@@ -1,47 +1,108 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://decisionator.dev/schemas/plugin-manifest/1.0.json",
+  "$id": "https://decisionator.dev/schemas/plugin-manifest/1.1.json",
   "title": "Deci plugin manifest (decisionator-plugin.json)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["manifestVersion", "id", "name", "version", "platform", "main", "provides"],
+  "required": [
+    "manifestVersion",
+    "id",
+    "name",
+    "version",
+    "platform",
+    "main",
+    "provides"
+  ],
   "properties": {
-    "manifestVersion": { "const": 1 },
+    "manifestVersion": {
+      "const": 1
+    },
     "id": {
       "type": "string",
       "description": "Reverse-DNS identifier, unique per plugin.",
       "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+){2,}$",
-      "examples": ["org.decisionator.strategy.random"]
+      "examples": [
+        "org.decisionator.strategy.random"
+      ]
     },
-    "name": { "type": "string", "minLength": 1, "maxLength": 60 },
-    "description": { "type": "string", "maxLength": 500 },
-    "version": { "type": "string", "description": "SemVer of the plugin.", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$" },
-    "author": { "type": "string", "maxLength": 120 },
-    "homepage": { "type": "string", "format": "uri" },
-    "license": { "type": "string", "description": "SPDX identifier." },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "version": {
+      "type": "string",
+      "description": "SemVer of the plugin.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX identifier."
+    },
     "platform": {
       "type": "object",
       "description": "Contract versions this plugin targets (semver ranges). Host refuses to load on mismatch (Principle II).",
       "additionalProperties": false,
-      "required": ["runtime"],
+      "required": [
+        "runtime"
+      ],
       "properties": {
-        "runtime": { "type": "string", "examples": ["^1.0.0"] },
-        "strategy": { "type": "string" },
-        "ideaSource": { "type": "string" },
-        "uiSlot": { "type": "string" }
+        "runtime": {
+          "type": "string",
+          "examples": [
+            "^1.0.0"
+          ]
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "ideaSource": {
+          "type": "string"
+        },
+        "uiSlot": {
+          "type": "string"
+        },
+        "projectStore": {
+          "type": "string"
+        }
       }
     },
-    "main": { "type": "string", "description": "Path to the ESM bundle inside the package.", "pattern": "^[^/].*\\.m?js$" },
+    "main": {
+      "type": "string",
+      "description": "Path to the ESM bundle inside the package.",
+      "pattern": "^[^/].*\\.m?js$"
+    },
     "provides": {
       "type": "object",
       "minProperties": 1,
       "additionalProperties": false,
       "properties": {
-        "strategy": { "$ref": "#/$defs/strategyDecl" },
-        "ideaSource": { "$ref": "#/$defs/ideaSourceDecl" },
+        "strategy": {
+          "$ref": "#/$defs/strategyDecl"
+        },
+        "ideaSource": {
+          "$ref": "#/$defs/ideaSourceDecl"
+        },
         "uiSlots": {
           "type": "array",
-          "items": { "$ref": "#/$defs/uiSlotDecl" }
+          "items": {
+            "$ref": "#/$defs/uiSlotDecl"
+          }
+        },
+        "projectStore": {
+          "$ref": "#/$defs/projectStoreDecl"
         }
       }
     },
@@ -50,11 +111,25 @@
       "uniqueItems": true,
       "items": {
         "oneOf": [
-          { "const": "clipboard:read" },
-          { "type": "string", "pattern": "^net:https://[a-z0-9.-]+(:\\d+)?$", "description": "Allowed network origin (CSP connect-src)." },
-          { "type": "string", "pattern": "^oauth:[a-z0-9-]+$", "description": "Use the host OAuth broker for the provider declared in `oauth`." },
-          { "const": "decision:read" },
-          { "const": "ideas:write" }
+          {
+            "const": "clipboard:read"
+          },
+          {
+            "type": "string",
+            "pattern": "^net:https://[a-z0-9.-]+(:\\d+)?$",
+            "description": "Allowed network origin (CSP connect-src)."
+          },
+          {
+            "type": "string",
+            "pattern": "^oauth:[a-z0-9-]+$",
+            "description": "Use the host OAuth broker for the provider declared in `oauth`."
+          },
+          {
+            "const": "decision:read"
+          },
+          {
+            "const": "ideas:write"
+          }
         ]
       },
       "default": []
@@ -65,57 +140,207 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["authorizationEndpoint", "tokenEndpoint", "scopes", "clientIdEnv"],
+        "required": [
+          "flow",
+          "scopes",
+          "clientIdEnv"
+        ],
         "properties": {
-          "authorizationEndpoint": { "type": "string", "format": "uri" },
-          "tokenEndpoint": { "type": "string", "format": "uri" },
-          "scopes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-          "extraAuthParams": { "type": "object", "additionalProperties": { "type": "string" } },
-          "returnCallbackParams": { "type": "array", "items": { "type": "string" }, "description": "Callback query params passed back to the plugin, e.g. picked_file_ids." },
-          "clientIdEnv": { "type": "string", "description": "Env var the node reads for the client id." },
-          "defaultClientId": { "type": "string" }
-        }
+          "flow": {
+            "enum": [
+              "pkce-loopback",
+              "gis-token"
+            ],
+            "description": "pkce-loopback: authorization code + PKCE via the local node (US5/US6). gis-token: Google Identity Services token model in the browser (MVP)."
+          },
+          "authorizationEndpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "tokenEndpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "extraAuthParams": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "returnCallbackParams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Callback query params passed back to the plugin, e.g. picked_file_ids."
+          },
+          "clientIdEnv": {
+            "type": "string",
+            "description": "Env var the node reads for the client id."
+          },
+          "defaultClientId": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "flow": {
+                  "const": "pkce-loopback"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "authorizationEndpoint",
+                "tokenEndpoint"
+              ]
+            }
+          }
+        ]
       }
     },
     "settingsSchema": {
       "description": "JSON Schema (draft 2020-12) for user settings; the host generates the settings panel from it (FR-053).",
       "type": "object"
     },
-    "settingsUiSchema": { "type": "object", "description": "Optional rjsf uiSchema hints." }
+    "settingsUiSchema": {
+      "type": "object",
+      "description": "Optional rjsf uiSchema hints."
+    }
   },
   "$defs": {
     "strategyDecl": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["usesRandomness", "minOptions"],
+      "required": [
+        "usesRandomness",
+        "minOptions"
+      ],
       "properties": {
-        "usesRandomness": { "type": "boolean" },
-        "minOptions": { "type": "integer", "minimum": 1, "default": 2 },
-        "requiresWeights": { "type": "boolean", "default": false },
-        "ballots": { "enum": ["none", "choice", "ranking", "score"], "default": "none" },
-        "interactive": { "type": "boolean", "default": false, "description": "Needs a per-run user input form (e.g. manual pick)." },
-        "runInputSchema": { "type": "object", "description": "JSON Schema for per-run input when interactive." }
+        "usesRandomness": {
+          "type": "boolean"
+        },
+        "minOptions": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2
+        },
+        "requiresWeights": {
+          "type": "boolean",
+          "default": false
+        },
+        "ballots": {
+          "enum": [
+            "none",
+            "choice",
+            "ranking",
+            "score"
+          ],
+          "default": "none"
+        },
+        "interactive": {
+          "type": "boolean",
+          "default": false,
+          "description": "Needs a per-run user input form (e.g. manual pick)."
+        },
+        "runInputSchema": {
+          "type": "object",
+          "description": "JSON Schema for per-run input when interactive."
+        }
       }
     },
     "ideaSourceDecl": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sourceType", "supportsRefresh"],
+      "required": [
+        "sourceType",
+        "supportsRefresh"
+      ],
       "properties": {
-        "sourceType": { "type": "string", "pattern": "^[a-z0-9-]+$" },
-        "supportsRefresh": { "type": "boolean" },
-        "input": { "enum": ["clipboard", "oauth", "form"], "description": "How the host collects input before calling the plugin." }
+        "sourceType": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "supportsRefresh": {
+          "type": "boolean"
+        },
+        "input": {
+          "enum": [
+            "clipboard",
+            "oauth",
+            "form"
+          ],
+          "description": "How the host collects input before calling the plugin."
+        }
       }
     },
     "uiSlotDecl": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["slot", "title"],
+      "required": [
+        "slot",
+        "title"
+      ],
       "properties": {
-        "slot": { "enum": ["option.detail", "decision.toolbar", "decision.sidebar", "idea.detail"] },
-        "title": { "type": "string", "maxLength": 40 },
-        "maxHeight": { "type": "integer", "minimum": 40, "maximum": 800, "default": 240 }
+        "slot": {
+          "enum": [
+            "option.detail",
+            "decision.toolbar",
+            "decision.sidebar",
+            "idea.detail"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "maxHeight": {
+          "type": "integer",
+          "minimum": 40,
+          "maximum": 800,
+          "default": 240
+        }
+      }
+    },
+    "projectStoreDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storeKind",
+        "supportsPassword",
+        "supportsSharing"
+      ],
+      "properties": {
+        "storeKind": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": [
+            "google-sheets",
+            "local"
+          ]
+        },
+        "supportsPassword": {
+          "type": "boolean"
+        },
+        "supportsSharing": {
+          "type": "boolean"
+        },
+        "supportsIndividualRemoval": {
+          "type": "boolean",
+          "default": true,
+          "description": "False for Google link sharing (research R21)."
+        }
       }
     }
-  }
+  },
+  "description": "Manifest v1.1 (additive over 1.0): adds the projectStore extension point and the browser token (\"gis-token\") OAuth flow."
 }

@@ -24,6 +24,8 @@ interface ProjectStore {
   share(ref: ProjectRef, req: ShareRequest): Promise<ShareState>;      // link on/off + role, invite/remove email (FR-015, FR-018)
   getShareState(ref: ProjectRef): Promise<ShareState>;
   export(ref: ProjectRef): Promise<ExportBundle>;                      // FR-080
+  deleteProject(ref: ProjectRef): Promise<void>;                       // owner only; Google: Drive trash (FR-025)
+  forgetProject(ref: ProjectRef): Promise<void>;                       // any participant: drop local data and list entry
 }
 
 type Entry =
@@ -57,4 +59,6 @@ covers:
 - author stamping;
 - access-level enforcement;
 - password round-trip, and unreadability without the password;
+- `deleteProject` by the owner makes `openProject` fail with "unavailable" for everyone, and a
+  non-owner calling it gets `PERMISSION_DENIED`;
 - queue behavior under simulated 429s.

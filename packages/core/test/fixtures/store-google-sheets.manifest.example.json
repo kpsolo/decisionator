@@ -1,0 +1,33 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.store.google-sheets",
+  "name": "Google Sheets store",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "projectStore": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "projectStore": {
+      "storeKind": "google-sheets",
+      "supportsPassword": true,
+      "supportsSharing": true,
+      "supportsIndividualRemoval": false
+    }
+  },
+  "permissions": [
+    "oauth:google",
+    "net:https://www.googleapis.com",
+    "net:https://sheets.googleapis.com"
+  ],
+  "oauth": {
+    "google": {
+      "flow": "gis-token",
+      "scopes": [
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "clientIdEnv": "VITE_GOOGLE_CLIENT_ID"
+    }
+  }
+}

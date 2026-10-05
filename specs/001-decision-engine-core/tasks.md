@@ -48,7 +48,7 @@ checkpoint.
   - `plugin-sdk` exports `.` and `./testing` subpaths.
 - [ ] T006 Scaffold `plugins/store-google-sheets/`, `plugins/source-paste/` and `plugins/strategy-borda/`:
   - each with `package.json`, `tsconfig.json`, `src/index.ts`, `test/`;
-  - each with `decisionator-plugin.json` (manifest per `contracts/plugin-manifest.schema.json`, with `platform.runtime: "^1.0.0"`).
+  - each with `decisionator-plugin.json` (manifest per `contracts/plugin-manifest.schema.json` v1.1, with `platform.runtime: "^1.0.0"`); the store's manifest follows `packages/core/test/fixtures/store-google-sheets.manifest.example.json` (`provides.projectStore`, `oauth.google.flow: "gis-token"`).
 - [ ] T007 Scaffold `apps/web/` with Vite and React 19 (TypeScript):
   - `vite.config.ts` with `base` from `VITE_BASE_URL` (default `/decisionator/`);
   - React Router in hash mode in `src/main.tsx`;
@@ -101,6 +101,7 @@ story work starts until this phase is done.**
   - author stamping (caller-supplied `by` is ignored);
   - access-level enforcement;
   - password round trip, and unreadability without the password;
+  - `deleteProject` by the owner makes the project unavailable to everyone; a non-owner gets `PERMISSION_DENIED`;
   - queue behavior under 429.
 - [ ] T021 Implement `runStrategyContractTests(plugin, fixtures)` in `packages/plugin-sdk/testing/strategy-kit.ts`:
   - determinism over 100 runs with the same seed;
@@ -123,7 +124,8 @@ story work starts until this phase is done.**
   - the key is never serialized;
   - T022 must pass.
 - [ ] T024 [P] Implement the export format `decisionator.project/v1` in `packages/core/src/export/project-v1.ts`, plus `scripts/gen-schemas.ts`, which emits JSON Schemas from the Zod models (via `z.toJSONSchema`) into `packages/core/schema/`.
-- [ ] T025 Implement the module host in `apps/web/src/host/module-host.ts`:
+- [ ] T025 Implement the module host in `apps/web/src/host/module-host.ts` (constitution §II):
+  - validate each first-party module's `decisionator-plugin.json` against `contracts/plugin-manifest.schema.json` v1.1 with Ajv, and refuse any module whose `platform.*` ranges the host doesn't satisfy, with a plain-language error;
   - register first-party modules only through the `plugin-sdk` interfaces;
   - wrap every call with a timeout (default 5 s, strategies 2 s) and error capture;
   - raise errors attributed to the module (research R26, constitution C3).
@@ -150,7 +152,7 @@ story work starts until this phase is done.**
 - [ ] T032 **SPIKE (gate)** in `apps/web/src/spikes/PickerSpike.tsx`, against a real Google project: does Picker `setFileIds([fileId])` grant a second account `drive.file` access to a Sheet shared only as "anyone with the link"?
   - If not, test fallback 1 (open the Sheet URL in Google first, then the Picker).
   - Record the result and the chosen flow in `specs/001-decision-engine-core/research.md` § R21.
-  - US2 T064 depends on this outcome.
+  - US2 T065 depends on this outcome.
 - [ ] T033 [P] Implement the quota budget and back-off in `plugins/store-google-sheets/src/budget.ts`, with tests in `plugins/store-google-sheets/test/budget.test.ts`:
   - ≤ 20 Sheets reads and ≤ 20 writes per minute per client;
   - truncated exponential back-off with jitter up to 1 s, capped at 64 s;
@@ -257,7 +259,12 @@ comment and view stats.
 - [ ] T056 [US1] Build the stats view in `apps/web/src/features/stats/StatsView.tsx`: sort and group controls, distribution bars, and an accessible table fallback.
 - [ ] T057 [US1] Build My projects in `apps/web/src/routes/home.tsx`: `listProjects()` with the last-opened time, an offline view from the `snapshots` store, and **New project** as the empty-state action.
 - [ ] T058 [P] [US1] Build export in `apps/web/src/features/project/ExportButton.tsx`: download `decisionator.project/v1` JSON with no tokens or passwords (FR-080, FR-081).
-- [ ] T059 [US1] Build unavailable states in `apps/web/src/features/project/ProjectUnavailable.tsx`: deleted, trashed or access-lost Sheets show the detectable reason, and never create a silent copy (spec edge cases).
+- [ ] T059 [US1] Build delete and forget in `apps/web/src/features/project/DeleteProject.tsx` and `deleteProject`/`forgetProject` in `plugins/store-google-sheets/src/store.ts` (FR-025, constitution V):
+  - owner only for delete; confirmation by typing the project name;
+  - Drive `files.update {trashed: true}`;
+  - clear the project's IndexedDB drafts, snapshot and queue; remove it from My projects;
+  - non-owners get "Remove from my list" (`forgetProject`, local only).
+- [ ] T060 [US1] Build unavailable states in `apps/web/src/features/project/ProjectUnavailable.tsx`: deleted, trashed or access-lost Sheets show the detectable reason, and never create a silent copy (spec edge cases).
 
 **Checkpoint**: US1 works alone (personal idea board), and quickstart US1 passes.
 
@@ -273,14 +280,14 @@ comments once. The owner sees it within 30 s, and view-only and password behavio
 
 ### Tests for User Story 2 (write first, must fail)
 
-- [ ] T060 [P] [US2] Write sharing and password store tests in `plugins/store-google-sheets/test/share.test.ts`, covering:
+- [ ] T061 [P] [US2] Write sharing and password store tests in `plugins/store-google-sheets/test/share.test.ts`, covering:
   - `anyone` reader and writer with `allowFileDiscovery: false`;
   - link off;
   - invite and remove by email;
   - individual removal on a link-shared project throws `NOT_SUPPORTED` with a readable message;
   - role mapping owner/writer/reader → owner/contribute/view;
   - in password mode no plaintext title, option or comment reaches the fake Sheets (SC-007).
-- [ ] T061 [P] [US2] Write the E2E test `apps/web/e2e/us2-share.spec.ts` with two browser contexts, covering quickstart US2 steps 1–6:
+- [ ] T062 [P] [US2] Write the E2E test `apps/web/e2e/us2-share.spec.ts` with two browser contexts, covering quickstart US2 steps 1–6:
   - a collaborator's first grade within 1 min (SC-003);
   - visibility within 30 s (SC-004);
   - view-only gating;
@@ -289,31 +296,31 @@ comments once. The owner sees it within 30 s, and view-only and password behavio
 
 ### Implementation for User Story 2
 
-- [ ] T062 [US2] Implement share operations in `plugins/store-google-sheets/src/share.ts`: `share()` and `getShareState()` using the Drive permission calls in `contracts/sheet-store.md` § Sharing operations.
-- [ ] T063 [US2] Build the share dialog in `apps/web/src/features/sharing/ShareDialog.tsx`:
+- [ ] T063 [US2] Implement share operations in `plugins/store-google-sheets/src/share.ts`: `share()` and `getShareState()` using the Drive permission calls in `contracts/sheet-store.md` § Sharing operations.
+- [ ] T064 [US2] Build the share dialog in `apps/web/src/features/sharing/ShareDialog.tsx`:
   - copy link (`<VITE_BASE_URL>#/p/<fileId>`);
   - access level (view or contribute);
   - link on/off;
   - invite by email;
   - an explanation that only email-invited people can be removed individually (FR-018).
-- [ ] T064 [US2] Build the collaborator join flow in `apps/web/src/features/sharing/JoinFlow.tsx`: Google sign-in, then Picker `setFileIds([fileId])`, or the fallback recorded by T032. At most one sign-in plus one confirmation (FR-016).
-- [ ] T065 [US2] Implement role resolution in `plugins/store-google-sheets/src/roles.ts` and `apps/web/src/features/project/useRole.ts`:
+- [ ] T065 [US2] Build the collaborator join flow in `apps/web/src/features/sharing/JoinFlow.tsx`: Google sign-in, then Picker `setFileIds([fileId])`, or the fallback recorded by T032. At most one sign-in plus one confirmation (FR-016).
+- [ ] T066 [US2] Implement role resolution in `plugins/store-google-sheets/src/roles.ts` and `apps/web/src/features/project/useRole.ts`:
   - `plugins/store-google-sheets/src/roles.ts` reads Drive permissions and capabilities and returns the role;
   - `apps/web/src/features/project/useRole.ts` disables grade, comment and vote for view access, with the reason text (US2 #5).
-- [ ] T066 [US2] Implement password setup in `apps/web/src/features/sharing/PasswordSetup.tsx` and password mode in `plugins/store-google-sheets/src/store.ts`:
+- [ ] T067 [US2] Implement password setup in `apps/web/src/features/sharing/PasswordSetup.tsx` and password mode in `plugins/store-google-sheets/src/store.ts`:
   - `apps/web/src/features/sharing/PasswordSetup.tsx` requires at least 12 characters and warns that a lost password is unrecoverable;
   - the store writes `kdf`, `kdfIterations`, `salt` and `verifier` to `meta`;
   - it encrypts the `title` and `description` meta values, `options` payloads and all entry payloads as `enc:v1:…`;
   - it renames the Sheet to "Deci project (protected)".
-- [ ] T067 [US2] Build the password prompt in `apps/web/src/features/sharing/PasswordPrompt.tsx`: show no content until the verifier passes; after 5 wrong tries, wait 30 s; keep the derived key in memory for the session only.
-- [ ] T068 [US2] Implement watching in `plugins/store-google-sheets/src/watch.ts`:
+- [ ] T068 [US2] Build the password prompt in `apps/web/src/features/sharing/PasswordPrompt.tsx`: show no content until the verifier passes; after 5 wrong tries, wait 30 s; keep the derived key in memory for the session only.
+- [ ] T069 [US2] Implement watching in `plugins/store-google-sheets/src/watch.ts`:
   - while `document.visibilityState === "visible"`, poll Drive `files.get?fields=version` every 10 s;
   - on a version change, do one `values.batchGet`, at most every 15 s;
   - stop when hidden;
   - stay within the budget (research R23).
-- [ ] T069 [US2] Build the sync banner in `apps/web/src/sync/SyncBanner.tsx`: "syncing paused, retrying in N s" with the queued count, driven by budget, back-off and queue events (FR-020).
-- [ ] T070 [US2] Implement live snapshot merging in `apps/web/src/sync/useProjectSnapshot.ts`: apply incoming snapshots without discarding queued local entries; show others' new grades and comments without a reload (FR-019).
-- [ ] T071 [P] [US2] Build the dev toolbar in `apps/web/src/dev/DevToolbar.tsx`, in dev builds only: "force 429" and "go offline" toggles for the quickstart and E2E.
+- [ ] T070 [US2] Build the sync banner in `apps/web/src/sync/SyncBanner.tsx`: "syncing paused, retrying in N s" with the queued count, driven by budget, back-off and queue events (FR-020).
+- [ ] T071 [US2] Implement live snapshot merging in `apps/web/src/sync/useProjectSnapshot.ts`: apply incoming snapshots without discarding queued local entries; show others' new grades and comments without a reload (FR-019).
+- [ ] T072 [P] [US2] Build the dev toolbar in `apps/web/src/dev/DevToolbar.tsx`, in dev builds only: "force 429" and "go offline" toggles for the quickstart and E2E.
 
 **Checkpoint**: US1 and US2 work together. Quickstart US2 passes.
 
@@ -330,38 +337,38 @@ closes voting. The result shows the winner, the order and the points, and Verify
 
 ### Tests for User Story 3 (write first, must fail)
 
-- [ ] T072 [P] [US3] Write Borda strategy tests in `plugins/strategy-borda/test/contract.test.ts`:
+- [ ] T073 [P] [US3] Write Borda strategy tests in `plugins/strategy-borda/test/contract.test.ts`:
   - `runStrategyContractTests`;
   - rank r on a top-N ballot earns N − r + 1 points, and unranked options earn 0;
   - partial ballots;
   - the tie-break chain is higher average grade → more first places → seeded random draw, with the seed recorded only when the random step is needed;
   - determinism over 100 runs (SC-006).
-- [ ] T073 [P] [US3] Write the E2E test `apps/web/e2e/us3-vote.spec.ts`, covering quickstart US3 steps 1–5 (re-vote replaces, close, tie broken by average grade, Verify, reopen → round 2) and an axe check on the vote and results screens.
+- [ ] T074 [P] [US3] Write the E2E test `apps/web/e2e/us3-vote.spec.ts`, covering quickstart US3 steps 1–5 (re-vote replaces, close, tie broken by average grade, Verify, reopen → round 2) and an axe check on the vote and results screens.
 
 ### Implementation for User Story 3
 
-- [ ] T074 [US3] Implement the Borda strategy in `plugins/strategy-borda/src/index.ts` and `plugins/strategy-borda/decisionator-plugin.json`:
+- [ ] T075 [US3] Implement the Borda strategy in `plugins/strategy-borda/src/index.ts` and `plugins/strategy-borda/decisionator-plugin.json`:
   - `provides.strategy {usesRandomness: true, minOptions: 2, ballots: "ranking"}`;
   - a settings schema with `topN` 1–10, default 3;
   - `check` and `decide` per `contracts/strategy.md` and research R25.
-- [ ] T075 [US3] Implement voting rounds in `packages/core/src/voting/rounds.ts`:
+- [ ] T076 [US3] Implement voting rounds in `packages/core/src/voting/rounds.ts`:
   - the state machine `open(n) → closed(n) → open(n+1)`;
   - effective ballot = latest per (by, round) with `at` ≤ the close time;
   - ballots must be unique, ≤ topN and only from active options.
-- [ ] T076 [US3] Implement the tally host in `packages/core/src/strategy-host/tally.ts`:
+- [ ] T077 [US3] Implement the tally host in `packages/core/src/strategy-host/tally.ts`:
   - build `StrategyInput` (options, effective ballots, aggregated grades) from a snapshot;
   - generate a 128-bit seed from a CSPRNG at close;
   - call the strategy through the module host;
   - build an immutable `OutcomeRecord` (data-model § Outcome);
   - append it via the store.
-- [ ] T077 [US3] Build the ballot UI in `apps/web/src/features/voting/RankBallot.tsx`: drag to rank with `@dnd-kit` and an equivalent keyboard control (move up/down); top N from `meta.voting.topN`; submit and resubmit replace the ballot.
-- [ ] T078 [US3] Build owner voting controls in `apps/web/src/features/voting/VotingControls.tsx`: open, close and reopen voting; set `topN` 1–10 and `liveResults` on/off; owner only (writes `meta.voting`).
-- [ ] T079 [US3] Build the results view in `apps/web/src/features/voting/ResultsView.tsx`:
+- [ ] T078 [US3] Build the ballot UI in `apps/web/src/features/voting/RankBallot.tsx`: drag to rank with `@dnd-kit` and an equivalent keyboard control (move up/down); top N from `meta.voting.topN`; submit and resubmit replace the ballot.
+- [ ] T079 [US3] Build owner voting controls in `apps/web/src/features/voting/VotingControls.tsx`: open, close and reopen voting; set `topN` 1–10 and `liveResults` on/off; owner only (writes `meta.voting`).
+- [ ] T080 [US3] Build the results view in `apps/web/src/features/voting/ResultsView.tsx`:
   - winner, full order with points and first places, tie-break used, ballots counted;
   - round history;
   - "voting in progress (N ballots)" when live results are off.
-- [ ] T080 [US3] Build Verify in `apps/web/src/features/voting/VerifyButton.tsx`: re-run the tally on the outcome's recorded `inputs` and `seed` with the same strategy version, then show "Reproduced ✓", "Mismatch" or "Strategy unavailable".
-- [ ] T081 [US3] Add the `bordaPoints` sort key to `apps/web/src/features/stats/StatsView.tsx`, shown only when results are visible.
+- [ ] T081 [US3] Build Verify in `apps/web/src/features/voting/VerifyButton.tsx`: re-run the tally on the outcome's recorded `inputs` and `seed` with the same strategy version, then show "Reproduced ✓", "Mismatch" or "Strategy unavailable".
+- [ ] T082 [US3] Add the `bordaPoints` sort key to `apps/web/src/features/stats/StatsView.tsx`, shown only when results are visible.
 
 **Checkpoint**: US1–US3 are complete. This is the owner's full first user story.
 
@@ -371,12 +378,16 @@ closes voting. The result shows the winner, the order and the points, and Verify
 
 **Purpose**: harden, document and ship US1–US3.
 
-- [ ] T082 [P] Write `scripts/soak/twenty-collaborators.ts`: 20 simulated clients on one project for 10 min against the fake backend's quota model. Assert ≤ 20 Sheets reads per client per minute and zero lost entries (SC-005).
-- [ ] T083 [P] Write `docs/self-hosting.md`: creating your own Google Cloud project, the OAuth Web client (authorized JavaScript origin), the Picker-restricted API key, publishing the consent screen with only `drive.file`, and `VITE_*` variables (research R28).
-- [ ] T084 [P] Write `docs/plugin-authors.md`: the project-store, idea-source and strategy contracts with links to `contracts/`, and how to run the plugin-sdk test kits.
-- [ ] T085 Run an axe audit across all MVP screens and fix every WCAG 2.1 AA violation (FR-082); record the result in `apps/web/e2e/README.md`.
-- [ ] T086 Run the live Google checklist from `specs/001-decision-engine-core/quickstart.md` against the hosted build. Record the results in `docs/releases/v0.1.md`.
-- [ ] T087 Update `README.md` with the hosted URL `https://kpsolo.github.io/decisionator/`, a 3-step "how it works" and screenshots. Add a changeset and tag `v0.1.0`.
+- [ ] T083 [P] Write `scripts/soak/twenty-collaborators.ts`: 20 simulated clients on one project for 10 min against the fake backend's quota model. Assert ≤ 20 Sheets reads per client per minute and zero lost entries (SC-005).
+- [ ] T084 [P] Write `docs/self-hosting.md`: creating your own Google Cloud project, the OAuth Web client (authorized JavaScript origin), the Picker-restricted API key, publishing the consent screen with only `drive.file`, and `VITE_*` variables (research R28).
+- [ ] T085 [P] Write `docs/plugin-authors.md`: the project-store, idea-source and strategy contracts with links to `contracts/`, and how to run the plugin-sdk test kits.
+- [ ] T086 [P] Create example plugins for every MVP extension point (constitution: each extension point ships with an example and author docs), each with a README and passing its contract kit:
+  - `examples/plugin-store-memory/`: a `ProjectStore` over an in-memory model (`runProjectStoreContractTests`);
+  - `examples/plugin-strategy-example/`: a simple strategy (`runStrategyContractTests`);
+  - `examples/plugin-source-example/`: an idea source (`runIdeaSourceContractTests`).
+- [ ] T087 Run an axe audit across all MVP screens and fix every WCAG 2.1 AA violation (FR-082); record the result in `apps/web/e2e/README.md`.
+- [ ] T088 Run the live Google checklist from `specs/001-decision-engine-core/quickstart.md` against the hosted build. Record the results in `docs/releases/v0.1.md`, together with a "Known limitations" section disclosing the staged-compliance deferrals from plan.md (no agent API until US5; offline limited to drafts and the write queue until US7).
+- [ ] T089 Update `README.md` with the hosted URL `https://kpsolo.github.io/decisionator/`, a 3-step "how it works" and screenshots. Add a changeset and tag `v0.1.0`.
 
 **Checkpoint**: the MVP is released.
 
@@ -387,12 +398,12 @@ closes voting. The result shows the winner, the order and the points, and Verify
 **Goal**: owner pick, uniform random and random weighted by average grade, all verifiable.
 **Independent Test**: run a weighted draw; Verify says "Reproduced". Install a sample strategy.
 
-- [ ] T088 [P] [US4] Write contract tests in `plugins/strategy-owner-pick/test/contract.test.ts`, `plugins/strategy-random/test/contract.test.ts` and `plugins/strategy-weighted/test/contract.test.ts`. For weighted: ungraded options excluded unless included, and frequencies within tolerance over 10 000 seeds.
-- [ ] T089 [P] [US4] Implement `plugins/strategy-owner-pick/src/index.ts` (`interactive: true`, `runInputSchema` = an option ID, `usesRandomness: false`).
-- [ ] T090 [P] [US4] Implement `plugins/strategy-random/src/index.ts` (uniform, via `rng.int(n)`).
-- [ ] T091 [P] [US4] Implement `plugins/strategy-weighted/src/index.ts` (weight = average grade; owner setting `includeUngraded`, default false).
-- [ ] T092 [US4] Build the strategy chooser in `apps/web/src/features/decide/StrategyChooser.tsx`: list registered strategies, explain unmet preconditions in plain language (FR-032), and record outcomes through `tally.ts`.
-- [ ] T093 [US4] Generalize `apps/web/src/features/voting/VerifyButton.tsx` to verify any strategy outcome (FR-031).
+- [ ] T090 [P] [US4] Write contract tests in `plugins/strategy-owner-pick/test/contract.test.ts`, `plugins/strategy-random/test/contract.test.ts` and `plugins/strategy-weighted/test/contract.test.ts`. For weighted: ungraded options excluded unless included, and frequencies within tolerance over 10 000 seeds.
+- [ ] T091 [P] [US4] Implement `plugins/strategy-owner-pick/src/index.ts` (`interactive: true`, `runInputSchema` = an option ID, `usesRandomness: false`).
+- [ ] T092 [P] [US4] Implement `plugins/strategy-random/src/index.ts` (uniform, via `rng.int(n)`).
+- [ ] T093 [P] [US4] Implement `plugins/strategy-weighted/src/index.ts` (weight = average grade; owner setting `includeUngraded`, default false).
+- [ ] T094 [US4] Build the strategy chooser in `apps/web/src/features/decide/StrategyChooser.tsx`: list registered strategies, explain unmet preconditions in plain language (FR-032), and record outcomes through `tally.ts`.
+- [ ] T095 [US4] Generalize `apps/web/src/features/voting/VerifyButton.tsx` to verify any strategy outcome (FR-031).
 
 ---
 
@@ -403,14 +414,14 @@ contributions.
 **Independent Test**: formatting without copy-paste; a sourced, attributed note "pending review"
 on an option.
 
-- [ ] T094 [US5] **Planning checkpoint**: refine plan.md for US5. Decide how a hosted web app reaches a local or remote agent: the local node from research R2 vs other options. Add a `contributions` tab to the Sheet format (v2) and a migration from v1. Update `contracts/agentic-api.md` and `contracts/sheet-store.md`.
-- [ ] T095 [P] [US5] Write agent API contract tests in `packages/node/test/contract/agentic-api.test.ts` for MCP and REST: each operation, permission denials, expired, revoked and cancelled grants, out-of-scope targets, the limits table, and MCP/OpenAPI parity.
-- [ ] T096 [US5] Scaffold `packages/node/`: a Hono server bound to `127.0.0.1:4178` with Host/Origin checks (research R14).
-- [ ] T097 [US5] Implement grants in `packages/node/src/agent-api/grants.ts`: 256-bit bearer tokens stored as SHA-256 hashes, scope, default expiry 24 h (max 30 days), revocation, and counters (≤ 50 contributions per request, ≤ 60 calls per minute).
-- [ ] T098 [US5] Implement the MCP server in `packages/node/src/agent-api/mcp.ts` (MCP TS SDK v2), with the tools from `contracts/agentic-api.md`: `agent_hello`, `get_request`, `get_context`, `list_contributions`, `add_contribution`, `update_contribution`, `propose_option`, `complete_request`.
-- [ ] T099 [US5] Implement REST and OpenAPI in `packages/node/src/agent-api/rest.ts`: `/api/v1` plus `/api/v1/openapi.json`, generated from the same Zod schemas.
-- [ ] T100 [US5] Build agent connection and auto-format in `apps/web/src/features/agents/ConnectAgent.tsx`: when connected, send `buildInstruction()` to the agent and skip the copy-paste step (FR-041).
-- [ ] T101 [US5] Build the agent brief and review in `apps/web/src/features/agents/AgentBrief.tsx` and `apps/web/src/features/agents/ContributionReview.tsx`:
+- [ ] T096 [US5] **Planning checkpoint**: refine plan.md for US5. Decide how a hosted web app reaches a local or remote agent: the local node from research R2 vs other options. Add a `contributions` tab to the Sheet format (v2) and a migration from v1. Update `contracts/agentic-api.md` and `contracts/sheet-store.md`.
+- [ ] T097 [P] [US5] Write agent API contract tests in `packages/node/test/contract/agentic-api.test.ts` for MCP and REST: each operation, permission denials, expired, revoked and cancelled grants, out-of-scope targets, the limits table, and MCP/OpenAPI parity.
+- [ ] T098 [US5] Scaffold `packages/node/`: a Hono server bound to `127.0.0.1:4178` with Host/Origin checks (research R14).
+- [ ] T099 [US5] Implement grants in `packages/node/src/agent-api/grants.ts`: 256-bit bearer tokens stored as SHA-256 hashes, scope, default expiry 24 h (max 30 days), revocation, and counters (≤ 50 contributions per request, ≤ 60 calls per minute).
+- [ ] T100 [US5] Implement the MCP server in `packages/node/src/agent-api/mcp.ts` (MCP TS SDK v2), with the tools from `contracts/agentic-api.md`: `agent_hello`, `get_request`, `get_context`, `list_contributions`, `add_contribution`, `update_contribution`, `propose_option`, `complete_request`.
+- [ ] T101 [US5] Implement REST and OpenAPI in `packages/node/src/agent-api/rest.ts`: `/api/v1` plus `/api/v1/openapi.json`, generated from the same Zod schemas.
+- [ ] T102 [US5] Build agent connection and auto-format in `apps/web/src/features/agents/ConnectAgent.tsx`: when connected, send `buildInstruction()` to the agent and skip the copy-paste step (FR-041).
+- [ ] T103 [US5] Build the agent brief and review in `apps/web/src/features/agents/AgentBrief.tsx` and `apps/web/src/features/agents/ContributionReview.tsx`:
   - a copyable brief;
   - pending/accepted/edited/dismissed review;
   - attribution "agent X for person Y";
@@ -424,19 +435,19 @@ on an option.
 **Independent Test**: install a sample plugin, approve permissions, change a setting, disable it.
 The app keeps working.
 
-- [ ] T102 [US6] **Planning checkpoint**: adapt research R4 to static hosting. GitHub Pages cannot set CSP headers, so use `<iframe sandbox="allow-scripts" srcdoc>` with a `<meta http-equiv="Content-Security-Policy">` built from granted `net:` permissions. Record this in research.md.
-- [ ] T103 [P] [US6] Write plugin runtime tests in `apps/web/test/plugin-host/runtime.test.ts`: RPC envelope, timeouts and teardown, `PERMISSION_DENIED`, incompatible `platform.*` refusal, and determinism stubs for strategies.
-- [ ] T104 [US6] Build the sandbox host in `apps/web/src/host/sandbox/`: frame manager, `postMessage` RPC per `contracts/plugin-runtime.md`, the capability bridge (clipboard text, OAuth token via Identity Services, decision snapshot) and UI slots.
-- [ ] T105 [US6] Build install and management in `apps/web/src/features/plugins/PluginsPage.tsx`:
+- [ ] T104 [US6] **Planning checkpoint**: adapt research R4 to static hosting. GitHub Pages cannot set CSP headers, so use `<iframe sandbox="allow-scripts" srcdoc>` with a `<meta http-equiv="Content-Security-Policy">` built from granted `net:` permissions. Record this in research.md.
+- [ ] T105 [P] [US6] Write plugin runtime tests in `apps/web/test/plugin-host/runtime.test.ts`: RPC envelope, timeouts and teardown, `PERMISSION_DENIED`, incompatible `platform.*` refusal, and determinism stubs for strategies.
+- [ ] T106 [US6] Build the sandbox host in `apps/web/src/host/sandbox/`: frame manager, `postMessage` RPC per `contracts/plugin-runtime.md`, the capability bridge (clipboard text, OAuth token via Identity Services, decision snapshot) and UI slots.
+- [ ] T107 [US6] Build install and management in `apps/web/src/features/plugins/PluginsPage.tsx`:
   - install from file or URL (with an "unreviewed source" warning);
   - manifest validation (Ajv, `contracts/plugin-manifest.schema.json`);
   - permission review;
   - enable/disable and uninstall;
   - `lastError`.
-- [ ] T106 [US6] Build generated settings in `apps/web/src/features/plugins/PluginSettings.tsx` with `@rjsf/core` and a Radix theme (FR-053).
-- [ ] T107 [US6] Switch `apps/web/src/host/module-host.ts` to load the first-party modules (`source-paste`, `strategy-*`) through the sandbox host with unchanged contracts; the store stays in-process (it holds the Google token).
-- [ ] T108 [P] [US6] Build `plugins/source-google-docs/`: web Picker, `documents.get`, list items or heading sections as ideas, `itemKey = sha256(documentId + normalizedText)`, plus `runIdeaSourceContractTests` (FR-054).
-- [ ] T109 [P] [US6] Create `examples/plugin-strategy-example/`, `examples/plugin-source-example/` and `examples/fixtures/{plugin-incompatible,plugin-hang}/` for authors and E2E.
+- [ ] T108 [US6] Build generated settings in `apps/web/src/features/plugins/PluginSettings.tsx` with `@rjsf/core` and a Radix theme (FR-053).
+- [ ] T109 [US6] Switch `apps/web/src/host/module-host.ts` to load the first-party modules (`source-paste`, `strategy-*`) through the sandbox host with unchanged contracts; the store stays in-process (it holds the Google token).
+- [ ] T110 [P] [US6] Build `plugins/source-google-docs/`: web Picker, `documents.get`, list items or heading sections as ideas, `itemKey = sha256(documentId + normalizedText)`, plus `runIdeaSourceContractTests` (FR-054).
+- [ ] T111 [P] [US6] Create `examples/fixtures/{plugin-incompatible,plugin-hang}/` for the plugin-area E2E tests, and package the Phase 6 example plugins for install from file or URL.
 
 ---
 
@@ -447,19 +458,19 @@ self-hostable relay.
 **Independent Test**: share between two devices via a self-hosted relay; relay storage has no
 readable option titles.
 
-- [ ] T110 [US7] **Planning checkpoint**: refine plan.md for local mode. Decide whether the local store runs in the browser (IndexedDB + Automerge) or in `packages/node`, and how it maps the grade/comment/ranking entries onto Automerge documents. Update `contracts/relay-protocol.md` if needed.
-- [ ] T111 [P] [US7] Write relay tests in `packages/relay/test/relay.test.ts`: signed requests, ACL enforcement, the append-only change log, the two-step invite, revocation with key rotation, and the limits table.
-- [ ] T112 [US7] Build `packages/relay/`: Hono with SQLite storage, implementing `contracts/relay-protocol.md`, plus `Dockerfile` and `compose.yaml`.
-- [ ] T113 [US7] Build `plugins/store-local/`: a `ProjectStore` backed by Automerge 3, synced through the relay with XChaCha20-Poly1305 and Ed25519 (`@noble/*`). It must pass `runProjectStoreContractTests`.
-- [ ] T114 [US7] Build import/export between modes in `apps/web/src/features/project/MoveProject.tsx`, using `decisionator.project/v1` (FR-072).
+- [ ] T112 [US7] **Planning checkpoint**: refine plan.md for local mode. Decide whether the local store runs in the browser (IndexedDB + Automerge) or in `packages/node`, and how it maps the grade/comment/ranking entries onto Automerge documents. Update `contracts/relay-protocol.md` if needed.
+- [ ] T113 [P] [US7] Write relay tests in `packages/relay/test/relay.test.ts`: signed requests, ACL enforcement, the append-only change log, the two-step invite, revocation with key rotation, and the limits table.
+- [ ] T114 [US7] Build `packages/relay/`: Hono with SQLite storage, implementing `contracts/relay-protocol.md`, plus `Dockerfile` and `compose.yaml`.
+- [ ] T115 [US7] Build `plugins/store-local/`: a `ProjectStore` backed by Automerge 3, synced through the relay with XChaCha20-Poly1305 and Ed25519 (`@noble/*`). It must pass `runProjectStoreContractTests`.
+- [ ] T116 [US7] Build import/export between modes in `apps/web/src/features/project/MoveProject.tsx`, using `decisionator.project/v1` (FR-072).
 
 ---
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T115 [P] Run `/speckit-analyze` and resolve any spec, plan or tasks inconsistencies before each release.
-- [ ] T116 Run a security review of `packages/core/src/crypto/`, `plugins/store-google-sheets/src/auth.ts` and (US5+) `packages/node/src/agent-api/` before marking any release stable.
-- [ ] T117 Run the full `specs/001-decision-engine-core/quickstart.md` validation for every shipped story.
+- [ ] T117 [P] Run `/speckit-analyze` and resolve any spec, plan or tasks inconsistencies before each release.
+- [ ] T118 Run a security review of `packages/core/src/crypto/`, `plugins/store-google-sheets/src/auth.ts` and (US5+) `packages/node/src/agent-api/` before marking any release stable.
+- [ ] T119 Run the full `specs/001-decision-engine-core/quickstart.md` validation for every shipped story.
 
 ---
 
@@ -470,15 +481,15 @@ readable option titles.
 - Setup (P1) → Foundational (P2) → US1 (P3) → US2 (P4) → US3 (P5) → MVP release (P6).
 - After the MVP: US4, US5, US6 and US7 (P7–P10) depend only on the MVP and can run in any
   order.
-- US6 T107 touches modules from US4, if US4 is done first.
+- US6 T109 touches modules from US4, if US4 is done first.
 
 ### Within phases
 
 - T011 → T013; T014–T016 → T017; T018 → T019 → T020 and T021; T022 → T023.
-- T030 and T031 → T032 (spike). T032 → T064.
-- T035–T038 (tests) before T039–T059. T044 and T045 → T046. T039–T041 → T043 → T047–T049.
-- T060 and T061 before T062–T071. T062 → T063. T068 → T069 and T070.
-- T072 and T073 before T074–T081. T075 → T076 → T079 and T080.
+- T030 and T031 → T032 (spike). T032 → T065.
+- T035–T038 (tests) before T039–T060. T044 and T045 → T046. T039–T041 → T043 → T047–T049.
+- T061 and T062 before T063–T072. T063 → T064. T069 → T070 and T071.
+- T073 and T074 before T075–T082. T076 → T077 → T080 and T081.
 
 ### Story independence
 
@@ -502,7 +513,7 @@ Lane C (UI):    T047 → T048 → T049 (after lane A); T052–T057 (after lane B
 Independent:    T042, T055, T058
 
 # US4 strategies together:
-T089 | T090 | T091
+T091 | T092 | T093
 ```
 
 ## Success Criteria → Owning Tasks
@@ -511,13 +522,13 @@ T089 | T090 | T091
 |----|----------------|
 | SC-001 paste → saved project < 3 min | T038 |
 | SC-002 ≥ 90% AI answers valid on first paste | T036 |
-| SC-003 link → first grade < 1 min | T061 |
-| SC-004 visible ≤ 30 s (95%) | T061, T068 |
-| SC-005 20 collaborators within free quotas, no loss | T082, T086 |
-| SC-006 tallies reproduce 100% | T072, T080 |
-| SC-007 password content unreadable | T060, T061 |
+| SC-003 link → first grade < 1 min | T062 |
+| SC-004 visible ≤ 30 s (95%) | T062, T069 |
+| SC-005 20 collaborators within free quotas, no loss | T083, T088 |
+| SC-006 tallies reproduce 100% | T073, T081 |
+| SC-007 password content unreadable | T061, T062 |
 | SC-008 stats for 200 options < 1 s | T055 |
-| SC-009 zero server cost | T009, T086 |
+| SC-009 zero server cost | T009, T088 |
 
 ## Implementation Strategy
 
@@ -525,11 +536,11 @@ T089 | T090 | T091
 2. **Spike early**: T032 runs before any US2 UI. If both Picker flows fail, US2 uses invite by
    email as the primary join flow, and FR-016 is revisited with the owner.
 3. **Then increments**: pick US4–US7 by interest; each begins with its planning checkpoint
-   (T094, T102, T110), except US4, which is fully specified.
+   (T096, T104, T112), except US4, which is fully specified.
 4. Commit after each task or logical group, using Conventional Commits.
 
 ## Notes
 
 - [P] means different files and no dependency on unfinished tasks.
 - Contract and strategy tests must be seen failing before their implementation (Principle VII).
-- Never call real Google APIs in CI. Use the fake backend (T019). Live checks are T032 and T086.
+- Never call real Google APIs in CI. Use the fake backend (T019). Live checks are T032 and T088.

@@ -41,6 +41,8 @@ Role permissions (MVP):
 | add, edit or remove options; edit project title or description | ✓ | – | – |
 | open or close voting, settings, hide others' comments | ✓ | – | – |
 | share, change access, set password | ✓ | – | – |
+| delete project (Drive trash) | ✓ | – | – |
+| remove project from own list (local) | ✓ | ✓ | ✓ |
 
 ### Project
 | Field | Type | Validation / notes |

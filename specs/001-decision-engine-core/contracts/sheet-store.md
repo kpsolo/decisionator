@@ -63,6 +63,7 @@ Free quota reference (2026-10-05):
 | Link: view | `permissions.create {type: anyone, role: reader, allowFileDiscovery: false}` |
 | Link: contribute | `permissions.create {type: anyone, role: writer, allowFileDiscovery: false}` |
 | Link off | `permissions.delete` (the `anyone` permission) |
+| Delete project (owner) | `files.update {trashed: true}` (recoverable from the owner's Drive trash) |
 | Invite / remove by email | `permissions.create {type: user, emailAddress, role}` / `permissions.delete` |
 | Collaborator first open | Picker with `setFileIds([fileId])` → app gains `drive.file` access to the file (spike in Increment 0, fallbacks in research R21) |
 

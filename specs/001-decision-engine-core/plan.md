@@ -98,22 +98,24 @@ One item is open as a **spike**, not a clarification: Picker `setFileIds` on lin
 | # | Principle / Constraint | MVP compliance | Pre | Post |
 |---|------------------------|----------------|:---:|:---:|
 | I | Minimal core, everything is a module | Storage (`store-google-sheets`), input (`source-paste`) and tally (`strategy-borda`) are modules behind public contracts in `plugin-sdk`. The core holds only model, stats, validation, crypto and the RNG. | ✅ | ✅ |
-| II | Stable, versioned contracts | `decisionator.options/v1`, format instruction v1, project-store v1, Sheet format v1 and strategy v1 are versioned in [contracts/](./contracts/). The Sheet carries `formatVersion`. | ✅ | ✅ |
+| II | Stable, versioned contracts | `decisionator.options/v1`, format instruction v1.2, project-store v1, Sheet format v1, strategy v1 and plugin manifest v1.1 are versioned in [contracts/](./contracts/). The Sheet carries `formatVersion`. The MVP module host validates first-party manifests and refuses incompatible `platform.*` ranges (T025). | ✅ | ✅ |
 | III | Simple by default | The primary flow is paste → format → preview → create → grade → share → vote. Settings sit behind Share, Voting and project Settings. | ✅ | ✅ |
-| IV | Agent-native | **Partial (D1).** Any agent can take part through the published format contract. API parity, scoped grants and agent contributions arrive in US5. | ⚠️ | ⚠️ |
+| IV | Agent-native | **Deferred under Staged Compliance (D1).** Interim measure: any agent takes part through the published, versioned format contract. Resolved by US5 (API parity, scoped grants, agent contributions). Disclosed in the PRD and in the v0.1 release notes (T088). | ✅ | ✅ |
 | V | User owns the data | Projects live in the user's own Drive, created only on an explicit action. Least-privilege `drive.file` scope. Optional password encryption. Export. No server of ours. | ✅ | ✅ |
 | VI | Transparent, reproducible decisions | Append-only rows. Outcomes record strategy and version, the input snapshot, the tie-break and the seed. Verify re-runs the tally. | ✅ | ✅ |
 | VII | Test-first for contracts and strategies | Contract kits for project store and strategy, format fixtures, and RNG vectors, written before implementation (ordered in tasks.md). | ✅ | ✅ |
 | C1 | Bundled stores: clipboard + Google; Obsidian external | Paste input and Google (Sheets as store) in the MVP. The Google Docs source in US6. Obsidian stays external. | ✅ | ✅ |
 | C2 | Permission model for plugins | **Deferred (D3).** No third-party plugins can load in the MVP. The sandbox (R4) ships with US6. | ✅ | ✅ |
 | C3 | Failure isolation | Module calls are wrapped with timeouts and error boundaries. A full sandbox arrives with US6. | ✅ | ✅ |
-| C4 | Offline-capable core | **Partial (D2).** Drafts, preview and the grade/comment queue work offline. Creating and syncing a project needs Google. Full offline arrives with US7. | ⚠️ | ⚠️ |
+| C4 | Offline-capable core | **Deferred under Staged Compliance (D2).** Interim measure: drafts, preview and the persisted grade/comment queue work offline. Resolved by US7 (local store). Disclosed in the PRD and in the v0.1 release notes (T088). | ✅ | ✅ |
 | C5 | Permissive dependencies | All MIT, Apache-2.0, ISC or BSD (dnd-kit MIT, idb ISC, Workbox MIT, MSW MIT). | ✅ | ✅ |
 | C6 | WCAG 2.1 AA | Radix primitives, a keyboard alternative for drag ranking, and axe in E2E. | ✅ | ✅ |
-| W | Workflow gates | Spec Kit flow, Conventional Commits, CI gates. | ✅ | ✅ |
+| W | Workflow gates | Spec Kit flow, Conventional Commits, CI gates. Every MVP extension point (project store, idea source, strategy) ships with an example plugin and author docs (T085, T086). | ✅ | ✅ |
+| V+ | Export **and delete** (Principle V) | Export (T058) and owner delete to Drive trash plus local forget (T059, FR-025). | ✅ | ✅ |
 
-**Result**: PASS with two justified, time-boxed deviations (D1, D2) and one deferral (D3),
-recorded in Complexity Tracking. Each is resolved by a named later story.
+**Result**: PASS. D1 and D2 are deferrals recorded under the constitution's Staged Compliance
+section (v1.1.0): each names its interim measure, its resolving story (US5, US7) and its disclosure.
+D3 is not a deviation (no third-party plugins exist in the MVP). A stable 1.0 must resolve D1 and D2.
 
 ## Project Structure
 
@@ -200,8 +202,8 @@ plugins/                             # first-party modules, packaged like third-
 
 | Item | Why Needed | Simpler Alternative Rejected Because |
 |------|------------|-------------------------------------|
-| **D1**: Agent API parity deferred to US5 (Principle IV partial) | The owner's MVP needs any agent to work with zero integration. The copy-paste format contract does that. | Shipping MCP/REST now needs a local node, which the hosted MVP doesn't have; that is the US5 scope. |
-| **D2**: Offline limited to drafts and the queue (C4 partial) | Google-backed storage and sharing need network, by the owner's choice. | A local store now duplicates US7. Drafts and the queue keep users from losing work. |
+| **D1** (Staged Compliance): Agent API parity deferred to US5 (Principle IV) | The owner's MVP needs any agent to work with zero integration. The copy-paste format contract does that. | Shipping MCP/REST now needs a local node, which the hosted MVP doesn't have; that is the US5 scope. |
+| **D2** (Staged Compliance): Offline limited to drafts and the queue until US7 (offline-capable core) | Google-backed storage and sharing need network, by the owner's choice. | A local store now duplicates US7. Drafts and the queue keep users from losing work. |
 | **D3**: Plugin sandbox deferred to US6 | Only first-party modules exist in the MVP. They already use the public contracts. | Building the sandbox before any third-party plugin exists is premature. |
 | Client-side encryption for passwords | Google sharing has no passwords. Only encryption makes the data unreadable without one (SC-007). | A password gate without encryption leaves the Sheet readable. |
 | Fake Google backend in tests | CI must not depend on real Google accounts or quotas. | Live-API tests are flaky and burn the shared quota; a live checklist covers release. |

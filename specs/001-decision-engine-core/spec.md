@@ -93,6 +93,10 @@ Grade 3 options, comment on one, then sort by grade and group by category.
    tag.
 8. **Given** the user closes and reopens Deci, **When** they open "My projects", **Then** their
    projects are listed and open with all grades and comments intact.
+9. **Given** an owner's project, **When** they choose "Delete project" and confirm by typing its
+   name, **Then** the project's Sheet is moved to their Google Drive trash, Deci's local copy and
+   pending changes are cleared, the project leaves "My projects", and collaborators see "project
+   unavailable".
 
 ---
 
@@ -319,6 +323,10 @@ device, and confirm the relay's storage contains no readable option titles.
   data intact.
 - **FR-011**: Project storage MUST sit behind a project-store contract. Google Sheets is the first
   implementation, and US7's local store is another implementation of the same contract.
+- **FR-025**: Owners MUST be able to delete a project from Deci after an explicit confirmation.
+  Deleting moves the Sheet to the owner's Google Drive trash (recoverable there for Google's
+  retention period), clears the project's local drafts, snapshot and write queue, and removes it
+  from "My projects". Non-owners can only remove a project from their own list (constitution V).
 
 **MVP — grading, comments and stats (US1, US2)**
 
