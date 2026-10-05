@@ -1,4 +1,12 @@
-import type { Comment, Grade, Option, OutcomeRecord, Project, Ranking } from "@decisionator/core";
+import type {
+  Comment,
+  Contribution,
+  Grade,
+  Option,
+  OutcomeRecord,
+  Project,
+  Ranking,
+} from "@decisionator/core";
 
 export type ParticipantRole = "owner" | "contribute" | "view";
 
@@ -32,6 +40,7 @@ export interface ProjectSnapshot {
   comments: Comment[];
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
+  contributions?: Contribution[];
   role: ParticipantRole;
 }
 
@@ -39,7 +48,8 @@ export type Entry =
   | { kind: "grade"; optionId: string; value: 1 | 2 | 3 | 4 | 5 }
   | { kind: "comment"; optionId: string; body: string; hidden?: boolean; replaces?: string }
   | { kind: "ranking"; ranking: string[]; round?: number }
-  | { kind: "outcome"; outcome: OutcomeRecord };
+  | { kind: "outcome"; outcome: OutcomeRecord }
+  | { kind: "contribution"; contribution: Contribution };
 
 export interface AppendResult {
   queued: number;

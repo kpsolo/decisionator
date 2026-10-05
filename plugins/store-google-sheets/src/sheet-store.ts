@@ -1,5 +1,6 @@
 import {
   type Comment,
+  type Contribution,
   type Grade,
   type Option,
   type OutcomeRecord,
@@ -93,7 +94,15 @@ export class GoogleSheetsProjectStore implements ProjectStore {
 
   async createProject(input: NewProject, opts?: { password?: string }): Promise<ProjectRef> {
     const identity = await this.auth.getIdentity();
-    const sheetTitles = ["meta", "options", "grades", "comments", "rankings", "outcomes"];
+    const sheetTitles = [
+      "meta",
+      "options",
+      "grades",
+      "comments",
+      "rankings",
+      "outcomes",
+      "contributions",
+    ];
     const spreadsheet = await this.client.createSpreadsheet(input.title, sheetTitles);
     const spreadsheetId = spreadsheet.spreadsheetId;
 
@@ -101,7 +110,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     await this.client.updateFile(spreadsheetId, {
       appProperties: {
         decisionator: "project",
-        formatVersion: "1",
+        formatVersion: "2",
       },
     });
 
@@ -119,7 +128,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     // Write meta rows
     const metaRows: string[][] = [
       ["key", "value"],
-      ["formatVersion", "1"],
+      ["formatVersion", "2"],
       ["createdAt", new Date().toISOString()],
       ["owner", identity.participantId],
       ["protected", opts?.password ? "true" : "false"],
@@ -170,6 +179,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       { range: "comments!A:E", values: [["id", "at", "by", "optionId", "payload"]] },
       { range: "rankings!A:D", values: [["id", "at", "by", "payload"]] },
       { range: "outcomes!A:D", values: [["id", "at", "by", "payload"]] },
+      {
+        range: "contributions!A:F",
+        values: [["id", "at", "by", "targetKind", "targetId", "payload"]],
+      },
     ]);
 
     return { store: "google-sheets", id: spreadsheetId };
@@ -199,6 +212,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       "comments!A:E",
       "rankings!A:D",
       "outcomes!A:D",
+      "contributions!A:F",
     ]);
 
     const metaMap = new Map<string, string>();
@@ -242,13 +256,37 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       ? JSON.parse(rawVoting)
       : { state: "open", round: 1, topN: 3, liveResults: true };
 
+    const formatVersion = (metaMap.get("formatVersion") === "2" ? 2 : 1) as 1 | 2;
+
     const project: Project = {
       title,
       description,
       protected: isProtected,
       voting: votingParsed,
-      formatVersion: 1,
+      formatVersion,
     };
+
+    // Format v1 to v2 migration
+    if (formatVersion === 1 && (role === "owner" || role === "contribute")) {
+      const contribsRange = data.valueRanges.find((r) => r.range.startsWith("contributions"));
+      if (!contribsRange?.values) {
+        try {
+          await this.client.batchUpdateValues(ref.id, [
+            {
+              range: "contributions!A:F",
+              values: [["id", "at", "by", "targetKind", "targetId", "payload"]],
+            },
+            {
+              range: "meta!A:B",
+              values: [["formatVersion", "2"]],
+            },
+          ]);
+          project.formatVersion = 2;
+        } catch {
+          // If update fails (e.g. view role or network), keep going
+        }
+      }
+    }
 
     // Parse options
     const options: Option[] = [];
@@ -341,6 +379,33 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       }
     }
 
+    // Parse contributions
+    const contributions: Contribution[] = [];
+    const contribsRange = data.valueRanges.find((r) => r.range.startsWith("contributions"));
+    if (contribsRange?.values) {
+      for (const row of contribsRange.values.slice(1)) {
+        const [id, at, by, targetKind, targetId, payloadStr] = row;
+        if (!payloadStr) continue;
+        const decPayload =
+          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
+        const parsed = JSON.parse(decPayload);
+        contributions.push({
+          id: id || "contrib",
+          at: at || "",
+          by: by || "",
+          targetKind: (targetKind as "project" | "option" | "idea") || "project",
+          targetId: targetId || "",
+          type: parsed.type,
+          body: parsed.body,
+          pros: parsed.pros,
+          cons: parsed.cons,
+          sources: parsed.sources,
+          author: parsed.author || { kind: "human" },
+          reviewStatus: parsed.reviewStatus || "pending",
+        });
+      }
+    }
+
     return {
       project,
       options,
@@ -348,6 +413,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       comments,
       rankings: Array.from(rankingsMap.values()),
       outcomes,
+      contributions,
       role,
     };
   }
@@ -420,6 +486,25 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       } else if (entry.kind === "outcome") {
         tab = "outcomes";
         row = [entryId, now, identity.participantId, JSON.stringify(entry.outcome)];
+      } else if (entry.kind === "contribution") {
+        tab = "contributions";
+        const c = entry.contribution;
+        row = [
+          c.id || entryId,
+          c.at || now,
+          c.by || identity.participantId,
+          c.targetKind,
+          c.targetId,
+          JSON.stringify({
+            type: c.type,
+            body: c.body,
+            pros: c.pros,
+            cons: c.cons,
+            sources: c.sources,
+            author: c.author,
+            reviewStatus: c.reviewStatus,
+          }),
+        ];
       }
 
       await this.queue.enqueue(ref.id, tab, row);

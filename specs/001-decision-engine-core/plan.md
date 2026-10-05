@@ -33,6 +33,12 @@ idea source, strategy).
 (US6) and local-first mode with an E2E relay (US7) follow, reusing the earlier design in
 [research.md](./research.md) R2–R9.
 
+**US5 Connection Architecture Decision (T096):**
+- A lightweight local node (`packages/node`, Hono + MCP TS SDK) runs on the user's workstation at `127.0.0.1:4178`.
+- The hosted web app (`https://kpsolo.github.io/decisionator/`) connects directly to `http://127.0.0.1:4178` via CORS-authenticated fetch/Streamable HTTP when the user has their local node running.
+- In addition, external AI agents (Claude Code, Cursor, MCP clients) connect directly to `http://127.0.0.1:4178/mcp` or `/api/v1` using bearer tokens scoped by Agent Grants.
+- Project Sheets are upgraded to format v2, adding the `contributions` tab for storing human-reviewable agent findings.
+
 ## Technical Context
 
 **Language/Version**: TypeScript (strict, ESM). The browser runtime targets evergreen browsers.

@@ -5,6 +5,8 @@ import { GoogleAuthService, GoogleSheetsProjectStore } from "@decisionator/store
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getGoogleConfig } from "../config/google.js";
+import { AgentBrief } from "../features/agents/AgentBrief.js";
+import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
 import { GradeInput } from "../features/grading/GradeInput.js";
 import { OptionDetail } from "../features/grading/OptionDetail.js";
@@ -26,7 +28,7 @@ export function ProjectViewPage() {
     reason: "deleted" | "trashed" | "permission_denied" | "not_found";
     details?: string;
   } | null>(null);
-  const [activeTab, setActiveTab] = useState<"options" | "stats">("options");
+  const [activeTab, setActiveTab] = useState<"options" | "stats" | "agents">("options");
 
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | undefined>();
@@ -210,6 +212,31 @@ export function ProjectViewPage() {
     setSnapshot({ ...snapshot, comments: updated });
   };
 
+  const handleReviewAction = async (
+    id: string,
+    action: "accepted" | "edited" | "dismissed",
+    editedBody?: string
+  ) => {
+    if (!fileId) return;
+    const existing = (snapshot.contributions || []).find((c) => c.id === id);
+    if (!existing) return;
+    const updated = {
+      ...existing,
+      reviewStatus: action,
+      body: editedBody !== undefined ? editedBody : existing.body,
+    };
+    const config = getGoogleConfig();
+    const auth = new GoogleAuthService({ clientId: config.clientId });
+    const store = new GoogleSheetsProjectStore(auth);
+
+    await store.append({ store: "google-sheets", id: fileId }, [
+      { kind: "contribution", contribution: updated },
+    ]);
+
+    const newContribs = (snapshot.contributions || []).map((c) => (c.id === id ? updated : c));
+    setSnapshot({ ...snapshot, contributions: newContribs });
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Header card */}
@@ -272,6 +299,14 @@ export function ProjectViewPage() {
           >
             Statistics & Distributions
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("agents")}
+            className={`btn ${activeTab === "agents" ? "btn-primary" : "btn-outline"}`}
+            style={{ fontSize: 13 }}
+          >
+            Ask Agent & Review ({snapshot.contributions?.length || 0})
+          </button>
           <Link to={`/p/${fileId}/vote`} className="btn btn-outline" style={{ fontSize: 13 }}>
             Vote
           </Link>
@@ -290,6 +325,21 @@ export function ProjectViewPage() {
           stats={Array.from(statsMap.values())}
           showBordaSort={snapshot.outcomes.length > 0}
         />
+      ) : activeTab === "agents" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <AgentBrief
+            projectTitle={snapshot.project.title}
+            target={{ kind: "project" }}
+            token="deci_agent_token_local"
+            instruction={`Analyze project "${snapshot.project.title}" and provide notes, research, pros/cons or proposed options.`}
+            expiresAt={new Date(Date.now() + 24 * 3600 * 1000).toISOString()}
+          />
+          <ContributionReview
+            contributions={snapshot.contributions || []}
+            onReviewAction={handleReviewAction}
+            isOwnerOrEditor={roleCapabilities.canComment}
+          />
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {snapshot.options.map((opt) => {

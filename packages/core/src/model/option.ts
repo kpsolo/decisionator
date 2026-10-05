@@ -3,7 +3,7 @@ import { z } from "zod";
 export const OptionEffortSchema = z.enum(["XS", "S", "M", "L", "XL"]);
 export type OptionEffort = z.infer<typeof OptionEffortSchema>;
 
-export const OptionStatusSchema = z.enum(["active", "removed"]);
+export const OptionStatusSchema = z.enum(["active", "removed", "proposed"]);
 export type OptionStatus = z.infer<typeof OptionStatusSchema>;
 
 export const OptionLinkSchema = z.object({

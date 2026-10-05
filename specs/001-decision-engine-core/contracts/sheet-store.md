@@ -27,13 +27,20 @@ account email, stamped by the store.
 | `comments` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"body": markdown, "replaces"?: id, "hidden"?: bool}`. Edits and hides are new rows that reference `replaces`. Only the owner may hide others' comments. |
 | `rankings` | `id`, `at`, `by`, `payload` | contributors | **Append-only.** `payload` = `{"ranking": [optionId…], "round": n}`. The latest row per (`by`, `round`) counts. |
 | `outcomes` | `id`, `at`, `by`, `payload` | owner | **Append-only.** `payload` = an OutcomeRecord ([data-model.md](../data-model.md)). |
+| `contributions` | `id`, `at`, `by`, `targetKind`, `targetId`, `payload` | agents & contributors | **Append-only.** Added in format v2 (US5). `payload` = `{type, body, pros?, cons?, sources[], author, reviewStatus: "pending" | "accepted" | "edited" | "dismissed"}`. |
 
 **`meta` keys**:
-- `formatVersion` (`1`)
+- `formatVersion` (`1` or `2`)
 - `title`, `description` (encrypted in password mode)
 - `protected` (`true` / `false`), `kdf` (`pbkdf2-sha256`), `kdfIterations`, `salt`, `verifier`
 - `voting` (`{"state": "open" | "closed", "round": n, "topN": 3, "liveResults": true}`)
 - `createdAt`, `owner`
+
+### Format v1 to v2 Migration (US5)
+When opening a project with `formatVersion = 1`:
+1. If the `contributions` tab does not exist, the store appends `contributions` to the spreadsheet tabs via `spreadsheets.batchUpdate` with the header row `["id", "at", "by", "targetKind", "targetId", "payload"]`.
+2. The store updates `meta.formatVersion` to `2`.
+3. If the user lacks write permission to update tabs (e.g. view-only collaborator), the store treats `contributions` as an empty list without failing.
 
 In password mode, readable `meta` values reveal nothing about the content beyond counts and
 timestamps. The `by` column (participants' emails), `optionId` columns and `at` timestamps stay
@@ -77,6 +84,7 @@ used to import into local mode in US7.
 
 | Version | Date | Change |
 |---------|------|--------|
-| 1.1.0 (unreleased) | 2026-10-05 | Add delete project operation (`files.update {trashed: true}`) per FR-025; disclose readable metadata fields (`by`, `optionId`, `at`) in password mode per FR-017 and SC-007 |
+| 2.0.0 | 2026-10-05 | Add `contributions` tab and automatic migration from v1 for agent and research contributions (US5) |
+| 1.1.0 | 2026-10-05 | Add delete project operation (`files.update {trashed: true}`) per FR-025; disclose readable metadata fields (`by`, `optionId`, `at`) in password mode per FR-017 and SC-007 |
 | 1.0.0 | 2026-10-05 | Initial Google Sheets store format specification |
 

@@ -10,6 +10,7 @@ import {
 } from "@decisionator/core";
 import type React from "react";
 import { useMemo, useState } from "react";
+import { ConnectAgent } from "../agents/ConnectAgent.js";
 
 export interface FormatStepProps {
   pastedText: string;
@@ -112,10 +113,12 @@ export const FormatStep: React.FC<FormatStepProps> = ({
         </button>
       </div>
 
+      <ConnectAgent pastedText={pastedText} localeHint={localeHint} onFormatted={onValidOptions} />
+
       <div style={{ marginBottom: 16 }}>
         <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
-          1. Copy the formatting instructions below and paste them into ChatGPT, Claude, Gemini, or
-          any LLM.
+          Or manually: 1. Copy the formatting instructions below and paste them into ChatGPT,
+          Claude, Gemini, or any LLM.
         </p>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
           <label style={{ fontSize: 13, color: "var(--text-muted)" }}>

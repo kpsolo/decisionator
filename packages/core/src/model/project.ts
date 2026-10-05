@@ -42,6 +42,6 @@ export const ProjectSchema = z.object({
     liveResults: true,
   }),
   createdAt: z.string().optional(),
-  formatVersion: z.literal(1).default(1),
+  formatVersion: z.union([z.literal(1), z.literal(2)]).default(1),
 });
 export type Project = z.infer<typeof ProjectSchema>;

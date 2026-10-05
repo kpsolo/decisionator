@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentRequestSchema,
   CommentSchema,
+  ContributionSchema,
   GradeSchema,
   OptionSchema,
   OutcomeRecordSchema,
@@ -229,6 +231,71 @@ describe("Data Model Zod Schemas (T017)", () => {
       };
 
       expect(OutcomeRecordSchema.safeParse(outcome).success).toBe(true);
+    });
+  });
+
+  describe("ContributionSchema (US5)", () => {
+    it("validates contribution within limits", () => {
+      const contrib = {
+        id: "c1",
+        at: "2026-10-05T12:00:00Z",
+        by: "agent1",
+        targetKind: "option",
+        targetId: "opt1",
+        type: "note",
+        body: "A valid note",
+        pros: ["Pro 1", "Pro 2"],
+        cons: ["Con 1"],
+        sources: [{ title: "Source 1", url: "https://example.com" }],
+        author: { kind: "agent", agentName: "ResearchBot" },
+        reviewStatus: "pending",
+      };
+      const result = ContributionSchema.safeParse(contrib);
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects invalid source URL or excessive body", () => {
+      const invalidUrl = {
+        id: "c2",
+        at: "2026-10-05T12:00:00Z",
+        by: "agent1",
+        targetKind: "option",
+        targetId: "opt1",
+        type: "note",
+        body: "A valid note",
+        sources: [{ title: "Bad", url: "ftp://example.com" }],
+        author: { kind: "agent" },
+      };
+      expect(ContributionSchema.safeParse(invalidUrl).success).toBe(false);
+
+      const tooLarge = {
+        id: "c3",
+        at: "2026-10-05T12:00:00Z",
+        by: "agent1",
+        targetKind: "option",
+        targetId: "opt1",
+        type: "note",
+        body: "a".repeat(65537),
+        author: { kind: "agent" },
+      };
+      expect(ContributionSchema.safeParse(tooLarge).success).toBe(false);
+    });
+  });
+
+  describe("AgentRequestSchema (US5)", () => {
+    it("validates agent request", () => {
+      const req = {
+        id: "req1",
+        projectId: "proj1",
+        instruction: "Research market options",
+        target: { kind: "project" },
+        permissions: ["read", "contribute"],
+        createdAt: "2026-10-05T12:00:00Z",
+        expiresAt: "2026-10-06T12:00:00Z",
+        status: "open",
+      };
+      const result = AgentRequestSchema.safeParse(req);
+      expect(result.success).toBe(true);
     });
   });
 });

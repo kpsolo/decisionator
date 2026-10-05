@@ -7,6 +7,7 @@ export const TAB_HEADERS = {
   comments: ["id", "at", "by", "optionId", "payload"],
   rankings: ["id", "at", "by", "payload"],
   outcomes: ["id", "at", "by", "payload"],
+  contributions: ["id", "at", "by", "targetKind", "targetId", "payload"],
 } as const;
 
 export type SheetTabName = keyof typeof TAB_HEADERS;
@@ -45,6 +46,7 @@ export async function createProjectSpreadsheet(
     "comments",
     "rankings",
     "outcomes",
+    "contributions",
   ];
 
   // 1. Create spreadsheet with all required tabs
@@ -55,14 +57,14 @@ export async function createProjectSpreadsheet(
   await client.updateFile(spreadsheetId, {
     appProperties: {
       decisionator: "project",
-      formatVersion: "1",
+      formatVersion: "2",
     },
   });
 
   // 3. Prepare initial meta rows
   const metaRows: string[][] = [
     [...TAB_HEADERS.meta],
-    ["formatVersion", "1"],
+    ["formatVersion", "2"],
     ["createdAt", new Date().toISOString()],
     ["owner", meta.ownerParticipantId],
     ["protected", meta.passwordProtected ? "true" : "false"],
@@ -96,6 +98,7 @@ export async function createProjectSpreadsheet(
     { range: "comments!A:E", values: [[...TAB_HEADERS.comments]] },
     { range: "rankings!A:D", values: [[...TAB_HEADERS.rankings]] },
     { range: "outcomes!A:D", values: [[...TAB_HEADERS.outcomes]] },
+    { range: "contributions!A:F", values: [[...TAB_HEADERS.contributions]] },
   ];
 
   await client.batchUpdateValues(spreadsheetId, initialData);

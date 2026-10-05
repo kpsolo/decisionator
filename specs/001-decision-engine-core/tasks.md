@@ -414,14 +414,14 @@ contributions.
 **Independent Test**: formatting without copy-paste; a sourced, attributed note "pending review"
 on an option.
 
-- [ ] T096 [US5] **Planning checkpoint**: refine plan.md for US5. Decide how a hosted web app reaches a local or remote agent: the local node from research R2 vs other options. Add a `contributions` tab to the Sheet format (v2) and a migration from v1. Update `contracts/agentic-api.md` and `contracts/sheet-store.md`.
-- [ ] T097 [P] [US5] Write agent API contract tests in `packages/node/test/contract/agentic-api.test.ts` for MCP and REST: each operation, permission denials, expired, revoked and cancelled grants, out-of-scope targets, the limits table, and MCP/OpenAPI parity (FR-040, FR-042, FR-044).
-- [ ] T098 [US5] Scaffold `packages/node/`: a Hono server bound to `127.0.0.1:4178` with Host/Origin checks (research R14) (FR-040).
-- [ ] T099 [US5] Implement grants in `packages/node/src/agent-api/grants.ts`: 256-bit bearer tokens stored as SHA-256 hashes, scope, default expiry 24 h (max 30 days), revocation, and counters (≤ 50 contributions per request, ≤ 60 calls per minute) (FR-042).
-- [ ] T100 [US5] Implement the MCP server in `packages/node/src/agent-api/mcp.ts` (MCP TS SDK v2), with the tools from `contracts/agentic-api.md`: `agent_hello`, `get_request`, `get_context`, `list_contributions`, `add_contribution`, `update_contribution`, `propose_option`, `complete_request` (FR-040).
-- [ ] T101 [US5] Implement REST and OpenAPI in `packages/node/src/agent-api/rest.ts`: `/api/v1` plus `/api/v1/openapi.json`, generated from the same Zod schemas (FR-040).
-- [ ] T102 [US5] Build agent connection and auto-format in `apps/web/src/features/agents/ConnectAgent.tsx`: when connected, send `buildInstruction()` to the agent and skip the copy-paste step (FR-041).
-- [ ] T103 [US5] Build the agent brief and review in `apps/web/src/features/agents/AgentBrief.tsx` and `apps/web/src/features/agents/ContributionReview.tsx` (FR-043, FR-044):
+- [x] T096 [US5] **Planning checkpoint**: refine plan.md for US5. Decide how a hosted web app reaches a local or remote agent: the local node from research R2 vs other options. Add a `contributions` tab to the Sheet format (v2) and a migration from v1. Update `contracts/agentic-api.md` and `contracts/sheet-store.md`.
+- [x] T097 [P] [US5] Write agent API contract tests in `packages/node/test/contract/agentic-api.test.ts` for MCP and REST: each operation, permission denials, expired, revoked and cancelled grants, out-of-scope targets, the limits table, and MCP/OpenAPI parity (FR-040, FR-042, FR-044).
+- [x] T098 [US5] Scaffold `packages/node/`: a Hono server bound to `127.0.0.1:4178` with Host/Origin checks (research R14) (FR-040).
+- [x] T099 [US5] Implement grants in `packages/node/src/agent-api/grants.ts`: 256-bit bearer tokens stored as SHA-256 hashes, scope, default expiry 24 h (max 30 days), revocation, and counters (≤ 50 contributions per request, ≤ 60 calls per minute) (FR-042).
+- [x] T100 [US5] Implement the MCP server in `packages/node/src/agent-api/mcp.ts` (MCP TS SDK v2), with the tools from `contracts/agentic-api.md`: `agent_hello`, `get_request`, `get_context`, `list_contributions`, `add_contribution`, `update_contribution`, `propose_option`, `complete_request` (FR-040).
+- [x] T101 [US5] Implement REST and OpenAPI in `packages/node/src/agent-api/rest.ts`: `/api/v1` plus `/api/v1/openapi.json`, generated from the same Zod schemas (FR-040).
+- [x] T102 [US5] Build agent connection and auto-format in `apps/web/src/features/agents/ConnectAgent.tsx`: when connected, send `buildInstruction()` to the agent and skip the copy-paste step (FR-041).
+- [x] T103 [US5] Build the agent brief and review in `apps/web/src/features/agents/AgentBrief.tsx` and `apps/web/src/features/agents/ContributionReview.tsx` (FR-043, FR-044):
   - a copyable brief;
   - pending/accepted/edited/dismissed review;
   - attribution "agent X for person Y";

@@ -4,6 +4,8 @@ export * from "./model/project.js";
 export * from "./model/option.js";
 export * from "./model/entries.js";
 export * from "./model/outcome.js";
+export * from "./model/contribution.js";
+export * from "./model/agent.js";
 export * from "./crypto/payload-codec.js";
 export * from "./export/project-v1.js";
 export * from "./format/instruction.js";
