@@ -17,9 +17,12 @@
     "@decisionator/source-paste": "workspace:*",
     "@decisionator/store-google-sheets": "workspace:*",
     "@decisionator/strategy-borda": "workspace:*",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.1.5"
+    "react-router-dom": "^7.1.5",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
@@ -27,6 +30,7 @@
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
+    "@types/semver": "^7.8.0",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",

@@ -1,0 +1,124 @@
+{
+  "$ref": "#/definitions/project",
+  "definitions": {
+    "project": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "store": {
+                  "type": "string",
+                  "const": "google-sheets"
+                },
+                "fileId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["store", "fileId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "store": {
+                  "type": "string",
+                  "const": "local"
+                },
+                "docId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["store", "docId"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 20000,
+          "default": ""
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protected": {
+          "type": "boolean",
+          "default": false
+        },
+        "kdf": {
+          "type": "object",
+          "properties": {
+            "alg": {
+              "type": "string",
+              "const": "pbkdf2-sha256"
+            },
+            "iterations": {
+              "type": "integer",
+              "minimum": 10000
+            },
+            "salt": {
+              "type": "string"
+            },
+            "verifier": {
+              "type": "string"
+            }
+          },
+          "required": ["alg", "iterations", "salt"],
+          "additionalProperties": false
+        },
+        "voting": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": ["open", "closed"]
+            },
+            "round": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "topN": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 3
+            },
+            "liveResults": {
+              "type": "boolean"
+            }
+          },
+          "required": ["state", "round", "liveResults"],
+          "additionalProperties": false,
+          "default": {
+            "state": "closed",
+            "round": 1,
+            "topN": 3,
+            "liveResults": true
+          }
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "formatVersion": {
+          "type": "number",
+          "const": 1,
+          "default": 1
+        }
+      },
+      "required": ["title"],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

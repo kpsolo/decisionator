@@ -1,0 +1,168 @@
+{
+  "$ref": "#/definitions/outcome",
+  "definitions": {
+    "outcome": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "strategy": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["id", "version"],
+          "additionalProperties": false
+        },
+        "settings": {},
+        "inputs": {
+          "type": "object",
+          "properties": {
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "weight": {
+                    "type": "number"
+                  }
+                },
+                "required": ["id", "title"],
+                "additionalProperties": false
+              }
+            },
+            "ballots": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "by": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "ranking": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "required": ["by", "ranking"],
+                "additionalProperties": false
+              }
+            },
+            "grades": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "optionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "average": {
+                    "type": "number"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["optionId", "average", "count"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["options"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "winner": {
+              "type": "string",
+              "minLength": 1
+            },
+            "chosen": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "order": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "optionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "points": {
+                    "type": "number"
+                  },
+                  "firstPlaces": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["optionId", "points", "firstPlaces"],
+                "additionalProperties": false
+              }
+            },
+            "explanation": {
+              "type": "string"
+            }
+          },
+          "required": ["winner", "order"],
+          "additionalProperties": false
+        },
+        "tieBreak": {
+          "type": "string",
+          "enum": ["none", "average-grade", "first-places", "seeded-random"],
+          "default": "none"
+        },
+        "seed": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 32,
+          "pattern": "^[0-9a-fA-F]{32}$"
+        },
+        "triggeredBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["strategy", "inputs", "result", "triggeredBy", "at"],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -111,20 +111,20 @@ story work starts until this phase is done.**
 
 ### Core services
 
-- [ ] T022 [P] Write `packages/core/test/crypto.test.ts` covering:
+- [x] T022 [P] Write `packages/core/test/crypto.test.ts` covering:
   - password round trip;
   - wrong password fails verifier;
   - output format `enc:v1:<base64 iv>:<base64 ciphertext>`;
   - a unique 12-byte IV per call;
   - KDF parameters `pbkdf2-sha256`, 600 000 iterations, 16-byte salt.
-- [ ] T023 Implement the password codec in `packages/core/src/crypto/payload-codec.ts`:
+- [x] T023 Implement the password codec in `packages/core/src/crypto/payload-codec.ts`:
   - `deriveKey(password, salt, iterations)` via WebCrypto PBKDF2;
   - `encrypt` / `decrypt` with AES-256-GCM;
   - `makeVerifier` / `checkVerifier`;
   - the key is never serialized;
   - T022 must pass.
-- [ ] T024 [P] Implement the export format `decisionator.project/v1` in `packages/core/src/export/project-v1.ts`, plus `scripts/gen-schemas.ts`, which emits JSON Schemas from the Zod models (via `z.toJSONSchema`) into `packages/core/schema/`.
-- [ ] T025 Implement the module host in `apps/web/src/host/module-host.ts` (constitution §II):
+- [x] T024 [P] Implement the export format `decisionator.project/v1` in `packages/core/src/export/project-v1.ts`, plus `scripts/gen-schemas.ts`, which emits JSON Schemas from the Zod models (via `z.toJSONSchema`) into `packages/core/schema/`.
+- [x] T025 Implement the module host in `apps/web/src/host/module-host.ts` (constitution §II):
   - validate each first-party module's `decisionator-plugin.json` against `contracts/plugin-manifest.schema.json` v1.1 with Ajv, and refuse any module whose `platform.*` ranges the host doesn't satisfy, with a plain-language error;
   - register first-party modules only through the `plugin-sdk` interfaces;
   - wrap every call with a timeout (default 5 s, strategies 2 s) and error capture;

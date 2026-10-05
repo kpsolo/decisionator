@@ -1,0 +1,96 @@
+{
+  "$ref": "#/definitions/option",
+  "definitions": {
+    "option": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "order": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "removed"],
+          "default": "active"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 20000,
+          "default": ""
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "maxItems": 10,
+          "default": []
+        },
+        "pros": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 20,
+          "default": []
+        },
+        "cons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 20,
+          "default": []
+        },
+        "effort": {
+          "type": "string",
+          "enum": ["XS", "S", "M", "L", "XL"]
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https?:\\/\\/.+"
+              }
+            },
+            "required": ["url"],
+            "additionalProperties": false
+          },
+          "maxItems": 10,
+          "default": []
+        },
+        "at": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "title"],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
