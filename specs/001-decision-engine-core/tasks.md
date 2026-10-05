@@ -286,7 +286,7 @@ comments once. The owner sees it within 30 s, and view-only and password behavio
   - individual removal on a link-shared project throws `NOT_SUPPORTED` with a readable message;
   - role mapping owner/writer/reader → owner/contribute/view;
   - in password mode no plaintext title, option or comment reaches the fake Sheets (SC-007).
-- [ ] T062 [P] [US2] Write the E2E test `apps/web/e2e/us2-share.spec.ts` with two browser contexts, covering quickstart US2 steps 1–6 (FR-015, FR-016, FR-019, FR-020):
+- [x] T062 [P] [US2] Write the E2E test `apps/web/e2e/us2-share.spec.ts` with two browser contexts, covering quickstart US2 steps 1–6 (FR-015, FR-016, FR-019, FR-020):
   - a collaborator's first grade within 1 min (SC-003);
   - visibility within 30 s (SC-004);
   - view-only gating;
@@ -295,32 +295,32 @@ comments once. The owner sees it within 30 s, and view-only and password behavio
 
 ### Implementation for User Story 2
 
-- [ ] T063 [US2] Implement share operations in `plugins/store-google-sheets/src/share.ts`: `share()` and `getShareState()` using the Drive permission calls in `contracts/sheet-store.md` § Sharing operations (FR-015, FR-018).
-- [ ] T064 [US2] Build the share dialog in `apps/web/src/features/sharing/ShareDialog.tsx` (FR-015):
+- [x] T063 [US2] Implement share operations in `plugins/store-google-sheets/src/share.ts`: `share()` and `getShareState()` using the Drive permission calls in `contracts/sheet-store.md` § Sharing operations (FR-015, FR-018).
+- [x] T064 [US2] Build the share dialog in `apps/web/src/features/sharing/ShareDialog.tsx` (FR-015):
   - copy link (`<VITE_BASE_URL>#/p/<fileId>`);
   - access level (view or contribute);
   - link on/off;
   - invite by email;
   - an explanation that only email-invited people can be removed individually (FR-018).
-- [ ] T065 [US2] Build the collaborator join flow in `apps/web/src/features/sharing/JoinFlow.tsx` (it also shows which Google account is signed in and offers "Switch account" when access is denied, per spec Edge Cases): Google sign-in, then Picker `setFileIds([fileId])`, or the fallback recorded by T032. At most one sign-in plus one confirmation (FR-016).
-- [ ] T066 [US2] Implement role resolution in `plugins/store-google-sheets/src/roles.ts` and `apps/web/src/features/project/useRole.ts` (FR-015):
+- [x] T065 [US2] Build the collaborator join flow in `apps/web/src/features/sharing/JoinFlow.tsx` (it also shows which Google account is signed in and offers "Switch account" when access is denied, per spec Edge Cases): Google sign-in, then Picker `setFileIds([fileId])`, or the fallback recorded by T032. At most one sign-in plus one confirmation (FR-016).
+- [x] T066 [US2] Implement role resolution in `plugins/store-google-sheets/src/roles.ts` and `apps/web/src/features/project/useRole.ts` (FR-015):
   - `plugins/store-google-sheets/src/roles.ts` reads Drive permissions and capabilities and returns the role;
   - `apps/web/src/features/project/useRole.ts` disables grade, comment and vote for view access, with the reason text (US2 #5).
-- [ ] T067 [US2] Implement password setup in `apps/web/src/features/sharing/PasswordSetup.tsx` and password mode in `plugins/store-google-sheets/src/store.ts` (FR-017):
+- [x] T067 [US2] Implement password setup in `apps/web/src/features/sharing/PasswordSetup.tsx` and password mode in `plugins/store-google-sheets/src/store.ts` (FR-017):
   - `apps/web/src/features/sharing/PasswordSetup.tsx` requires at least 12 characters and warns that a lost password is unrecoverable;
   - it states which metadata stays readable in the Sheet (participants' emails, option IDs, timestamps, counts);
   - the store writes `kdf`, `kdfIterations`, `salt` and `verifier` to `meta`;
   - it encrypts the `title` and `description` meta values, `options` payloads and all entry payloads as `enc:v1:…`;
   - it renames the Sheet to "Deci project (protected)".
-- [ ] T068 [US2] Build the password prompt in `apps/web/src/features/sharing/PasswordPrompt.tsx`: show no content until the verifier passes; after 5 wrong tries, wait 30 s; keep the derived key in memory for the session only (FR-017).
-- [ ] T069 [US2] Implement watching in `plugins/store-google-sheets/src/watch.ts` (FR-019, FR-020):
+- [x] T068 [US2] Build the password prompt in `apps/web/src/features/sharing/PasswordPrompt.tsx`: show no content until the verifier passes; after 5 wrong tries, wait 30 s; keep the derived key in memory for the session only (FR-017).
+- [x] T069 [US2] Implement watching in `plugins/store-google-sheets/src/watch.ts` (FR-019, FR-020):
   - while `document.visibilityState === "visible"`, poll Drive `files.get?fields=version` every 10 s;
   - on a version change, do one `values.batchGet`, at most every 15 s;
   - stop when hidden;
   - stay within the budget (research R23).
-- [ ] T070 [US2] Build the sync banner in `apps/web/src/sync/SyncBanner.tsx`: "syncing paused, retrying in N s" with the queued count, driven by budget, back-off and queue events (FR-020).
-- [ ] T071 [US2] Implement live snapshot merging in `apps/web/src/sync/useProjectSnapshot.ts`: apply incoming snapshots without discarding queued local entries; show others' new grades and comments without a reload (FR-019).
-- [ ] T072 [P] [US2] Build the dev toolbar in `apps/web/src/dev/DevToolbar.tsx`, in dev builds only: "force 429" and "go offline" toggles for the quickstart and E2E.
+- [x] T070 [US2] Build the sync banner in `apps/web/src/sync/SyncBanner.tsx`: "syncing paused, retrying in N s" with the queued count, driven by budget, back-off and queue events (FR-020).
+- [x] T071 [US2] Implement live snapshot merging in `apps/web/src/sync/useProjectSnapshot.ts`: apply incoming snapshots without discarding queued local entries; show others' new grades and comments without a reload (FR-019).
+- [x] T072 [P] [US2] Build the dev toolbar in `apps/web/src/dev/DevToolbar.tsx`, in dev builds only: "force 429" and "go offline" toggles for the quickstart and E2E.
 
 **Checkpoint**: US1 and US2 work together. Quickstart US2 passes.
 

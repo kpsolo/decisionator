@@ -14,7 +14,7 @@ describe("Sharing and Password Store Compliance (T061)", () => {
   afterAll(() => fakeGoogleServer.close());
 
   function setupStore(email = "owner@example.com") {
-    fakeGoogleState.currentUser = { displayName: "Owner User", emailAddress: email };
+    fakeGoogleState.setCurrentUser(email);
     const auth = new GoogleAuthService({ clientId: "test-client" });
     auth.setTokenInMemory("fake-token-123");
     const client = new GoogleApiClient(() => auth.getValidToken());

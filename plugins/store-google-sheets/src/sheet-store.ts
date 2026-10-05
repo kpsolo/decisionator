@@ -504,7 +504,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       } else {
         const perms = await this.client.listPermissions(ref.id);
         const linkPerm = perms.permissions.find((p) => p.type === "anyone");
-        if (linkPerm && linkPerm.id) {
+        if (linkPerm?.id) {
           await this.client.deletePermission(ref.id, linkPerm.id);
         }
       }
@@ -560,5 +560,145 @@ export class GoogleSheetsProjectStore implements ProjectStore {
 
   async forgetProject(_ref: ProjectRef): Promise<void> {
     // Participant side: drops local cache
+  }
+
+  /**
+   * Upgrades an existing plaintext project to password protection (T067, FR-017).
+   */
+  async enablePassword(ref: ProjectRef, password: string): Promise<void> {
+    const snap = await this.openProject(ref);
+    if (snap.role !== "owner") {
+      throw new Error("PERMISSION_DENIED: Only owner may enable password protection");
+    }
+    if (password.length < 12) {
+      throw new Error("Password must be at least 12 characters long");
+    }
+
+    const salt = generateSalt();
+    const saltBase64 = bytesToBase64(salt);
+    const cryptoKey = await deriveKey(password, salt, 600_000);
+    const verifier = await makeVerifier(cryptoKey);
+
+    // 1. Rename Sheet to "Deci project (protected)"
+    await this.client.updateFile(ref.id, {
+      name: "Deci project (protected)",
+    });
+
+    // 2. Read all existing data to encrypt
+    const data = await this.client.batchGetValues(ref.id, [
+      "meta!A:B",
+      "options!A:F",
+      "grades!A:E",
+      "comments!A:E",
+      "rankings!A:D",
+      "outcomes!A:D",
+    ]);
+
+    const metaMap = new Map<string, string>();
+    const metaRange = data.valueRanges.find((r) => r.range.startsWith("meta"));
+    if (metaRange?.values) {
+      for (const row of metaRange.values.slice(1)) {
+        if (row[0] && row[1]) metaMap.set(row[0], row[1]);
+      }
+    }
+
+    const title = metaMap.get("title") || snap.project.title;
+    const desc = metaMap.get("description") || snap.project.description || "";
+
+    const encryptedTitle = await encrypt(title, cryptoKey);
+    const encryptedDesc = desc ? await encrypt(desc, cryptoKey) : "";
+
+    const updatedMetaRows: string[][] = [
+      ["key", "value"],
+      ["formatVersion", metaMap.get("formatVersion") || "1"],
+      ["createdAt", metaMap.get("createdAt") || new Date().toISOString()],
+      ["owner", metaMap.get("owner") || ""],
+      ["protected", "true"],
+      ["voting", metaMap.get("voting") || JSON.stringify(snap.project.voting)],
+      ["kdf", "pbkdf2-sha256"],
+      ["kdfIterations", "600000"],
+      ["salt", saltBase64],
+      ["verifier", verifier],
+      ["title", encryptedTitle],
+    ];
+    if (encryptedDesc) {
+      updatedMetaRows.push(["description", encryptedDesc]);
+    }
+
+    // Encrypt options payloads
+    const optionsRows: string[][] = [["id", "order", "status", "at", "by", "payload"]];
+    const optionsRange = data.valueRanges.find((r) => r.range.startsWith("options"));
+    if (optionsRange?.values) {
+      for (const row of optionsRange.values.slice(1)) {
+        const [id, order, status, at, by, payloadStr] = row;
+        if (!payloadStr) continue;
+        const encPayload = await encrypt(payloadStr, cryptoKey);
+        optionsRows.push([
+          id || "",
+          order || "0",
+          status || "active",
+          at || "",
+          by || "",
+          encPayload,
+        ]);
+      }
+    }
+
+    // Encrypt grades payloads
+    const gradesRows: string[][] = [["id", "at", "by", "optionId", "payload"]];
+    const gradesRange = data.valueRanges.find((r) => r.range.startsWith("grades"));
+    if (gradesRange?.values) {
+      for (const row of gradesRange.values.slice(1)) {
+        const [id, at, by, optionId, payloadStr] = row;
+        if (!payloadStr) continue;
+        const encPayload = await encrypt(payloadStr, cryptoKey);
+        gradesRows.push([id || "", at || "", by || "", optionId || "", encPayload]);
+      }
+    }
+
+    // Encrypt comments payloads
+    const commentsRows: string[][] = [["id", "at", "by", "optionId", "payload"]];
+    const commentsRange = data.valueRanges.find((r) => r.range.startsWith("comments"));
+    if (commentsRange?.values) {
+      for (const row of commentsRange.values.slice(1)) {
+        const [id, at, by, optionId, payloadStr] = row;
+        if (!payloadStr) continue;
+        const encPayload = await encrypt(payloadStr, cryptoKey);
+        commentsRows.push([id || "", at || "", by || "", optionId || "", encPayload]);
+      }
+    }
+
+    // Encrypt rankings payloads
+    const rankingsRows: string[][] = [["id", "at", "by", "payload"]];
+    const rankingsRange = data.valueRanges.find((r) => r.range.startsWith("rankings"));
+    if (rankingsRange?.values) {
+      for (const row of rankingsRange.values.slice(1)) {
+        const [id, at, by, payloadStr] = row;
+        if (!payloadStr) continue;
+        const encPayload = await encrypt(payloadStr, cryptoKey);
+        rankingsRows.push([id || "", at || "", by || "", encPayload]);
+      }
+    }
+
+    // Encrypt outcomes payloads
+    const outcomesRows: string[][] = [["id", "at", "by", "payload"]];
+    const outcomesRange = data.valueRanges.find((r) => r.range.startsWith("outcomes"));
+    if (outcomesRange?.values) {
+      for (const row of outcomesRange.values.slice(1)) {
+        const [id, at, by, payloadStr] = row;
+        if (!payloadStr) continue;
+        const encPayload = await encrypt(payloadStr, cryptoKey);
+        outcomesRows.push([id || "", at || "", by || "", encPayload]);
+      }
+    }
+
+    await this.client.batchUpdateValues(ref.id, [
+      { range: "meta!A:B", values: updatedMetaRows },
+      { range: "options!A:F", values: optionsRows },
+      { range: "grades!A:E", values: gradesRows },
+      { range: "comments!A:E", values: commentsRows },
+      { range: "rankings!A:D", values: rankingsRows },
+      { range: "outcomes!A:D", values: outcomesRows },
+    ]);
   }
 }

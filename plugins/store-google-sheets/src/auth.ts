@@ -53,7 +53,7 @@ export class GoogleAuthService {
   /**
    * Requests an access token via Google Identity Services token client
    */
-  async requestToken(interactive = true): Promise<string> {
+  async requestToken(interactive = true, selectAccount = false): Promise<string> {
     if (typeof window === "undefined" || !window.google?.accounts?.oauth2) {
       // In testing or environments without GIS script loaded, allow mock/fallback
       if (this.currentToken) return this.currentToken;
@@ -84,8 +84,9 @@ export class GoogleAuthService {
           return;
         }
 
-        // Silent re-request on expiry, prompt if interactive
-        client.requestAccessToken({ prompt: interactive ? "consent" : "" });
+        // Silent re-request on expiry, prompt if interactive or switching accounts
+        const promptVal = selectAccount ? "select_account" : interactive ? "consent" : "";
+        client.requestAccessToken({ prompt: promptVal });
       } catch (err) {
         reject(err);
       }

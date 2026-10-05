@@ -11,6 +11,8 @@ import { OptionDetail } from "../features/grading/OptionDetail.js";
 import { DeleteProject } from "../features/project/DeleteProject.js";
 import { ExportButton } from "../features/project/ExportButton.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
+import { useRole } from "../features/project/useRole.js";
+import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
 import { StatsView } from "../features/stats/StatsView.js";
 
 export function ProjectViewPage() {
@@ -25,6 +27,10 @@ export function ProjectViewPage() {
     details?: string;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<"options" | "stats">("options");
+
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [cachedPassword, setCachedPassword] = useState<string | undefined>();
 
   useEffect(() => {
     if (!fileId) return;
@@ -41,12 +47,21 @@ export function ProjectViewPage() {
         const identity = await store.signIn({ interactive: false });
         if (isMounted) setCurrentUser(identity.participantId);
 
-        const snap = await store.openProject({ store: "google-sheets", id: validFileId });
-        if (isMounted) setSnapshot(snap);
+        const snap = await store.openProject(
+          { store: "google-sheets", id: validFileId },
+          { password: cachedPassword }
+        );
+        if (isMounted) {
+          setSnapshot(snap);
+          setNeedsPassword(false);
+        }
       } catch (err: unknown) {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("trashed")) {
+        if (msg.includes("Password required") || msg.includes("Incorrect password")) {
+          setNeedsPassword(true);
+          setPasswordError(msg);
+        } else if (msg.includes("trashed")) {
           setError({ reason: "trashed", details: msg });
         } else if (msg.includes("PERMISSION_DENIED") || msg.includes("insufficientPermissions")) {
           setError({ reason: "permission_denied", details: msg });
@@ -69,13 +84,41 @@ export function ProjectViewPage() {
       isMounted = false;
       unsub();
     };
-  }, [fileId]);
+  }, [fileId, cachedPassword]);
 
   if (loading) {
     return (
       <div className="card" style={{ textAlign: "center", padding: "40px 16px" }}>
         <h3>Loading project...</h3>
       </div>
+    );
+  }
+
+  if (needsPassword) {
+    return (
+      <PasswordPrompt
+        error={passwordError}
+        onUnlock={async (pwd) => {
+          try {
+            setLoading(true);
+            const cfg = getGoogleConfig();
+            const a = new GoogleAuthService({ clientId: cfg.clientId });
+            const s = new GoogleSheetsProjectStore(a);
+            const snap = await s.openProject(
+              { store: "google-sheets", id: fileId || "" },
+              { password: pwd }
+            );
+            setCachedPassword(pwd);
+            setSnapshot(snap);
+            setNeedsPassword(false);
+            return true;
+          } catch {
+            return false;
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
     );
   }
 
@@ -88,6 +131,7 @@ export function ProjectViewPage() {
   }
 
   const isOwner = snapshot.role === "owner";
+  const roleCapabilities = useRole(snapshot.role);
   const statsMap = computeOptionStats(snapshot.options, snapshot.grades, snapshot.comments);
 
   const handleGradeChange = async (optionId: string, val: number) => {
@@ -270,6 +314,7 @@ export function ProjectViewPage() {
                       value={myGrade?.value}
                       authorName={currentUser}
                       updatedAt={myGrade?.at}
+                      disabled={!roleCapabilities.canGrade}
                       onChange={(val) => handleGradeChange(opt.id, val)}
                     />
                   </div>
@@ -279,6 +324,8 @@ export function ProjectViewPage() {
                     optionId={opt.id}
                     currentUserId={currentUser}
                     isOwner={isOwner}
+                    disabled={!roleCapabilities.canComment}
+                    disabledReason={roleCapabilities.disabledReason}
                     onAddComment={(body) => handleAddComment(body, opt.id)}
                     onEditComment={(cId, body) => handleEditComment(cId, body, opt.id)}
                     onToggleHide={(cId, hidden) => handleToggleHide(cId, hidden, opt.id)}

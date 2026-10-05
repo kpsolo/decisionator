@@ -1,5 +1,7 @@
 import React from "react";
 import { Link, useParams } from "react-router-dom";
+import { PasswordSetup } from "../features/sharing/PasswordSetup.js";
+import { ShareDialog } from "../features/sharing/ShareDialog.js";
 
 export function HomePage() {
   return (
@@ -93,12 +95,58 @@ export function ProjectResultsPage() {
 
 export function ProjectSharePage() {
   const { fileId } = useParams();
+  const [showPasswordSetup, setShowPasswordSetup] = React.useState(false);
+
+  if (!fileId) return <div>Project ID missing</div>;
+
   return (
-    <div className="card">
-      <h2>Share Decision Project</h2>
-      <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-        Manage link access and collaborator invitations.
-      </p>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2>Share Decision Project</h2>
+            <p style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 13 }}>
+              Manage link access, invite collaborators, and configure encryption for{" "}
+              <code>{fileId}</code>.
+            </p>
+          </div>
+          <Link to={`/p/${fileId}`} className="btn btn-outline" style={{ fontSize: 13 }}>
+            ← Back to Project
+          </Link>
+        </div>
+      </div>
+
+      <ShareDialog fileId={fileId} onClose={() => {}} />
+
+      {!showPasswordSetup ? (
+        <div
+          className="card"
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        >
+          <div>
+            <h4 style={{ margin: "0 0 4px 0" }}>Client-Side Encryption</h4>
+            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
+              Protect options and discussions with AES-256-GCM encryption before sending to Google
+              Sheets.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPasswordSetup(true)}
+            className="btn btn-outline"
+            style={{ fontSize: 13 }}
+          >
+            🔒 Enable Password Protection
+          </button>
+        </div>
+      ) : (
+        <PasswordSetup
+          onEnablePassword={async (_password) => {
+            setShowPasswordSetup(false);
+          }}
+          onCancel={() => setShowPasswordSetup(false)}
+        />
+      )}
     </div>
   );
 }

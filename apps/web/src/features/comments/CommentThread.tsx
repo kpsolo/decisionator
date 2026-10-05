@@ -9,6 +9,8 @@ export interface CommentThreadProps {
   optionId: string;
   currentUserId: string;
   isOwner: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
   onAddComment: (body: string) => void;
   onEditComment: (commentId: string, newBody: string) => void;
   onToggleHide: (commentId: string, hidden: boolean) => void;
@@ -21,6 +23,8 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
   optionId,
   currentUserId,
   isOwner,
+  disabled = false,
+  disabledReason,
   onAddComment,
   onEditComment,
   onToggleHide,
@@ -185,13 +189,26 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
         })}
       </div>
 
+      {disabled && disabledReason && (
+        <div
+          style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic", marginBottom: 8 }}
+        >
+          {disabledReason}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <textarea
           value={newBody}
           onChange={(e) => setNewBody(e.target.value)}
-          placeholder="Add a comment (Markdown supported)..."
+          placeholder={
+            disabled
+              ? "Commenting disabled for view-only access"
+              : "Add a comment (Markdown supported)..."
+          }
           rows={3}
           maxLength={10000}
+          disabled={disabled}
           style={{
             width: "100%",
             padding: 8,
@@ -202,6 +219,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
             boxSizing: "border-box",
             fontSize: 13,
             marginBottom: 8,
+            opacity: disabled ? 0.6 : 1,
           }}
         />
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -209,7 +227,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
             type="submit"
             className="btn btn-primary"
             style={{ fontSize: 13 }}
-            disabled={!newBody.trim() || newBody.length > 10000}
+            disabled={disabled || !newBody.trim() || newBody.length > 10000}
           >
             Post Comment
           </button>
