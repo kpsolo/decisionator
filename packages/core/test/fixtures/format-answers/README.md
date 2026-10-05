@@ -50,7 +50,19 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 
 ## Results so far
 
-**v1.2:** Claude 5/5 valid; Gemini 0/5 collected.
+**v1.2: 10/10 valid strictly** (no extraction rules needed). Every Gemini answer passes all
+tracked checks: field types, no citation markers, correct language (02 is now English), and
+expected option counts.
+
+| Version | Strict valid | Gemini issues |
+|---------|--------------|---------------|
+| v1.0 | 10/10 | 02: citations, Ukrainian, 17/16 options · 03, 04: citations · 05: citations, Ukrainian |
+| v1.1 | 9/10 | 01: `pros`/`cons` as strings · 02: Ukrainian |
+| v1.2 | 10/10 | none of the tracked issues |
+
+Untracked quality notes on v1.2 (candidates for v1.3): Gemini 01 shortened the list's own
+descriptions to their first sentence (about 46% of the text dropped); 03 and 04 used too many
+categories (14 for 20, 10 for 12).
 
 **v1.1: 10/10 valid** after extraction rules (9/10 strictly: Gemini 01 gave `pros`/`cons` as
 strings, now handled by extraction rule 6). Compared with v1.0, Gemini's answers lost all
@@ -71,7 +83,11 @@ carried `[cite: N]` markers.
 |------|-----------|-------------|------|-------|
 | 01–03, 05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Same as v1.1 (already compliant) |
 | 04 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Titles and tags fully in Ukrainian per the new "all text" hint |
-| 01–05 | gemini | — | — | to collect |
+| 01 | gemini | Gemini (app) | 2026-10-05 | Valid; 50/50, English, no `pros`/`cons`; descriptions cut to the first sentence (0/50 verbatim) |
+| 02 | gemini | Gemini (app) | 2026-10-05 | Valid; 16/16, **English**, clean titles, URL in `links`, `pros`/`cons` as lists |
+| 03 | gemini | Gemini (app) | 2026-10-05 | Valid; 20/20, one short sentence each; 14 categories for 20 ideas |
+| 04 | gemini | Gemini (app) | 2026-10-05 | Valid; 12/12, Ukrainian, `pros`/`cons` as lists; 10 categories for 12 ideas |
+| 05 | gemini | Gemini (app) | 2026-10-05 | Valid; 9/9 merged, English, heading as project title |
 
 ### v1.1
 

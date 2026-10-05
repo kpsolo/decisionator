@@ -92,6 +92,14 @@ stored per template version in `packages/core/test/fixtures/format-answers/v<maj
 replayed in CI. Older versions stay as a baseline. Any change to the template must re-collect
 answers and keep this pass rate.
 
+## Known issues (candidates for the next version)
+
+- Assistants may shorten descriptions that the list already gives (fixture `v1.2/01/gemini`: first
+  sentence only, about 46% of the text dropped). Candidate rule: "If the list already gives a
+  description for an idea, copy it word for word."
+- Category sprawl (fixtures `v1.2/03`, `v1.2/04`: 14 categories for 20 ideas, 10 for 12).
+  Candidate rule: "Use at most one category per four ideas."
+
 ## Changelog
 
 | Version | Date | Change | Evidence |
