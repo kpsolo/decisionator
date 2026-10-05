@@ -65,13 +65,15 @@ export class GoogleApiClient {
 
       if (res.status === 403) {
         const errJson = await res.json().catch(() => null);
-        const reason = errJson?.error?.errors?.[0]?.reason || errJson?.error?.status || "";
+        const reason =
+          errJson?.error?.errors?.[0]?.reason ||
+          errJson?.error?.status ||
+          errJson?.error?.message ||
+          "";
         if (reason === "rateLimitExceeded" || reason === "userRateLimitExceeded") {
           throw new RateLimitedError("Google API 403 rateLimitExceeded");
         }
-        if (reason === "insufficientPermissions" || reason === "PERMISSION_DENIED") {
-          throw new ProjectUnavailableError("Insufficient permissions");
-        }
+        throw new ProjectUnavailableError(`PERMISSION_DENIED: ${reason || "Forbidden"}`);
       }
 
       if (res.status === 404) {

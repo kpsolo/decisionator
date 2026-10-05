@@ -6,3 +6,6 @@ export * from "./model/entries.js";
 export * from "./model/outcome.js";
 export * from "./crypto/payload-codec.js";
 export * from "./export/project-v1.js";
+export * from "./format/instruction.js";
+export * from "./format/extract.js";
+export * from "./format/validate.js";

@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@decisionator/core": "workspace:*",
-    "@decisionator/plugin-sdk": "workspace:*"
+    "@decisionator/plugin-sdk": "workspace:*",
+    "@noble/hashes": "^2.4.0"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

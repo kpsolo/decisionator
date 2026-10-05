@@ -35,11 +35,13 @@ describe("WebCrypto Password Codec", () => {
     expect(parts[1]).toBe("v1");
 
     // Base64 decode IV to verify 12 bytes
-    const ivBytes = Buffer.from(parts[2], "base64");
+    const ivBase64 = parts[2] ?? "";
+    const ivBytes = Buffer.from(ivBase64, "base64");
     expect(ivBytes.byteLength).toBe(12);
 
     // Ciphertext should not be empty
-    const cipherBytes = Buffer.from(parts[3], "base64");
+    const cipherBase64 = parts[3] ?? "";
+    const cipherBytes = Buffer.from(cipherBase64, "base64");
     expect(cipherBytes.byteLength).toBeGreaterThan(0);
   });
 
@@ -87,7 +89,7 @@ describe("WebCrypto Password Codec", () => {
     const encrypted = await encrypt(plaintext, key);
     const parts = encrypted.split(":");
     // modify one character of ciphertext base64
-    const tampered = `${parts[0]}:${parts[1]}:${parts[2]}:A${parts[3].slice(1)}`;
+    const tampered = `${parts[0]}:${parts[1]}:${parts[2]}:A${(parts[3] ?? "").slice(1)}`;
 
     await expect(decrypt(tampered, key)).rejects.toThrow();
   });

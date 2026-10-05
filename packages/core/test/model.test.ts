@@ -84,8 +84,7 @@ describe("Data Model Zod Schemas (T017)", () => {
         OptionSchema.safeParse({
           id: "01J00000000000000000000000",
           title: "Valid option",
-          // @ts-expect-error invalid effort
-          effort: "XXL",
+          effort: "XXL" as any,
         }).success
       ).toBe(false);
 
