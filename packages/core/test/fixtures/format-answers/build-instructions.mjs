@@ -1,0 +1,25 @@
+// Regenerates instructions/<name>.txt from inputs/<name>.txt using the template in
+// specs/001-decision-engine-core/contracts/format-instruction.md.
+// An optional inputs/<name>.hint.txt fills {{LOCALE_HINT}}.
+// Usage: node packages/core/test/fixtures/format-answers/build-instructions.mjs
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const contract = join(here, "../../../../../specs/001-decision-engine-core/contracts/format-instruction.md");
+const template = /## Template[\s\S]*?````text\n([\s\S]*?)````/.exec(readFileSync(contract, "utf8"))[1];
+
+mkdirSync(join(here, "instructions"), { recursive: true });
+for (const file of readdirSync(join(here, "inputs"))) {
+  if (!file.endsWith(".txt") || file.endsWith(".hint.txt")) continue;
+  const name = file.slice(0, -4);
+  const pasted = readFileSync(join(here, "inputs", file), "utf8").replace(/\n+$/, "");
+  const hintFile = join(here, "inputs", `${name}.hint.txt`);
+  const hint = existsSync(hintFile) ? readFileSync(hintFile, "utf8").trim() : "";
+  const out = template
+    .replace("{{LOCALE_HINT}}\n", hint ? `${hint}\n` : "")
+    .replace("{{PASTED_TEXT}}", () => pasted);
+  writeFileSync(join(here, "instructions", file), out);
+  console.log(`instructions/${file}${hint ? " (with locale hint)" : ""}`);
+}

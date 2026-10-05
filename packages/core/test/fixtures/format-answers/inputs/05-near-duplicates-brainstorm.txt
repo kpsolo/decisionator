@@ -1,0 +1,16 @@
+Brainstorm: how do we get more people to try Deci?
+
+- Post on Product Hunt
+- launch on producthunt.com
+- Write a blog post about the Borda count
+- Twitter/X thread explaining ranked voting
+- X thread: why ranked voting beats simple polls
+- Ask friends to share the link
+- Share in Ukrainian startup Telegram channels
+- Telegram channels for UA founders — share there
+- YouTube demo video (2 min)
+- short demo video for YouTube
+- Reddit r/SideProject post
+- Template gallery: ready-made decision templates
+- Templates (hiring, trips, lunch)
+- Integrate with Slack so teams find us

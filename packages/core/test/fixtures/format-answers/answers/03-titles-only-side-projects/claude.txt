@@ -1,0 +1,28 @@
+```json
+{
+  "format": "decisionator.options/v1",
+  "project": { "title": "Side project ideas" },
+  "options": [
+    { "title": "Habit tracker for couples", "description": "A habit tracker that two partners share and keep each other accountable in.", "category": "Personal & Home", "tags": ["habits", "couples"], "effort": "M" },
+    { "title": "Recipe cost calculator", "description": "Calculates how much a recipe costs to make from its ingredients.", "category": "Food", "tags": ["recipes", "calculator", "budget"], "effort": "S" },
+    { "title": "Podcast clip maker", "description": "Turns podcast episodes into short shareable clips.", "category": "Media", "tags": ["podcasts", "audio", "clips"], "effort": "L" },
+    { "title": "Local farmers market finder", "description": "Helps people find farmers markets near them.", "category": "Food", "tags": ["local", "maps", "markets"], "effort": "S" },
+    { "title": "Board game night scheduler", "description": "Schedules board game nights with a group of friends.", "category": "Social & Events", "tags": ["scheduling", "board-games", "friends"], "effort": "S" },
+    { "title": "Personal API for my life stats", "description": "A personal API that exposes stats about the owner's life.", "category": "Personal & Home", "tags": ["api", "quantified-self"], "effort": "M" },
+    { "title": "Meme generator for Slack", "description": "Generates memes directly inside Slack.", "category": "Media", "tags": ["slack", "memes", "bot"], "effort": "S" },
+    { "title": "Language exchange matcher", "description": "Matches people who want to practise each other's languages.", "category": "Social & Events", "tags": ["language", "matching"], "effort": "M" },
+    { "title": "Bike route weather planner", "description": "Plans bike routes around the weather forecast.", "category": "Outdoors", "tags": ["cycling", "weather", "routes"], "effort": "M" },
+    { "title": "Home inventory for insurance", "description": "Keeps an inventory of home belongings for insurance purposes.", "category": "Personal & Home", "tags": ["inventory", "insurance"], "effort": "M" },
+    { "title": "Kids chore rewards app", "description": "Rewards kids for completing chores.", "category": "Family", "tags": ["kids", "chores", "rewards"], "effort": "S" },
+    { "title": "Book club voting bot", "description": "A bot that lets a book club vote on what to read next.", "category": "Social & Events", "tags": ["books", "voting", "bot"], "effort": "S" },
+    { "title": "Secondhand textbook swap", "description": "Lets students swap secondhand textbooks.", "category": "Marketplace", "tags": ["students", "books", "swap"], "effort": "M" },
+    { "title": "Coffee shop wifi map", "description": "A map of coffee shops with information about their wifi.", "category": "Outdoors", "tags": ["maps", "coffee", "wifi"], "effort": "S" },
+    { "title": "Gift idea tracker", "description": "Keeps track of gift ideas for the people in your life.", "category": "Personal & Home", "tags": ["gifts", "lists"], "effort": "XS" },
+    { "title": "Freelance invoice reminder", "description": "Reminds freelancers to send invoices and chase unpaid ones.", "category": "Work", "tags": ["freelance", "invoices", "reminders"], "effort": "S" },
+    { "title": "Pet medication reminder", "description": "Reminds owners when their pets need medication.", "category": "Family", "tags": ["pets", "reminders", "health"], "effort": "XS" },
+    { "title": "Apartment noise logger", "description": "Logs noise levels in an apartment over time.", "category": "Personal & Home", "tags": ["noise", "logging"], "effort": "S" },
+    { "title": "Volunteer shift planner", "description": "Plans and assigns volunteer shifts.", "category": "Work", "tags": ["volunteering", "scheduling"], "effort": "M" },
+    { "title": "Wedding seating planner", "description": "Helps plan who sits where at a wedding.", "category": "Social & Events", "tags": ["wedding", "seating", "planning"], "effort": "S" }
+  ]
+}
+```
