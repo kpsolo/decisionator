@@ -1,3 +1,4 @@
+import { runIdeaSourceContractTests } from "@decisionator/plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 import { PasteIdeaSourcePlugin, parsePlainList } from "../src/index.js";
 
@@ -59,4 +60,6 @@ describe("Plain List Parser & Paste Source (T042, T043)", () => {
     expect(plainRes.candidates.length).toBe(2);
     expect(plainRes.candidates[0]?.title).toBe("Simple task A");
   });
+
+  runIdeaSourceContractTests(new PasteIdeaSourcePlugin());
 });

@@ -378,16 +378,16 @@ closes voting. The result shows the winner, the order and the points, and Verify
 
 **Purpose**: harden, document and ship US1–US3.
 
-- [ ] T083 [P] Write `scripts/soak/twenty-collaborators.ts`: 20 simulated clients on one project for 10 min against the fake backend's quota model. Assert ≤ 20 Sheets reads per client per minute and zero lost entries (SC-005).
-- [ ] T084 [P] Write `docs/self-hosting.md`: creating your own Google Cloud project, the OAuth Web client (authorized JavaScript origin), the Picker-restricted API key, publishing the consent screen with only `drive.file`, and `VITE_*` variables (research R28).
-- [ ] T085 [P] Write `docs/plugin-authors.md`: the project-store, idea-source and strategy contracts with links to `contracts/`, and how to run the plugin-sdk test kits.
-- [ ] T086 [P] Create example plugins for every MVP extension point (constitution: each extension point ships with an example and author docs), each with a README and passing its contract kit (FR-055):
+- [x] T083 [P] Write `scripts/soak/twenty-collaborators.ts`: 20 simulated clients on one project for 10 min against the fake backend's quota model. Assert ≤ 20 Sheets reads per client per minute and zero lost entries (SC-005).
+- [x] T084 [P] Write `docs/self-hosting.md`: creating your own Google Cloud project, the OAuth Web client (authorized JavaScript origin), the Picker-restricted API key, publishing the consent screen with only `drive.file`, and `VITE_*` variables (research R28).
+- [x] T085 [P] Write `docs/plugin-authors.md`: the project-store, idea-source and strategy contracts with links to `contracts/`, and how to run the plugin-sdk test kits.
+- [x] T086 [P] Create example plugins for every MVP extension point (constitution: each extension point ships with an example and author docs), each with a README and passing its contract kit (FR-055):
   - `examples/plugin-store-memory/`: a `ProjectStore` over an in-memory model (`runProjectStoreContractTests`);
   - `examples/plugin-strategy-example/`: a simple strategy (`runStrategyContractTests`);
   - `examples/plugin-source-example/`: an idea source (`runIdeaSourceContractTests`).
-- [ ] T087 Run an axe audit across all MVP screens and fix every WCAG 2.1 AA violation (FR-082); record the result in `apps/web/e2e/README.md`.
-- [ ] T088 Run the live Google checklist from `specs/001-decision-engine-core/quickstart.md` against the hosted build. Measure load performance against the ≤ 2.5 s interactive aim on mobile 4G (Lighthouse audit). Record the results in `docs/releases/v0.1.md`, together with a "Known limitations" section disclosing the staged-compliance deferrals from plan.md (no agent API until US5; offline limited to drafts and the write queue until US7).
-- [ ] T089 Update `README.md` with the hosted URL `https://kpsolo.github.io/decisionator/`, a 3-step "how it works" and screenshots. Add a changeset and tag `v0.1.0`.
+- [x] T087 Run an axe audit across all MVP screens and fix every WCAG 2.1 AA violation (FR-082); record the result in `apps/web/e2e/README.md`.
+- [x] T088 Run the live Google checklist from `specs/001-decision-engine-core/quickstart.md` against the hosted build. Measure load performance against the ≤ 2.5 s interactive aim on mobile 4G (Lighthouse audit). Record the results in `docs/releases/v0.1.md`, together with a "Known limitations" section disclosing the staged-compliance deferrals from plan.md (no agent API until US5; offline limited to drafts and the write queue until US7).
+- [x] T089 Update `README.md` with the hosted URL `https://kpsolo.github.io/decisionator/`, a 3-step "how it works" and screenshots. Add a changeset and tag `v0.1.0`.
 
 **Checkpoint**: the MVP is released.
 
