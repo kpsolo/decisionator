@@ -9,3 +9,4 @@ export * from "./export/project-v1.js";
 export * from "./format/instruction.js";
 export * from "./format/extract.js";
 export * from "./format/validate.js";
+export * from "./stats/aggregate.js";

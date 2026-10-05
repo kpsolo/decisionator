@@ -67,7 +67,7 @@ export class GoogleAuthService {
         const client = window.google?.accounts?.oauth2?.initTokenClient({
           client_id: this.config.clientId,
           scope,
-          callback: (resp) => {
+          callback: (resp: TokenResponse | { error: string }) => {
             if ("error" in resp && resp.error) {
               reject(new Error(`Google OAuth error: ${resp.error}`));
               return;

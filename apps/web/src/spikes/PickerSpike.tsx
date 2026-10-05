@@ -15,13 +15,16 @@ interface TokenClientResponse {
   error?: string;
 }
 
-declare global {
-  interface Window {
+interface WindowWithGoogle extends Window {
+  gapi?: {
+    load(api: string, callback: () => void): void;
+  };
+  google?: {
     // biome-ignore lint/suspicious/noExplicitAny: Google client library globals
-    google?: any;
+    picker?: any;
     // biome-ignore lint/suspicious/noExplicitAny: Google client library globals
-    gapi?: any;
-  }
+    accounts?: any;
+  };
 }
 
 interface LogEntry {
@@ -64,7 +67,7 @@ export default function PickerSpike() {
       script.async = true;
       script.defer = true;
       script.onload = () => {
-        window.gapi?.load("picker", () => {
+        (window as unknown as WindowWithGoogle).gapi?.load("picker", () => {
           addLog("Google Picker API loaded.");
         });
       };
@@ -154,19 +157,20 @@ export default function PickerSpike() {
       return;
     }
 
-    if (!window.google?.picker) {
+    const googleObj = (window as unknown as WindowWithGoogle).google;
+    if (!googleObj?.picker) {
       alert("Picker library not loaded");
       return;
     }
 
     addLog(`Constructing Picker with setFileIds([${fileId}])...`);
 
-    const view = new window.google.picker.DocsView()
+    const view = new googleObj.picker.DocsView()
       .setIncludeFolders(true)
       .setSelectFolderEnabled(false);
 
-    const picker = new window.google.picker.PickerBuilder()
-      .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
+    const picker = new googleObj.picker.PickerBuilder()
+      .enableFeature(googleObj.picker.Feature.NAV_HIDDEN)
       .setAppId(clientId.split("-")[0])
       .setOAuthToken(accessToken)
       .setDeveloperKey(apiKey)
@@ -174,13 +178,13 @@ export default function PickerSpike() {
       .setFileIds([fileId.trim()])
       .setTitle("Confirm Access to Shared Project Sheet")
       .setCallback(async (data: GooglePickerCallbackData) => {
-        if (data.action === window.google.picker.Action.PICKED) {
+        if (data.action === googleObj.picker.Action.PICKED) {
           const doc = data.docs[0];
           if (doc) {
             addLog(`✓ Picker item picked: ID=${doc.id}, Name=${doc.name}`);
             await testDirectApiAccess(accessToken, doc.id);
           }
-        } else if (data.action === window.google.picker.Action.CANCEL) {
+        } else if (data.action === googleObj.picker.Action.CANCEL) {
           addLog("Picker cancelled by user.");
         }
       })
