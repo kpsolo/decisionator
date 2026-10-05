@@ -468,9 +468,9 @@ readable option titles.
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T117 [P] Run `/speckit-analyze` and resolve any spec, plan or tasks inconsistencies before each release.
-- [ ] T118 Run a security review of `packages/core/src/crypto/`, `plugins/store-google-sheets/src/auth.ts` and (US5+) `packages/node/src/agent-api/` before marking any release stable (FR-081).
-- [ ] T119 Run the full `specs/001-decision-engine-core/quickstart.md` validation for every shipped story.
+- [x] T117 [P] Run `/speckit-analyze` and resolve any spec, plan or tasks inconsistencies before each release.
+- [x] T118 Run a security review of `packages/core/src/crypto/`, `plugins/store-google-sheets/src/auth.ts` and (US5+) `packages/node/src/agent-api/` before marking any release stable (FR-081).
+- [x] T119 Run the full `specs/001-decision-engine-core/quickstart.md` validation for every shipped story.
 
 ---
 
