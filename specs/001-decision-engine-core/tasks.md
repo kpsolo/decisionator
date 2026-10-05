@@ -35,27 +35,27 @@ checkpoint.
 
 **Purpose**: monorepo, tooling, CI and hosting skeleton.
 
-- [ ] T001 Create the pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `.nvmrc`):
+- [x] T001 Create the pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `.nvmrc`):
   - `package.json` with `"packageManager": "pnpm@10"`, `"type": "module"` and scripts `lint`, `typecheck`, `test`, `test:contract`, `test:e2e`;
   - `pnpm-workspace.yaml` listing `apps/*`, `packages/*`, `plugins/*`;
   - `.nvmrc` with `24`.
-- [ ] T002 [P] Create `tsconfig.base.json`: `strict: true`, `module`/`target` `ES2022`, `moduleResolution: "bundler"`, `verbatimModuleSyntax: true`, `noUncheckedIndexedAccess: true`.
-- [ ] T003 [P] Create `biome.json`: formatter (2-space indent, 100-column line width), recommended lint rules, ignoring `dist/` and `coverage/`.
-- [ ] T004 [P] Initialize Changesets in `.changeset/config.json`: fixed versioning off; `apps/web` set private.
-- [ ] T005 Scaffold `packages/core/` and `packages/plugin-sdk/`:
+- [x] T002 [P] Create `tsconfig.base.json`: `strict: true`, `module`/`target` `ES2022`, `moduleResolution: "bundler"`, `verbatimModuleSyntax: true`, `noUncheckedIndexedAccess: true`.
+- [x] T003 [P] Create `biome.json`: formatter (2-space indent, 100-column line width), recommended lint rules, ignoring `dist/` and `coverage/`.
+- [x] T004 [P] Initialize Changesets in `.changeset/config.json`: fixed versioning off; `apps/web` set private.
+- [x] T005 Scaffold `packages/core/` and `packages/plugin-sdk/`:
   - each with `package.json`, `tsconfig.json`, `src/index.ts`, `vitest.config.ts`;
   - npm scope `@decisionator/*`;
   - `plugin-sdk` exports `.` and `./testing` subpaths.
-- [ ] T006 Scaffold `plugins/store-google-sheets/`, `plugins/source-paste/` and `plugins/strategy-borda/`:
+- [x] T006 Scaffold `plugins/store-google-sheets/`, `plugins/source-paste/` and `plugins/strategy-borda/`:
   - each with `package.json`, `tsconfig.json`, `src/index.ts`, `test/`;
   - each with `decisionator-plugin.json` (manifest per `contracts/plugin-manifest.schema.json` v1.1, with `platform.runtime: "^1.0.0"`); the store's manifest follows `packages/core/test/fixtures/store-google-sheets.manifest.example.json` (`provides.projectStore`, `oauth.google.flow: "gis-token"`).
-- [ ] T007 Scaffold `apps/web/` with Vite and React 19 (TypeScript):
+- [x] T007 Scaffold `apps/web/` with Vite and React 19 (TypeScript):
   - `vite.config.ts` with `base` from `VITE_BASE_URL` (default `/decisionator/`);
   - React Router in hash mode in `src/main.tsx`;
   - `.env.example` listing `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY`, `VITE_BASE_URL`.
-- [ ] T008 [P] Create `.github/workflows/ci.yml`: install with pnpm and run lint, typecheck, `test`, `test:contract` and `test:e2e`, on `ubuntu-latest`, `windows-latest` and `macos-latest`.
-- [ ] T009 [P] Create `.github/workflows/pages.yml`: on push to `main`, build `apps/web` and deploy to GitHub Pages (`actions/deploy-pages`). Read Google IDs from repository variables. No server component (SC-009).
-- [ ] T010 [P] Create `apps/web/playwright.config.ts` (Chromium, Firefox, WebKit; two-context helper) and `apps/web/e2e/fixtures/axe.ts` wrapping `@axe-core/playwright` for WCAG 2.1 AA checks.
+- [x] T008 [P] Create `.github/workflows/ci.yml`: install with pnpm and run lint, typecheck, `test`, `test:contract` and `test:e2e`, on `ubuntu-latest`, `windows-latest` and `macos-latest`.
+- [x] T009 [P] Create `.github/workflows/pages.yml`: on push to `main`, build `apps/web` and deploy to GitHub Pages (`actions/deploy-pages`). Read Google IDs from repository variables. No server component (SC-009).
+- [x] T010 [P] Create `apps/web/playwright.config.ts` (Chromium, Firefox, WebKit; two-context helper) and `apps/web/e2e/fixtures/axe.ts` wrapping `@axe-core/playwright` for WCAG 2.1 AA checks.
 
 ---
 

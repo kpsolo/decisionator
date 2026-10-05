@@ -3,12 +3,15 @@
 // comes from the contract's "— vX.Y.Z" heading, so older versions are never overwritten.
 // An optional inputs/<name>.hint.txt fills {{LOCALE_HINT}}.
 // Usage: node packages/core/test/fixtures/format-answers/build-instructions.mjs
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const contractPath = join(here, "../../../../../specs/001-decision-engine-core/contracts/format-instruction.md");
+const contractPath = join(
+  here,
+  "../../../../../specs/001-decision-engine-core/contracts/format-instruction.md"
+);
 const contract = readFileSync(contractPath, "utf8");
 const [, major, minor] = /— v(\d+)\.(\d+)\.\d+/.exec(contract);
 const template = /## Template[\s\S]*?````text\n([\s\S]*?)````/.exec(contract)[1];
@@ -21,7 +24,27 @@ function detectLanguage(text) {
   const cyrillic = letters.filter((ch) => /\p{Script=Cyrillic}/u.test(ch)).length / letters.length;
   if (cyrillic > 0.5) return "Ukrainian";
   const words = text.toLowerCase().match(/[a-z']+/g) ?? [];
-  const stop = new Set(["the", "a", "an", "and", "or", "for", "to", "of", "in", "on", "with", "it", "that", "is", "we", "how", "do", "about", "from"]);
+  const stop = new Set([
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "for",
+    "to",
+    "of",
+    "in",
+    "on",
+    "with",
+    "it",
+    "that",
+    "is",
+    "we",
+    "how",
+    "do",
+    "about",
+    "from",
+  ]);
   const hits = words.filter((w) => stop.has(w)).length;
   return cyrillic < 0.1 && hits / Math.max(words.length, 1) > 0.05 ? "English" : null;
 }

@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.source.paste",
+  "name": "Paste idea source",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "ideaSource": {
+      "sourceType": "paste",
+      "supportsRefresh": false,
+      "input": "clipboard"
+    }
+  }
+}

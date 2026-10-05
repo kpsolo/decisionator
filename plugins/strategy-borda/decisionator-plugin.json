@@ -1,0 +1,18 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.strategy.borda",
+  "name": "Borda count ranking strategy",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "strategy": {
+      "usesRandomness": false,
+      "minOptions": 2,
+      "requiresWeights": false,
+      "ballots": "ranking"
+    }
+  }
+}
