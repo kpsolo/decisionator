@@ -279,7 +279,7 @@ comments once. The owner sees it within 30 s, and view-only and password behavio
 
 ### Tests for User Story 2 (write first, must fail)
 
-- [ ] T061 [P] [US2] Write sharing and password store tests in `plugins/store-google-sheets/test/share.test.ts`, covering (FR-015, FR-017, FR-018):
+- [x] T061 [P] [US2] Write sharing and password store tests in `plugins/store-google-sheets/test/share.test.ts`, covering (FR-015, FR-017, FR-018):
   - `anyone` reader and writer with `allowFileDiscovery: false`;
   - link off;
   - invite and remove by email;
