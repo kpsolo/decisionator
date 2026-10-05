@@ -186,6 +186,7 @@ comment and view stats.
   - a bare array is accepted as `options`, with a warning;
   - unknown fields produce warnings;
   - over-length strings are truncated, with a warning;
+  - citation markers such as `[cite: 5]` and `[cite_start]` are stripped, with a warning (rule 5; fixture `05/gemini`);
   - error messages such as `options[2].title: missing`.
 - [ ] T036 [P] [US1] Create the SC-002 fixture set in `packages/core/test/fixtures/format-answers/`, collected manually:
   - real answers from Claude and Gemini, for 5 sample idea lists, each produced from the instruction in `contracts/format-instruction.md`;

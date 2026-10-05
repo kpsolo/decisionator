@@ -53,4 +53,5 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 | 03 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 20 options, one-sentence descriptions |
 | 04 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 12 options, Ukrainian descriptions and categories |
 | 05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 9 options, 5 duplicate pairs merged |
-| 01–05 | gemini | — | — | to collect |
+| 05 | gemini | Gemini (app; model not recorded) | 2026-10-05 | Valid; 9 options, duplicates merged. No code fence. Every description ends in a `[cite: 5]` marker (extraction rule 5 strips it). All text in Ukrainian although the list is English and there was no hint |
+| 01–04 | gemini | — | — | to collect |

@@ -54,6 +54,9 @@ Reply with the corrected JSON only, in one code block, same structure as before.
 3. A bare array is accepted as `options`, with `format` assumed to be v1. A warning is shown.
 4. Unknown fields are ignored and listed as warnings. Over-length strings are truncated, with a
    warning.
+5. Assistant citation markers are removed from every string, with one warning per answer. These
+   are tokens matching `\[cite(?:_start|_end)?(?::[^\]]*)?\]`, such as Gemini's `[cite: 5]` and
+   `[cite_start]`. Found in fixture `05/gemini` (2026-10-05).
 
 ## Quality gate
 
