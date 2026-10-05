@@ -446,8 +446,8 @@ The app keeps working.
   - `lastError`.
 - [x] T108 [US6] Build generated settings in `apps/web/src/features/plugins/PluginSettings.tsx` with `@rjsf/core` and a Radix theme (FR-053).
 - [x] T109 [US6] Switch `apps/web/src/host/module-host.ts` to load the first-party modules (`source-paste`, `strategy-*`) through the sandbox host with unchanged contracts; the store stays in-process (it holds the Google token) (FR-051).
-- [ ] T110 [P] [US6] Build `plugins/source-google-docs/`: web Picker, `documents.get`, list items or heading sections as ideas, `itemKey = sha256(documentId + normalizedText)`, plus `runIdeaSourceContractTests` (FR-054).
-- [ ] T111 [P] [US6] Create `examples/fixtures/{plugin-incompatible,plugin-hang}/` for the plugin-area E2E tests, and package the Phase 6 example plugins for install from file or URL.
+- [x] T110 [P] [US6] Build `plugins/source-google-docs/`: web Picker, `documents.get`, list items or heading sections as ideas, `itemKey = sha256(documentId + normalizedText)`, plus `runIdeaSourceContractTests` (FR-054).
+- [x] T111 [P] [US6] Create `examples/fixtures/{plugin-incompatible,plugin-hang}/` for the plugin-area E2E tests, and package the Phase 6 example plugins for install from file or URL.
 
 ---
 

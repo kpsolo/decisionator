@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.examples.store.memory",
+  "name": "In-Memory Project Store",
+  "description": "Example ProjectStore storing projects and votes entirely in memory",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "projectStore": "^1.1.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "projectStore": {
+      "storeType": "memory"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.fixture.hang",
+  "name": "Hanging Test Plugin",
+  "description": "Fixture plugin designed to hang and trigger host timeout teardown",
+  "version": "1.0.0",
+  "platform": {
+    "runtime": "^1.0.0"
+  },
+  "main": "index.js",
+  "provides": {
+    "strategy": {
+      "sourceType": "custom",
+      "ballots": "none",
+      "interactive": false,
+      "usesRandomness": false
+    }
+  }
+}

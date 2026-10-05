@@ -1,0 +1,20 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.examples.strategy.first",
+  "name": "First Candidate Strategy",
+  "description": "Example strategy that selects the first available candidate",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "strategy": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "strategy": {
+      "sourceType": "custom",
+      "ballots": "none",
+      "interactive": false,
+      "usesRandomness": false
+    }
+  }
+}
