@@ -501,6 +501,12 @@ export class GoogleSheetsProjectStore implements ProjectStore {
           role: req.linkSharing.role === "contribute" ? "writer" : "reader",
           allowFileDiscovery: false,
         });
+      } else {
+        const perms = await this.client.listPermissions(ref.id);
+        const linkPerm = perms.permissions.find((p) => p.type === "anyone");
+        if (linkPerm && linkPerm.id) {
+          await this.client.deletePermission(ref.id, linkPerm.id);
+        }
       }
     }
 
