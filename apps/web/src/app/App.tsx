@@ -35,6 +35,9 @@ export function AppShell() {
           <Link to="/settings" className="btn btn-outline">
             Settings
           </Link>
+          <Link to="/plugins" className="btn btn-outline">
+            Plugins
+          </Link>
           <button
             type="button"
             onClick={toggleTheme}

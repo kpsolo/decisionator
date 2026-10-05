@@ -1,5 +1,6 @@
 import type { RouteObject } from "react-router-dom";
 import { NewProjectWizard } from "../features/paste-format/NewProjectWizard.js";
+import { PluginsPage } from "../features/plugins/PluginsPage.js";
 import PickerSpike from "../spikes/PickerSpike.js";
 import { HomePage } from "./HomePage.js";
 import { ProjectViewPage } from "./ProjectViewPage.js";
@@ -20,5 +21,6 @@ export const routes: RouteObject[] = [
   { path: "/p/:fileId/results", element: <ProjectResultsPage /> },
   { path: "/p/:fileId/share", element: <ProjectSharePage /> },
   { path: "/settings", element: <SettingsPage /> },
+  { path: "/plugins", element: <PluginsPage /> },
   { path: "/spike/picker", element: <PickerSpike /> },
 ];
