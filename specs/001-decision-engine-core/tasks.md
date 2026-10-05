@@ -86,16 +86,16 @@ story work starts until this phase is done.**
   - All carry `id` (ULID), `at` and `by`.
 - [x] T016 [P] Define the Zod schema `OutcomeRecord` in `packages/core/src/model/outcome.ts` with fields `round?`, `strategy {id, version}`, `settings`, `inputs {options, ballots, grades}`, `result {winner, order[{optionId, points, firstPlaces}]}`, `tieBreak`, `seed?` (hex 32), `triggeredBy` and `at`.
 - [x] T017 [P] Write model tests in `packages/core/test/model.test.ts` covering every boundary above (lengths, enum values, ballot uniqueness and length ≤ topN).
-- [ ] T018 Define the TypeScript contracts in `packages/plugin-sdk/src/`, exactly as specified in `contracts/project-store.md`, `contracts/idea-source.md` and `contracts/strategy.md`:
+- [x] T018 Define the TypeScript contracts in `packages/plugin-sdk/src/`, exactly as specified in `contracts/project-store.md`, `contracts/idea-source.md` and `contracts/strategy.md`:
   - `project-store.ts`: `ProjectStore`, `Entry`, `ProjectSnapshot`, `ShareRequest`, `ShareState`, `AppendResult`;
   - `idea-source.ts`;
   - `strategy.ts`: `StrategyInput` including `grades?`, `StrategyResult`, `Rng`.
-- [ ] T019 Build the fake Google backend in `packages/plugin-sdk/testing/fake-google/` with Mock Service Worker:
+- [x] T019 Build the fake Google backend in `packages/plugin-sdk/testing/fake-google/` with Mock Service Worker:
   - an in-memory Drive (`files.create/get/list` with `appProperties` filter and `version` increments, `permissions.create/delete/list`, `about.get` per identity);
   - an in-memory Sheets (`spreadsheets.create`, `values.batchGet`, `values.append`, `values.batchUpdate`);
   - multiple signed-in identities with reader/writer/owner roles;
   - an injectable `429` / `403 rateLimitExceeded`.
-- [ ] T020 Implement `runProjectStoreContractTests(factory)` in `packages/plugin-sdk/testing/project-store-kit.ts`. Cases from `contracts/project-store.md`:
+- [x] T020 Implement `runProjectStoreContractTests(factory)` in `packages/plugin-sdk/testing/project-store-kit.ts`. Cases from `contracts/project-store.md`:
   - append-only behavior;
   - latest-wins for grades per (by, optionId) and rankings per (by, round);
   - author stamping (caller-supplied `by` is ignored);
@@ -103,7 +103,7 @@ story work starts until this phase is done.**
   - password round trip, and unreadability without the password;
   - `deleteProject` by the owner makes the project unavailable to everyone; a non-owner gets `PERMISSION_DENIED`;
   - queue behavior under 429.
-- [ ] T021 Implement `runStrategyContractTests(plugin, fixtures)` in `packages/plugin-sdk/testing/strategy-kit.ts`:
+- [x] T021 Implement `runStrategyContractTests(plugin, fixtures)` in `packages/plugin-sdk/testing/strategy-kit.ts`:
   - determinism over 100 runs with the same seed;
   - `chosen ⊆ options`;
   - `check` rejects inputs below `minOptions`;
