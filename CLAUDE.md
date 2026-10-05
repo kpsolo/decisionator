@@ -1,7 +1,8 @@
-# Deciginator — agent guide
+# Decisionator — agent guide
 
-Open-source, modular decision-making engine (ideas → options → strategy → outcome → share),
-local-first, plugin-based, agent-native.
+Open-source, modular decision-making engine (ideas → options → grades/votes → outcome → share),
+plugin-based, agent-native. "Deci" for short. The MVP is a static web app that stores each project
+as a Google Sheet in the owner's Drive; local-first mode comes later (US7).
 
 ## Read first
 
@@ -28,23 +29,28 @@ Non-trivial work goes through the Spec Kit skills, in order:
 
 ## Tech stack
 
-From `specs/001-decision-engine-core/plan.md` and its `research.md`:
+From `specs/001-decision-engine-core/plan.md` (MVP = US1–US3):
 
-- TypeScript (strict, ESM), Node.js 24 LTS, pnpm 10 workspaces, Biome, Vitest, Playwright and
-  axe, Changesets.
-- `packages/core`: isomorphic domain model, commands and crypto. Uses Zod 4, Automerge 3 and
-  `@noble/*`.
-- `packages/plugin-sdk`: plugin contracts, the RPC client and the contract test kits.
-- `packages/node`: the local node on `127.0.0.1:4178`. Built with Hono, automerge-repo 2, the
-  MCP TS SDK v2 and REST/OpenAPI, plus the OAuth broker and the relay client.
-- `packages/ui`: React 19, Vite, Radix and rjsf. Plugins run in sandboxed iframes with CSP.
-- `packages/relay`: self-hostable, stores E2E-encrypted change logs in SQLite, and runs the
-  agent tunnel.
-- `plugins/*`: first-party strategies and idea sources, packaged like third-party plugins.
+- TypeScript (strict, ESM), pnpm 10 workspaces, Biome, Vitest, Playwright + axe, Changesets.
+  Node.js 24 LTS for tooling.
+- `apps/web`: React 19 + Vite SPA on GitHub Pages (hash routing). Radix, dnd-kit, idb,
+  vite-plugin-pwa.
+- `packages/core`: Zod model, format instruction/extraction/validation, stats, WebCrypto password
+  codec, SHA-256 counter RNG, export.
+- `packages/plugin-sdk`: ProjectStore / IdeaSource / Strategy contracts, contract test kits and
+  the fake Google backend (MSW).
+- `plugins/store-google-sheets`, `plugins/source-paste`, `plugins/strategy-borda`: first-party
+  modules.
+- Google: Identity Services token model, `drive.file` scope only, Drive v3 + Sheets v4 via
+  `fetch`, Picker `setFileIds`. Tokens live in memory. Stay under the quota budget in
+  `contracts/sheet-store.md`.
+- Later: `packages/node` (MCP/REST agent API, US5), plugin sandbox (US6), `packages/relay` and
+  Automerge local store (US7).
 
 ## Contracts
 
-`specs/001-decision-engine-core/contracts/` contains the plugin manifest schema, the plugin
-runtime RPC, the strategy (with the normative RNG and test vectors), the idea source, the
-agentic API and the relay protocol. Change one only together with a version bump and a
+`specs/001-decision-engine-core/contracts/` contains:
+- MVP: options format, format instruction, project store, Google Sheet layout, strategy (RNG
+  vectors), idea source.
+- Later: plugin manifest and runtime (US6), agentic API (US5), relay protocol (US7). Change one only together with a version bump and a
 changeset.

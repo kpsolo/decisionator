@@ -1,5 +1,7 @@
 # Contract: Sync/Relay Protocol — v1.0.0
 
+> **Scope: post-MVP (US7, local-first mode).** The MVP shares projects through Google Drive ([sheet-store.md](./sheet-store.md)).
+
 The relay is a self-hostable service (`packages/relay`, Docker image). It carries **encrypted**
 shared-decision changes and **agent tunnels**. It never holds decision keys
 ([research R6, R8](../research.md)).
@@ -50,7 +52,7 @@ relay accepted it. This protects against a compromised relay.
 
 1. The owner calls `POST /v1/docs/{docId}/invites` with `{role, expiresAt}` and gets back
    `inviteId`. The owner then shares the link
-   `deciginator://join?relay=<url>&invite=<inviteId>` (or its https equivalent on the relay).
+   `decisionator://join?relay=<url>&invite=<inviteId>` (or its https equivalent on the relay).
 2. The invitee's node calls `POST /v1/invites/{inviteId}/accept` with its public keys.
    The relay queues the request for the owner.
 3. The owner's node, while online, confirms the invite. It adds the member to the ACL and posts
@@ -69,7 +71,7 @@ then distributes the new key, sealed to each remaining member. Later batches use
 | `ANY /t/{tunnelId}/mcp`, `ANY /t/{tunnelId}/api/v1/*` | Public endpoints for remote agents. The relay forwards each HTTP request over the WS as a framed message and streams back the node's response. |
 
 The relay does not inspect or store tunnel payloads, but the relay operator could see them in
-transit. The UI states this when the user picks the "remote agent" channel (spec FR-027a). The
+transit. The UI states this when the user picks the "remote agent" channel (spec FR-071). The
 node performs all grant checks. When the node is offline, the tunnel endpoints return
 `503 NODE_OFFLINE` with a plain-language message.
 

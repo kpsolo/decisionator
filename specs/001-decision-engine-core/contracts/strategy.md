@@ -1,15 +1,18 @@
 # Contract: Decision Strategy — v1.0.0
 
+> **Scope:** the Borda ranking strategy ships in the MVP (US3). Owner pick, random and weighted ship in US4.
+
 Platform key: `platform.strategy`. Manifest declaration: `provides.strategy`
 ([plugin-manifest.schema.json](./plugin-manifest.schema.json)).
-Built-ins: manual pick, uniform random, weighted random, plurality vote (FR-005, FR-027d).
+Built-ins: Borda ranking (MVP, research R25), owner pick, uniform random, weighted by average grade (FR-023, FR-030).
 
-## Interface (TypeScript, from `@deciginator/plugin-sdk`)
+## Interface (TypeScript, from `@decisionator/plugin-sdk`)
 
 ```ts
 interface StrategyInput {
   options: { id: string; title: string; weight?: number }[];   // active options, in display order
-  ballots?: BallotSnapshot[];                                  // when manifest.ballots != "none"
+  ballots?: BallotSnapshot[];                                  // when manifest.ballots != "none"; ranking = { by, ranking: optionId[] }
+  grades?: { optionId: string; average: number; count: number }[];  // aggregated 1–5 grades (Borda tie-break, weighted-by-grade)
   settings: unknown;                                           // validated against settingsSchema
   runInput?: unknown;                                          // when interactive, validated against runInputSchema
 }
@@ -20,7 +23,7 @@ interface StrategyResult {
 }
 
 interface StrategyPlugin {
-  check(input: StrategyInput): { ok: true } | { ok: false; reason: string };  // FR-010, plain language
+  check(input: StrategyInput): { ok: true } | { ok: false; reason: string };  // FR-032, plain language
   decide(input: StrategyInput, rng: Rng): StrategyResult;                       // pure & deterministic
 }
 ```
@@ -32,11 +35,11 @@ RPC methods: `strategy.check`, `strategy.decide`.
 1. `decide` MUST be a pure function of `(input, rng)`: same input and same seed produce the same
    result. No clock, no network, no ambient randomness. The sandbox enforces the last one.
 2. The host calls `check` before `decide`. It also checks `minOptions` / `requiresWeights` from
-   the manifest. If `check` fails, no outcome is recorded and the reason is shown (US2 #5).
+   the manifest. If `check` fails, no outcome is recorded and the reason is shown (US4 #4).
 3. The host, not the plugin, writes the Outcome
    ([data-model.md § Outcome](../data-model.md)). It records the plugin id, version,
    packageHash, settings, the input snapshot and the seed.
-4. Verification (FR-009) re-runs `decide` with the recorded snapshot and seed on the plugin
+4. Verification (FR-031) re-runs `decide` with the recorded snapshot and seed on the plugin
    package whose hash matches. The result must equal `chosen` exactly. If no matching package is
    installed, the result is `strategy_unavailable`.
 
@@ -74,11 +77,11 @@ frozen in `plugin-sdk/testing/vectors.json`.
 
 ## Contract test kit
 
-`runStrategyContractTests(plugin, fixtures)` from `@deciginator/plugin-sdk/testing` checks:
+`runStrategyContractTests(plugin, fixtures)` from `@decisionator/plugin-sdk/testing` checks:
 - determinism (same seed → same result, 100 runs);
 - `chosen ⊆ options`;
 - `check` rejects inputs below `minOptions`;
 - no ambient randomness.
 
 For the built-in weighted strategy it also checks that weight 0 is never chosen and that the
-frequency distribution is within tolerance over 10 000 seeds (US2 #3).
+frequency distribution is within tolerance over 10 000 seeds (US4 #3).

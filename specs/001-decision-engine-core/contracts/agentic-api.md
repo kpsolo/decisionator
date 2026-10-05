@@ -1,12 +1,14 @@
 # Contract: Agentic API — v1.0.0
 
+> **Scope: post-MVP (US5).** The MVP supports agents only through the copy-paste [format instruction](./format-instruction.md).
+
 The local node exposes one command layer through two transports. Both are generated from the
-same Zod schemas, so they stay in parity (Principle IV, FR-016, FR-017).
+same Zod schemas, so they stay in parity (Principle IV, FR-040).
 
 | Transport | Endpoint | Discovery |
 |-----------|----------|-----------|
 | MCP (spec 2026-07-28, Streamable HTTP) | `http://127.0.0.1:4178/mcp` or, for remote agents, `https://<relay>/t/<tunnelId>/mcp` | MCP tool listing |
-| MCP stdio bridge | `npx deciginator mcp --url <mcp-url>` (token via `DECIGINATOR_TOKEN`) | same |
+| MCP stdio bridge | `npx decisionator mcp --url <mcp-url>` (token via `DECISIONATOR_TOKEN`) | same |
 | REST | `http://127.0.0.1:4178/api/v1` (or tunnel equivalent) | `GET /api/v1/openapi.json` (OpenAPI 3.1) |
 
 ## Authentication and scope
@@ -16,8 +18,8 @@ same Zod schemas, so they stay in parity (Principle IV, FR-016, FR-017).
 - The node resolves token → grant and checks, in order: grant `open` and not expired → target
   still exists → operation permitted by `permissions` → rate and size limits.
 - Failures return MCP tool errors or REST `401/403/404/409/413/429` with a plain-language
-  `message`. Refused writes outside the scope are appended to the decision's `auditLog` (FR-022,
-  US4 #6).
+  `message`. Refused writes outside the scope are appended to the decision's `auditLog` (FR-044,
+  US5 #4).
 - The agent sets its self-declared name once, through `agent_hello`, or per call with the
   `X-Agent-Name` header. That name is stored in `ActorRef.agentName`.
 
@@ -35,7 +37,7 @@ same Zod schemas, so they stay in parity (Principle IV, FR-016, FR-017).
 | `complete_request` | `POST /complete` | any | `{summary?}`. Marks the request `completed`, and the grant stops accepting writes. |
 
 **No operation** exists to record outcomes, cast ballots, delete content, change sharing or read
-outside the scope (FR-022). Asking for any of these returns `403 NOT_PERMITTED_FOR_AGENTS`.
+outside the scope (FR-044). Asking for any of these returns `403 NOT_PERMITTED_FOR_AGENTS`.
 
 ### `add_contribution` input schema (excerpt)
 
@@ -85,7 +87,7 @@ order:
 4. **Expiry**: when access ends.
 
 The brief also offers a ready-made `claude mcp add` / JSON snippet for MCP clients. The token
-is the only secret in the brief. It is scoped, expires and can be revoked (FR-019, FR-020).
+is the only secret in the brief. It is scoped, expires and can be revoked (FR-042).
 
 ## Contract tests (Principle VII)
 

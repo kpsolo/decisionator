@@ -1,10 +1,10 @@
-# Feature Specification: Decision Engine Core (MVP)
+# Feature Specification: Decision Engine Core
 
 **Feature Branch**: `001-decision-engine-core`
 
 **Created**: 2026-10-05
 
-**Status**: Draft
+**Status**: Draft (revised 2026-10-05: MVP redefined around the owner's first user story)
 
 **Input**: User description: "Open source decision making engine. It should be a module system
 built from ideas, descriptions, options and user picking, some randomizer, or custom strategy
@@ -14,423 +14,464 @@ included. We should have an easy to use agentic API: main feature — ask the us
 add relevant data to an option or idea (like some research) and share with friends / other
 collaborators."
 
+**First user story (owner, 2026-10-05)**: "I have a list of ideas to build a software
+product/app. I paste it from the clipboard. If Decisionator doesn't have a configured AI to
+format the options properly, it asks the user to use a format. The user goes to their agent,
+asks it to format the options and comes back with properly formatted JSON. Deci forms a project
+to share. The user goes through each option and makes comments or sets grades. It should be
+easy to share like Google Docs — by link (optionally with a password). Other collaborators look
+through the ideas/options, vote and comment. Each contributor can see stats: list, group and
+sort the options. The first MVP release should work out of the box with the Google API. All
+limits must stay within free API usage."
+
 ## Clarifications
 
-### Session 2026-10-05
+### Session 2026-10-05 (initial)
 
 - Q: Hosting & identity model? → A: Local-first; data on the user's device, sharing and remote
-  agent access via an optional, self-hostable sync/relay service (FR-027–FR-027b).
-- Q: Can collaborators take part in making the decision? → A: Yes, by casting ballots tallied
-  by group strategy modules; owner triggers the outcome (US5 #6–7, FR-027c–FR-027d).
-- Q: How are third-party plugins obtained in v1? → A: Local package file or URL only; no
-  in-app catalog in v1 (FR-034).
+  agent access via an optional, self-hostable sync/relay service. **Superseded for the MVP by
+  the revision session below; still the direction for US7.**
+- Q: Can collaborators take part in making the decision? → A: Yes, by casting ballots that
+  group strategies tally.
+- Q: How are third-party plugins obtained in v1? → A: Local package file or URL only; no in-app
+  catalog (FR-061).
 - Planning refinement (research R8): remote-agent tunnel traffic is visible to the relay
-  operator in transit; disclosed in UI (FR-027a).
+  operator in transit; disclosed in UI (applies to US7).
+
+### Session 2026-10-05 (revision: first user story)
+
+- Q: How does the MVP run? → A: A hosted web app with no backend of its own. Each project lives
+  in the owner's Google Drive and is shared through Google's link sharing. Free API quotas only.
+  The local node, agent API and relay move after the MVP.
+- Q: Which Google file holds a project? → A: A Google Sheet per project (options, grades,
+  rankings and comments as rows).
+- Q: What does "vote" mean next to grades? → A: Each collaborator grades each option 1–5 and
+  also submits a ranked vote of their top options, tallied by a ranking strategy.
+- Q: Product name? → A: Decisionator ("Deci" for short).
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Capture options and make a decision (Priority: P1)
+The **MVP release = US1 + US2 + US3** (the owner's first user story). Each story is still
+independently testable, and US1 alone is useful as a personal idea board.
 
-A person facing a choice ("Where do we go for dinner?", "Which job offer do I take?") creates
-a decision, adds a few options — each with a title and an optional description — and then
-decides by picking an option themselves. The chosen outcome is recorded with the decision.
+### User Story 1 - Turn a pasted idea list into a graded project (Priority: P1)
 
-**Why this priority**: This is the irreducible core of the product. Without it nothing else
-(strategies, sources, agents, sharing) has anything to act on. On its own it is already a
-usable, if simple, decision journal.
+A person has a raw list of product ideas. They paste it into Decisionator. Without a connected
+AI, Deci gives them a ready-made instruction and format. The person copies it to their own AI
+agent (any chat assistant), gets back formatted JSON and pastes that into Deci. Deci shows a
+preview of the options, and on confirmation creates a project saved in the person's own Google
+Drive. The person then goes through each option, sets a grade and adds comments, and can list,
+group and sort the options.
 
-**Independent Test**: Start with an empty workspace, create a decision with three options,
-pick one manually, reopen the decision and confirm the outcome, the options and who picked
-it are shown.
+**Why this priority**: This is the start of every decision and is already useful alone: a
+structured, graded idea board kept in the user's own Google Drive.
+
+**Independent Test**: Paste a 10-line idea list. Copy the instruction to any AI assistant, paste
+the returned JSON, confirm, and check that a Google Sheet appears in your Drive with 10 options.
+Grade 3 options, comment on one, then sort by grade and group by category.
 
 **Acceptance Scenarios**:
 
-1. **Given** an empty workspace, **When** the user creates a decision titled "Dinner tonight"
-   and adds options "Sushi", "Pizza" and "Tacos", **Then** the decision shows three options
-   in the order they were added.
-2. **Given** a decision with options, **When** the user edits an option's description or
-   removes an option, **Then** the change is visible immediately and persists after reopening.
-3. **Given** a decision with at least two options, **When** the user chooses "Pick myself"
-   and selects "Tacos", **Then** an outcome is recorded showing "Tacos", the strategy used
-   ("Manual pick"), the user and the time.
-4. **Given** a decision with a recorded outcome, **When** the user decides again, **Then** a
-   new outcome is added to the decision's history and the previous outcome is kept.
-5. **Given** a first-time user, **When** they open the application, **Then** they can create
-   a decision and record an outcome without opening any settings screen.
+1. **Given** the user has pasted a plain list and no AI is connected, **When** they choose
+   "Format with my AI", **Then** Deci shows a copyable instruction that includes their pasted
+   list and the required JSON format, plus a box to paste the AI's answer.
+2. **Given** the user pastes JSON that matches the format, **When** Deci validates it, **Then**
+   a preview lists each option with its title, description and category/tags, and the user can
+   edit or remove items before confirming.
+3. **Given** the pasted JSON is invalid or incomplete, **When** Deci validates it, **Then** it
+   shows exactly what is wrong (e.g. "item 4: title is missing") and offers a corrected
+   instruction to send back to the AI.
+4. **Given** the user does not want to use an AI, **When** they choose "Use as plain list",
+   **Then** each non-empty line or list item becomes an option title.
+5. **Given** a confirmed preview, **When** the user signs in with Google and creates the
+   project, **Then** a Google Sheet with the project is created in their Drive. Deci only asks
+   for access to files it creates or that the user opens with it.
+6. **Given** a project, **When** the user sets a 1–5 grade or adds a comment on an option,
+   **Then** it is saved to the project and shown with their name and the time.
+7. **Given** a project, **When** the user opens the stats view, **Then** they can sort options by
+   average grade, number of grades, number of comments or title, and group them by category or
+   tag.
+8. **Given** the user closes and reopens Deci, **When** they open "My projects", **Then** their
+   projects are listed and open with all grades and comments intact.
 
 ---
 
-### User Story 2 - Decide with a strategy module (randomizer, weighted, custom) (Priority: P2)
+### User Story 2 - Share by link and collaborate (Priority: P2)
 
-Instead of picking themselves, the user chooses a decision strategy: a fair random draw, a
-weighted random draw (options get weights), or any other installed strategy module. The result
-is explained and can be reproduced by anyone who has the decision.
+The owner shares the project the way they share a Google Doc: they copy a link, choose whether
+people can only view or can also grade and comment, and optionally add a password. Collaborators
+open the link, sign in with Google if needed, and grade and comment on each option. Everyone
+sees everyone's input and the aggregated stats.
 
-**Why this priority**: Strategies are what makes this a decision *engine* rather than a list.
-The randomizer is the most-requested "help me decide" capability and proves the strategy
-extension point.
+**Why this priority**: Group input is the point of the owner's story. It builds directly on
+US1's project.
 
-**Independent Test**: With a decision of four options, run the random strategy, verify an
-outcome is recorded with its seed; re-run verification with the same seed and confirm the
-identical result. Install a sample custom strategy and confirm it appears and can be used
-with no change to the rest of the app.
+**Independent Test**: Share a project with "can contribute" access. A second Google account
+opens the link, grades two options and comments on one. The owner sees the new grades in the
+averages and the comment with the collaborator's name within 30 seconds.
 
 **Acceptance Scenarios**:
 
-1. **Given** a decision with options, **When** the user selects "Random" and confirms,
-   **Then** one option is chosen, and the outcome records the strategy, its version, its
-   settings and the random seed.
-2. **Given** a recorded random outcome, **When** any viewer chooses "Verify", **Then** the
-   system re-runs the strategy with the recorded inputs and seed and shows that it produces
-   the same option.
-3. **Given** the weighted strategy, **When** the user assigns weights to options, **Then**
-   options are drawn proportionally to their weights and options with weight zero are never
-   drawn.
-4. **Given** a third-party strategy module is installed, **When** the user opens the strategy
-   chooser, **Then** the new strategy is listed with its name and description, and its
-   settings are shown in a generated settings panel.
-5. **Given** a strategy that cannot run on the current decision (e.g. fewer options than it
-   requires), **When** the user tries to run it, **Then** the system explains why in plain
-   language and records no outcome.
+1. **Given** a project, **When** the owner chooses "Share", **Then** they pick an access level
+   (view, or contribute = grade + comment + vote) and get a link to copy.
+2. **Given** a link, **When** a collaborator opens it, **Then** they see the project after at most
+   one Google sign-in and one access confirmation. No other account creation is needed.
+3. **Given** the owner set a password, **When** anyone opens the link, **Then** they must enter
+   the password before any project content is shown. Without the password, the project data
+   stored in Google is unreadable.
+4. **Given** a collaborator with contribute access, **When** they grade or comment, **Then** the
+   owner and other collaborators see it attributed to them, and nobody's input overwrites
+   anyone else's.
+5. **Given** a collaborator with view access, **When** they try to grade, comment or vote,
+   **Then** the action is unavailable and the reason is shown.
+6. **Given** the owner turns off link sharing, or removes a person they invited by email,
+   **When** that person next opens or refreshes the project, **Then** access is refused.
+7. **Given** several people are working at once, **When** anyone adds input, **Then** others see
+   it without reloading, within 30 seconds while the project is open.
 
 ---
 
-### User Story 3 - Import ideas from pluggable sources (clipboard, Google Docs) (Priority: P3)
+### User Story 3 - Ranked vote and results (Priority: P3)
 
-The user brings in raw ideas from where they already keep them. They paste a list from the
-clipboard, or connect a Google Doc, and the lines/items become ideas. Ideas can be turned into
-options of a decision. Other sources (for example Obsidian) can be added later as external
-plugins without changing the application.
+When the group is ready, each contributor submits a ranked vote of their top options. The owner
+closes voting, Deci tallies the rankings, and everyone sees the result next to the grade stats.
 
-**Why this priority**: Removes the friction of retyping. It exercises the idea-source
-extension point, which is a key promise of the platform, but the product is usable without it.
+**Why this priority**: Turns grades and discussion into a decision. It needs US2's collaborators
+to be meaningful.
 
-**Independent Test**: Copy a 5-line list to the clipboard, import it, verify 5 ideas appear
-and can be added to a decision as options. Connect a Google Doc containing a bulleted list,
-import it, verify the ideas appear with a link back to the source document.
+**Independent Test**: Three accounts each rank their top 3 of 6 options. The owner closes voting.
+The result shows the winner and full order with points per option, and re-running the tally on
+the same ballots gives the same result.
 
 **Acceptance Scenarios**:
 
-1. **Given** clipboard text with one idea per line (or a bulleted/numbered list), **When** the
-   user chooses "Import from clipboard", **Then** a preview shows the detected ideas, and on
-   confirmation each becomes an idea; blank lines and list markers are discarded.
-2. **Given** the user has not connected Google, **When** they choose "Import from Google Docs",
-   **Then** they are asked to grant read-only access to the document(s) they select, and
-   nothing is read before they grant it.
-3. **Given** a connected Google Doc, **When** the user imports it, **Then** each list item or
-   heading-delimited section becomes an idea that keeps a reference to its source document.
-4. **Given** a previously imported Google Doc that has since changed, **When** the user
-   chooses "Refresh", **Then** new items are added as new ideas and existing ideas are not
-   duplicated or overwritten.
-5. **Given** a set of ideas, **When** the user selects some and chooses "Add to decision",
-   **Then** they become options of that decision, keeping their descriptions and source links.
-6. **Given** a user revokes Google access, **When** they next try to refresh, **Then** they are
-   told access was revoked, and already-imported ideas remain available.
+1. **Given** an open project, **When** a contributor ranks options (drag to order, top N chosen by
+   the owner, default 3), **Then** their ranking is saved. Submitting again replaces their
+   previous ranking and is never counted twice.
+2. **Given** submitted rankings, **When** any participant opens results, **Then** they see the
+   current tally (if the owner allows live results) or a "voting in progress" notice with the
+   number of ballots.
+3. **Given** the owner closes voting, **When** the tally runs, **Then** an outcome is recorded with
+   the winner, the full order with points, the ranking strategy and version, the ballots counted
+   and the time. The outcome cannot be edited afterwards.
+4. **Given** a tie, **When** the tally runs, **Then** the tie is broken by the documented rule
+   (higher average grade, then more first-place votes, then a recorded random seed) and the
+   result says which rule was used.
+5. **Given** a closed vote, **When** the owner reopens voting and closes it again, **Then** a new
+   outcome is appended and the earlier one stays in history.
 
 ---
 
-### User Story 4 - Ask your own agent to research an option or idea (Priority: P4)
+### User Story 4 - Decide with strategy modules (Priority: P4)
 
-The user wants more information before deciding. On an option, idea or the whole decision
-they choose "Ask my agent", describe what they want ("compare prices and reviews"), and hand
-the request to an AI agent of their choice. The agent reads the relevant context and attaches
-its findings — text, links, pros/cons, sources — back onto the option or idea. The user reviews
-the contribution and keeps, edits or dismisses it.
+Besides ranked voting, the owner can decide with other strategies: their own pick, a fair random
+draw, a random draw weighted by grades, or any installed strategy plugin. Random results are
+reproducible and anyone can verify them.
 
-**Why this priority**: This is the product's headline differentiator. It depends on stories
-1 (something to enrich) and benefits from 5 (sharing the results), so it comes after the core.
+**Why this priority**: Expands the "engine" beyond voting and proves the strategy extension
+point, after the MVP flow works.
 
-**Independent Test**: Create a decision with two options, issue an agent request on one
-option, have a test agent use the agentic API to attach a research note with two source
-links, and verify the note appears on that option, attributed to the agent and the requesting
-user, pending the user's review.
+**Independent Test**: Run a weighted random draw on a project, then press Verify and get
+"Reproduced". Install a sample strategy plugin and use it without other changes.
 
 **Acceptance Scenarios**:
 
-1. **Given** an option, **When** the user chooses "Ask my agent" and enters an instruction,
-   **Then** the system produces an agent request containing the instruction and a scoped,
-   time-limited access grant limited to that option (and read access to its decision).
-2. **Given** a valid agent request, **When** the agent uses the agentic API, **Then** it can
-   discover the available actions, read the context it was granted, and attach contributions
-   only within that scope.
-3. **Given** an agent attaches a contribution, **Then** it is shown on the target, labelled as
-   agent-made, attributed to the agent and to the user it acted for, with its sources, and
-   marked "pending review".
-4. **Given** a pending agent contribution, **When** the user accepts, edits or dismisses it,
-   **Then** its status updates accordingly and dismissed contributions are hidden from the
-   default view but remain in history.
-5. **Given** an agent request, **When** the user revokes it or it expires, **Then** any further
-   attempt by the agent to read or write is refused.
-6. **Given** an agent tries to change an outcome, delete options or act outside its granted
-   target, **Then** the action is refused and the attempt is visible to the user.
+1. **Given** a project, **When** the owner runs "Random", **Then** the outcome records the seed,
+   the strategy and version, and the inputs.
+2. **Given** a recorded random outcome, **When** anyone presses Verify, **Then** the system
+   reproduces the same result from the recorded inputs and seed.
+3. **Given** "Weighted by grades", **When** the draw runs, **Then** options are drawn in
+   proportion to their average grade, and ungraded options are excluded unless the owner
+   includes them.
+4. **Given** a strategy whose preconditions are unmet, **When** it is chosen, **Then** the reason
+   is explained and no outcome is recorded.
 
 ---
 
-### User Story 5 - Share a decision with friends and collaborators (Priority: P5)
+### User Story 5 - Connected AI and agent API (Priority: P5)
 
-The user shares a decision (with its options, enrichment and outcomes) with friends or
-colleagues. Collaborators can view it and, depending on the access the owner gave them,
-add options, add their own notes, or ask their own agents to contribute.
+Instead of copy-pasting, the user connects an AI agent. Deci can then format pasted lists
+automatically, and the user can ask the agent to research an option. Findings land on the option
+with sources, attributed and pending review. Collaborators can do the same with their own agents.
 
-**Why this priority**: Turns a personal tool into a group one and completes the "research and
-share" headline flow, but relies on the earlier stories.
+**Why this priority**: The full "ask your own agent" vision. The MVP already supports any agent
+through the copy-paste format; this removes the manual step.
 
-**Independent Test**: Share a decision with a second user, have them open it, add a note to
-an option, and verify the owner sees the note attributed to that collaborator; then revoke
-access and verify the collaborator can no longer open it.
+**Independent Test**: Connect a test agent, paste a list and get formatted options without
+copy-paste. Then ask the agent to research one option and see a sourced, attributed note marked
+"pending review".
 
 **Acceptance Scenarios**:
 
-1. **Given** a decision, **When** the owner chooses "Share", **Then** they choose an access
-   level for collaborators and receive a way to invite them.
-2. **Given** an invited collaborator with contribute access, **When** they add an option or a
-   note, **Then** the owner and other collaborators see it attributed to that collaborator.
-3. **Given** a collaborator with contribute access, **When** they choose "Ask my agent" on an
-   option, **Then** their agent's contributions are attributed to their agent acting for them.
-4. **Given** a collaborator with view-only access, **When** they try to change anything,
-   **Then** the change is not allowed and the reason is explained.
-5. **Given** a shared decision, **When** the owner revokes a collaborator's access, **Then**
-   that collaborator can no longer open the decision or submit changes.
-6. **Given** a shared decision using a group strategy (e.g. plurality vote), **When** each
-   collaborator with contribute access casts a ballot and the owner triggers the outcome,
-   **Then** the outcome tallies all submitted ballots, records who voted (or that votes were
-   anonymous, if the owner chose so) and shows the result to all participants.
-7. **Given** a collaborator has already voted, **When** they vote again before the outcome is
-   triggered, **Then** their previous ballot is replaced, never counted twice.
+1. **Given** a connected agent, **When** the user pastes a list, **Then** Deci asks the agent to
+   format it and shows the preview, without the copy-paste step.
+2. **Given** an option, **When** the user chooses "Ask my agent" with an instruction, **Then** the
+   agent gets scoped, time-limited, revocable access to that option only.
+3. **Given** an agent adds findings, **Then** they appear on the option attributed to the agent
+   and the user it acted for, with sources, marked "pending review" until a human accepts, edits
+   or dismisses them.
+4. **Given** an agent tries to grade, vote, delete, change sharing or act outside its scope,
+   **Then** the action is refused and the attempt is visible to the user.
 
 ---
 
-### User Story 6 - Customize the app through plugins (Priority: P6)
+### User Story 6 - Plugins and more idea sources (Priority: P6)
 
-A power user opens the plugin area, sees installed modules (idea sources, strategies,
-enrichers, UI panels), enables/disables them, adjusts their detailed settings, and installs
-new ones. The default screens stay just as simple for everyone else.
+Power users install plugins: more idea sources (a Google Doc import, or external ones like
+Obsidian), strategies and UI panels. They review each plugin's permissions, configure it in a
+generated settings panel, and can disable it at any time. The default screens stay simple.
 
-**Why this priority**: Delivers the "extendable with detailed customization" promise. Basic
-plugin hosting is a prerequisite of stories 2–4, but the management experience can come last.
+**Why this priority**: Delivers the extensibility promise once the core flow is proven.
 
-**Independent Test**: Install a sample plugin package, confirm the permissions it requests are
-shown before enabling, change one of its settings, confirm the behaviour changes, disable it
-and confirm it disappears from the UI without affecting other features.
+**Independent Test**: Install a sample plugin, approve its permissions, change a setting and see
+the behavior change. Disable it and confirm the rest of the app works unchanged.
 
 **Acceptance Scenarios**:
 
-1. **Given** the plugin area, **When** the user views it, **Then** each plugin shows its name,
-   type, version, author, the permissions it holds and whether it is enabled.
-2. **Given** a new plugin, **When** the user installs it, **Then** the permissions it requests
-   (e.g. clipboard, network hosts, document access) are shown and must be approved before it
-   is enabled.
-3. **Given** a plugin with settings, **When** the user opens its settings, **Then** a settings
-   panel generated from the plugin's declared settings is shown with defaults and validation.
-4. **Given** a plugin built for an incompatible version of the platform, **When** the user
-   tries to enable it, **Then** it is refused with a plain-language explanation.
-5. **Given** a plugin that fails or hangs at runtime, **Then** the rest of the app keeps
-   working and the user sees an error naming the plugin.
+1. **Given** a plugin package (file or URL), **When** the user installs it, **Then** its
+   requested permissions are shown and must be approved first.
+2. **Given** the Google Docs idea source, **When** the user picks a document, **Then** its list
+   items or heading sections become ideas, read-only, with links back to the document, and
+   refreshing never duplicates items.
+3. **Given** a plugin with settings, **When** the user opens them, **Then** a form generated from
+   the plugin's declared settings is shown, with validation.
+4. **Given** a plugin built for an incompatible platform version, or one that fails at runtime,
+   **Then** it is refused or isolated with a plain-language message naming it, and the rest of
+   the app keeps working.
+
+---
+
+### User Story 7 - Local-first mode without Google (Priority: P7)
+
+A privacy-minded user or team runs Decisionator without Google: data on their own device, and
+sharing through a self-hostable relay that only stores end-to-end encrypted data.
+
+**Why this priority**: Keeps the project's local-first, user-owns-the-data direction available
+for people who don't want a Google dependency, after the Google-based MVP.
+
+**Independent Test**: Run the local app and a self-hosted relay, share a project with a second
+device, and confirm the relay's storage contains no readable option titles.
+
+**Acceptance Scenarios**:
+
+1. **Given** local mode, **When** the user creates and grades projects offline, **Then**
+   everything works without network access.
+2. **Given** a self-hosted relay, **When** the owner shares a project, **Then** collaborators can
+   contribute and vote, and the relay operator cannot read the content.
+3. **Given** a project in Google Sheets, **When** the user exports it and imports it in local mode
+   (and back), **Then** options, grades, comments, rankings and outcomes are preserved.
 
 ---
 
 ### Edge Cases
 
-- A decision with zero or one option: deciding is disabled with an explanation (one option
-  can be confirmed manually but strategies requiring a choice are unavailable).
-- Duplicate option titles are allowed but visually flagged.
-- Clipboard is empty, contains non-text content, or contains a very large paste (thousands of
-  lines): the user sees a clear message, and large imports show a preview with a cap the user
-  can adjust.
-- Google Doc is deleted, moved, or access is lost after import: imported ideas stay, the source
-  link is marked as unavailable.
-- Network is unavailable: local actions (create, edit, manual/random decide) keep working;
-  imports, sharing and agent requests show they are waiting for connectivity.
-- An agent submits a huge or malformed contribution, or floods many contributions: the system
-  enforces size limits and a per-request contribution limit and reports the rejection to the
-  agent.
-- Two collaborators edit the same option at the same time: neither change is silently lost.
-- An option is removed while an agent request targets it: the request is cancelled and the
-  agent receives a clear "target no longer exists" response.
-- A strategy module is uninstalled after it produced outcomes: past outcomes remain readable,
-  showing the strategy name/version, but verification reports that the strategy is unavailable.
-- An uninstalled idea-source plugin: ideas it imported remain; refresh is unavailable.
+- Pasted text is empty, not text, or very large (more than 500 lines): Deci explains, or shows a
+  preview with an adjustable cap.
+- The AI returns JSON wrapped in prose or markdown fences: Deci extracts the JSON block. If it
+  finds several, it asks which one to use.
+- The AI returns options with duplicate titles: they are allowed but flagged in the preview.
+- The user declines Google sign-in: they can still format and preview their list. Deci explains
+  that saving and sharing need Google, and keeps the draft in the browser.
+- The project Sheet is deleted, trashed or its sharing changed outside Deci: Deci shows "project
+  unavailable" with the reason it can detect. It never silently creates a new copy.
+- Someone edits the Sheet directly in Google Sheets: Deci ignores rows it cannot validate, shows
+  a warning that names the row, and never crashes.
+- A wrong password: no content is shown. After 5 wrong tries, Deci waits 30 seconds before
+  accepting another try.
+- Free Google API quota is reached: Deci slows down automatically, shows "syncing paused, retrying
+  in N s", and never loses the user's unsent input (it is queued locally).
+- Two people grade the same option at the same moment: both grades are kept (one per person).
+- An option is removed after people graded or ranked it: its grades stay in history, and it is
+  excluded from new tallies with a note.
+- A collaborator signs in with a different Google account than the one invited: Deci shows which
+  account is signed in and how to switch.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-**Decisions, ideas and options**
+**MVP — capture and formatting (US1)**
 
-- **FR-001**: Users MUST be able to create, rename, describe, archive and delete decisions.
-- **FR-002**: Users MUST be able to add, edit, reorder and remove options on a decision; each
-  option has a title and an optional rich-text description.
-- **FR-003**: Users MUST be able to keep a pool of ideas (not yet assigned to a decision) and
-  turn selected ideas into options of a decision, preserving description and source reference.
-- **FR-004**: The system MUST persist all decisions, ideas, options, contributions and outcomes
-  so they survive restarts.
+- **FR-001**: Users MUST be able to paste text from the clipboard to start a project.
+- **FR-002**: Without a connected AI, the system MUST offer a copyable **format instruction**
+  containing the user's pasted text, the required JSON format and an example, written to work
+  with any general-purpose AI assistant.
+- **FR-003**: The JSON format MUST be a published, versioned contract (title, description,
+  category, tags, and optional pros, cons, effort and links per option) and MUST accept a top-level
+  project title and description.
+- **FR-004**: The system MUST validate pasted JSON against the format, extract it from
+  surrounding prose or code fences, report each problem with its item number and field, and
+  offer a correction instruction for the AI.
+- **FR-005**: Users MUST be able to skip the AI and import each non-empty line or list item as an
+  option title (list markers removed).
+- **FR-006**: Users MUST see an editable preview (edit, remove or add options) before a project is
+  created. Drafts MUST be kept in the browser until saved.
 
-**Deciding and strategies**
+**MVP — project storage in Google (US1)**
 
-- **FR-005**: The system MUST provide built-in strategies: manual pick, uniform random, and
-  weighted random.
-- **FR-006**: Decision strategies MUST be modules implementing a common strategy contract; the
-  built-in strategies MUST use the same contract as third-party ones.
-- **FR-007**: Each outcome MUST record the chosen option(s), the strategy identity and version,
-  its settings, the inputs considered, the random seed (if any), who triggered it, and when.
-- **FR-008**: Outcomes MUST be append-only; deciding again adds a new outcome.
-- **FR-009**: Any participant who can view a decision MUST be able to verify a recorded random
-  outcome by reproducing it from its recorded inputs and seed.
-- **FR-010**: A strategy MUST be able to declare preconditions (e.g. minimum option count,
-  weights required) and the system MUST explain unmet preconditions instead of running it.
+- **FR-007**: Creating a project MUST create a Google Sheet in the owner's Google Drive that holds
+  the project: options, grades, comments, rankings, outcomes and settings.
+- **FR-008**: The system MUST request only per-file Google access (files the app creates or the
+  user explicitly opens with it), never access to all of the user's Drive.
+- **FR-009**: Every grade, comment and ranking MUST be stored as its own entry attributed to its
+  author's Google account, so concurrent input never overwrites other people's input.
+- **FR-010**: The system MUST list the user's projects ("My projects") and reopen them with all
+  data intact.
+- **FR-011**: Project storage MUST sit behind a project-store contract. Google Sheets is the first
+  implementation, and US7's local store is another implementation of the same contract.
 
-**Idea sources**
+**MVP — grading, comments and stats (US1, US2)**
 
-- **FR-011**: Idea sources MUST be modules implementing a common idea-source contract.
-- **FR-012**: The system MUST include a clipboard idea source that splits pasted text into ideas
-  (one per line or list item) and shows a preview before import.
-- **FR-013**: The system MUST include a Google Docs idea source that imports list items or
-  heading-delimited sections from documents the user explicitly selects, using read-only access.
-- **FR-014**: Imported ideas MUST keep a reference to their source (source type, document,
-  location) and re-importing MUST NOT create duplicates of unchanged items.
-- **FR-015**: Additional sources (e.g. Obsidian vaults) MUST be addable as external plugins
-  without changes to the application; an Obsidian source is NOT bundled.
+- **FR-012**: Participants with contribute access MUST be able to set one 1–5 grade per option
+  (changeable) and add comments to options.
+- **FR-013**: The stats view MUST let any participant sort options by average grade, number of
+  grades, number of comments, ranked-vote points (when available) or title, and group them by
+  category or tag. It MUST show each option's average, grade count and distribution.
+- **FR-014**: Each grade and comment MUST show its author's display name and time. Owners MUST be
+  able to hide a comment, which stays in history.
 
-**Agentic API**
+**MVP — sharing (US2)**
 
-- **FR-016**: The system MUST expose a documented, versioned agentic API offering parity with
-  user actions relevant to agents: read decision/idea/option context, attach contributions,
-  propose new options or ideas, and report request status.
-- **FR-017**: The agentic API MUST be self-describing so an agent can discover available actions
-  and their inputs without external documentation.
-- **FR-018**: Users MUST be able to create an agent request on a decision, idea or option that
-  bundles an instruction and a scoped access grant (target, permissions, expiry).
-- **FR-019**: The system MUST let the user hand the agent request to an agent of their choice
-  (copyable instructions plus access details), without requiring a specific AI vendor.
-- **FR-020**: Agent grants MUST be limited to their target and permissions, time-limited
-  (default 24 hours, user-adjustable) and revocable at any time.
-- **FR-021**: Agent contributions MUST record the agent's self-declared name, the user it acted
-  for, the request it belongs to, its content, its sources and its timestamp, and MUST be shown
-  as agent-made and "pending review" until a human accepts, edits or dismisses them.
-- **FR-022**: Agents MUST NOT be able to trigger outcomes, delete content, change sharing or
-  act outside their grant; refused attempts MUST be logged and visible to the requesting user.
+- **FR-015**: Owners MUST be able to share a project by link with an access level: view, or
+  contribute (grade, comment, vote).
+- **FR-016**: Opening a link MUST require at most one Google sign-in and one access confirmation.
+  No Decisionator account exists.
+- **FR-017**: Owners MAY protect a project with a password. Password-protected project content
+  MUST be encrypted in the browser before it is stored in Google, so that neither Google nor
+  anyone with Sheet access can read it without the password. The password MUST never be stored
+  or sent anywhere.
+- **FR-018**: Owners MUST be able to turn off link sharing (effective for everyone at their next
+  access) and to invite people by email instead of by link. Only people invited by email can be
+  removed individually. The UI MUST explain this when an owner tries to remove someone from a
+  link-shared project (research R21).
+- **FR-019**: While a project is open, other participants' input MUST appear without a reload
+  within 30 seconds.
+- **FR-020**: All Google API use MUST stay within the free quotas. The client MUST budget its
+  requests, back off on rate-limit responses, queue unsent input locally, and tell the user when
+  syncing is paused.
 
-**Sharing and collaboration**
+**MVP — ranked vote (US3)**
 
-- **FR-023**: Owners MUST be able to share a decision with specific people and choose their
-  access level: view or contribute (add options, notes and agent requests).
-- **FR-024**: All changes to a shared decision MUST be attributed to the person or agent that
-  made them, and visible to all participants with view access.
-- **FR-025**: Owners MUST be able to revoke a participant's access at any time, effective
-  immediately.
-- **FR-026**: Concurrent edits by different participants MUST NOT silently overwrite each other.
-- **FR-027**: Deciginator MUST be local-first: all data lives on the user's device and every
-  non-network feature works offline. Sharing and remote agent access MUST go through an
-  optional sync/relay service that anyone can self-host; a user who never shares never needs it.
-- **FR-027a**: Only decisions the owner explicitly shares (and agent requests the user issues)
-  MUST be sent to the sync/relay service; the service MUST NOT be able to read shared decision
-  content it stores or relays (end-to-end protection). Exception: when a user chooses the
-  "remote agent" channel, the scoped context that agent reads passes through the relay and
-  could be visible to the relay operator in transit; the UI MUST state this before the request
-  is created, and local agents or a self-hosted relay avoid it.
-- **FR-027b**: Participants MUST be identified to each other by a display name and a stable
-  identity created on their device; no central account sign-up is required.
-- **FR-027c**: Collaborators with contribute access MUST be able to cast a ballot (vote or
-  ranking) on decisions that use a group strategy; one active ballot per participant, replaced
-  on re-vote. The owner chooses whether ballots are attributed or anonymous to other
-  participants.
-- **FR-027d**: Group strategies (tallying ballots) MUST be strategy modules using the same
-  strategy contract; a plurality-vote strategy MUST be built in.
+- **FR-021**: Contributors MUST be able to submit one ranked vote per project (top N, owner
+  configurable, default 3). Re-submitting replaces it.
+- **FR-022**: The owner MUST be able to open and close voting and choose whether results are
+  visible live or only after closing.
+- **FR-023**: The ranked vote MUST be tallied by a ranking strategy module (default: Borda count
+  over each ballot's top N), with the documented tie-break chain from US3 #4.
+- **FR-024**: Each closed vote MUST record an immutable outcome: winner, full order with points,
+  strategy id and version, ballots counted, tie-break used, seed (if any), who closed it and
+  when. Outcomes are append-only.
 
-**Plugins and UI**
+**Post-MVP — strategies (US4)**
 
-- **FR-028**: Every plugin MUST declare a manifest: identity, version, compatible platform
-  version, provided extension points, required permissions and a settings schema.
-- **FR-029**: The system MUST show requested permissions and require user approval before a
-  plugin is enabled; plugins MUST only access what they were granted.
-- **FR-030**: The system MUST generate each plugin's settings panel from its declared settings
-  schema, with defaults and validation.
-- **FR-031**: Users MUST be able to list, enable, disable, configure, install and uninstall
-  plugins.
-- **FR-032**: Plugins MAY contribute UI only into defined UI slots (e.g. option detail panel,
-  decision toolbar, strategy chooser); they MUST NOT alter the primary flow.
-- **FR-033**: A failing or unresponsive plugin MUST NOT block or crash the rest of the app; the
-  user sees an error that names the plugin.
-- **FR-034**: In v1, third-party plugins MUST be installable from a local package file or a URL,
-  with the permission review of FR-029; an in-app community catalog is out of scope for v1.
-  Installing from a URL MUST show the source and warn that the plugin is not reviewed by the
-  project.
+- **FR-030**: Strategies MUST be modules implementing a common strategy contract. Built-ins:
+  owner pick, uniform random, weighted by average grade, and the Borda ranking strategy.
+- **FR-031**: Random strategies MUST record a seed, and any participant MUST be able to verify an
+  outcome by reproducing it.
+- **FR-032**: Strategies MUST declare preconditions, and unmet preconditions MUST be explained.
 
-**Data ownership**
+**Post-MVP — connected AI and agent API (US5)**
 
-- **FR-035**: Users MUST be able to export all their decisions (including ideas, contributions
-  and outcomes) in an open, documented format and import such an export.
-- **FR-036**: Credentials for external services MUST never appear in exports, share links,
-  logs or agent requests.
-- **FR-037**: The default interface MUST meet WCAG 2.1 AA accessibility guidelines.
+- **FR-040**: The system MUST expose a documented, versioned, self-describing agent API (MCP and
+  REST) with parity to user actions relevant to agents.
+- **FR-041**: Users MUST be able to connect an agent to auto-format pasted lists using the FR-003
+  format.
+- **FR-042**: Agent requests MUST carry scoped, time-limited (default 24 h) and revocable access.
+  Any agent vendor must work.
+- **FR-043**: Agent contributions MUST be attributed (agent name, on whose behalf, sources) and
+  pending review until a human accepts, edits or dismisses them.
+- **FR-044**: Agents MUST NOT grade, vote, record outcomes, delete content or change sharing.
+  Refused attempts MUST be visible to the user.
+
+**Post-MVP — plugins and sources (US6)**
+
+- **FR-050**: Idea sources, strategies, project stores and UI panels MUST be plugins with a
+  manifest (identity, version, compatible platform version, permissions, settings schema).
+- **FR-051**: Built-in modules MUST use the same public contracts as third-party plugins.
+- **FR-052**: Third-party plugins MUST run isolated, limited to their approved permissions and
+  network hosts. A failing plugin MUST NOT break the app and MUST be named in the error.
+- **FR-053**: Plugin settings panels MUST be generated from the plugin's settings schema.
+- **FR-054**: A Google Docs idea source MUST import list items or heading sections from documents
+  the user picks, read-only, with source links and without duplicates on refresh.
+- **FR-055**: Other sources (e.g. Obsidian) MUST be addable as external plugins without app
+  changes. An Obsidian source is not bundled.
+- **FR-061**: In v1, third-party plugins MUST be installed from a local file or URL with a
+  permission review. There is no in-app catalog.
+
+**Post-MVP — local-first mode (US7)**
+
+- **FR-070**: A local mode MUST store projects on the user's device and work offline.
+- **FR-071**: Local-mode sharing MUST go through an optional, self-hostable relay that cannot read
+  stored content (end-to-end encrypted). Remote-agent traffic through the relay MUST be disclosed
+  as visible to the relay operator in transit.
+- **FR-072**: Projects MUST be exportable and importable between Google and local modes in an open,
+  documented format.
+
+**All releases — data and quality**
+
+- **FR-080**: Users MUST be able to export a project (options, grades, comments, rankings,
+  outcomes) in an open, documented format.
+- **FR-081**: Credentials and access tokens MUST never appear in project data, exports, share
+  links or logs. Google access tokens are kept in memory only.
+- **FR-082**: The default interface MUST meet WCAG 2.1 AA and be usable from 360 px wide.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Decision**: A question to be resolved. Has title, description, owner, participants with
-  access levels, options, contributions, outcome history, status (open, decided, archived).
-- **Idea**: A raw item captured from a source or typed in. Has title, description, source
-  reference, created-by, and may be linked to options derived from it.
-- **Option**: A candidate answer within a decision. Has title, description, order, optional
-  strategy inputs (e.g. weight), link to originating idea, and contributions.
-- **Contribution**: Information attached to a decision, idea or option — note, research,
-  pros/cons, links/sources. Has author (human or agent), on-behalf-of user, review status
-  (pending, accepted, edited, dismissed) and timestamp.
-- **Outcome**: An immutable record of one decision run: chosen option(s), strategy id and
-  version, settings, inputs snapshot, seed, triggered-by and time.
-- **Strategy**: A module that, given a decision's options and settings, produces an outcome.
-  Declares name, description, version, preconditions and settings schema.
-- **Idea Source**: A module that reads items from an external place (clipboard, Google Docs,
-  third-party: Obsidian…) and produces ideas with source references.
-- **Plugin**: An installable module package with a manifest (identity, version, compatibility,
-  extension points, permissions, settings schema), enabled state and user settings.
-- **Agent Request**: A user-issued task for an agent: instruction, target, access grant
-  (permissions, expiry, revoked flag), requesting user, status, and resulting contributions.
-- **Participant**: A person with access to a decision, identified by a device-created identity
-  and display name, and their access level (owner, contribute, view).
-- **Ballot**: A participant's vote or ranking on a decision's options for a group strategy;
-  one active ballot per participant per decision, superseded on re-vote.
-- **Sync/Relay Service**: An optional, self-hostable service that carries shared decisions and
-  agent requests between participants' devices and remote agents without reading their content.
+- **Project**: The thing being decided (e.g. "Which app do we build?"). Title, description,
+  owner, storage location (Google Sheet or local), access settings, password-protected flag,
+  voting settings (top N, live results, open or closed).
+- **Option**: One candidate idea. Title, description, category, tags, optional pros, cons, effort
+  and links, status (active or removed), who added it.
+- **Participant**: A person with access, identified by their Google account in the MVP (display
+  name and email) or by a device identity in local mode, with a role: owner, contribute or view.
+- **Grade**: One participant's 1–5 score for one option. The latest grade per participant and
+  option counts.
+- **Comment**: Text on an option by a participant (or, later, an agent), with time and hidden
+  flag.
+- **Ranking (ballot)**: One participant's ordered top-N options. The latest submission counts.
+- **Outcome**: An immutable result of a tally or strategy run: winner, order and points,
+  strategy and version, inputs counted, tie-break, seed, who and when.
+- **Format instruction**: The generated prompt plus the JSON format (FR-002, FR-003).
+- **Contribution (post-MVP)**: Agent or human research attached to an option, with sources and
+  review status.
+- **Plugin (post-MVP)**: An installable module with manifest, permissions, settings and enabled
+  state.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: A first-time user can create a decision with three options and record an outcome
-  in under 60 seconds, without opening settings or documentation.
-- **SC-002**: At least 90% of first-time test users complete the primary flow (add options →
-  decide → view outcome) on the first attempt.
-- **SC-003**: 100% of recorded random outcomes reproduce identically when verified.
-- **SC-004**: A plugin author can build and load a working custom strategy by following the
-  docs and example in under 30 minutes, without modifying the application.
-- **SC-005**: Importing a 50-item list from the clipboard or a Google Doc takes under 10
-  seconds end to end (excluding the one-time access grant).
-- **SC-006**: A user can go from "Ask my agent" to seeing the agent's attributed contribution
-  on the option in under 2 minutes of their own effort (excluding the agent's research time).
-- **SC-007**: 100% of agent actions outside their grant, after expiry or after revocation are
-  refused in testing.
-- **SC-008**: A collaborator invited to a shared decision can open it and add a contribution in
-  under 2 minutes from receiving the invitation.
-- **SC-009**: Disabling or crashing any single plugin leaves the primary flow fully working.
+- **SC-001**: A first-time user goes from pasting a 10-item list to a saved project in under
+  3 minutes, including the round trip to their own AI assistant.
+- **SC-002**: At least 90% of AI answers produced from the format instruction by mainstream
+  assistants validate on the first paste (measured with the launch agent list: Claude, Grok,
+  Muse, Dots).
+- **SC-003**: A collaborator goes from opening a share link to their first grade in under
+  1 minute.
+- **SC-004**: Input from one participant appears for others within 30 seconds in 95% of cases
+  while the project is open.
+- **SC-005**: With 20 collaborators active on one project, the app stays within free Google API
+  quotas and no input is lost.
+- **SC-006**: 100% of tallies reproduce identically from the same ballots (and seed).
+- **SC-007**: Without the password, a password-protected project's options, grades and comments
+  are unreadable in the stored Google Sheet.
+- **SC-008**: Sorting or grouping 200 options in the stats view feels instant (under 1 second).
+- **SC-009**: The MVP runs with zero server cost to the project beyond static hosting.
 
 ## Assumptions
 
-- The project will provide a reference sync/relay service that can be self-hosted; whether the
-  project also operates a free public instance is a separate, non-blocking decision.
-- Remote agents (running outside the user's device) reach agent requests through the
-  sync/relay service; agents running on the same device may talk to the local app directly.
-- The first release targets individuals and small groups (up to ~20 participants per decision);
-  large-organization features (SSO, admin consoles, compliance reporting) are out of scope.
-- "Your own agent" means any AI agent or assistant the user already uses that can follow
-  instructions and call a documented API; Deciginator does not ship or pay for an AI model.
-- Agents identify themselves by a self-declared name; the trust anchor is the user who issued
-  the grant, not the agent's identity.
-- Google Docs access is read-only and limited to documents the user explicitly selects;
-  writing back to Google Docs is out of scope for v1.
-- Obsidian support is delivered (if at all) by a separate, unbundled plugin; v1 only guarantees
-  the idea-source contract makes it possible.
-- Rich-text descriptions use a common lightweight markup; exact format is decided at planning.
-- Mobile-specific apps are out of scope for v1; the UI should remain usable on small screens.
-- English is the only UI language for v1, but user-facing text should be translatable later.
-- Grant default expiry is 24 hours; contribution size and per-request count limits are set at
-  planning with sensible defaults.
+- The MVP is a pet project: there are no adoption targets, and success is measured by the
+  criteria above.
+- Users of the MVP have a Google account. People without one can format and preview, but cannot
+  save or share until local mode (US7) ships.
+- The project publishes one Google Cloud OAuth client for the hosted app, with only non-sensitive
+  per-file scopes, so no Google app verification is needed. Self-hosters can use their own client.
+- "Any AI" in the MVP means a general-purpose chat assistant that can follow instructions and
+  return JSON. The launch compatibility list is Claude, Grok, Muse and Dots.
+- Typical projects have up to 200 options and up to 20 active collaborators.
+- Password protection is a privacy feature, not access control: anyone with the password and
+  Sheet access can read the project, and a lost password cannot be recovered.
+- People who can edit the underlying Sheet in Google Sheets could tamper with it directly. Deci
+  validates rows, and Google's version history provides an audit trail; this is accepted for the
+  MVP.
+- English UI only for now, with text kept translatable.

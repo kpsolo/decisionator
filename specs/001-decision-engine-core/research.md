@@ -1,9 +1,202 @@
-# Phase 0 Research: Decision Engine Core (MVP)
+# Phase 0 Research: Decision Engine Core
 
 **Feature**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md) | **Date**: 2026-10-05
+(revised the same day for the Google-based MVP)
 
 Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items marked
 ⚠ *spec impact* change or refine a spec requirement and are reflected in `spec.md`.
+
+## Status after the MVP revision
+
+The owner's first user story redefined the MVP: a hosted web app storing each project in a
+Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as follows:
+
+| Decision | Status |
+|----------|--------|
+| R1 language, R11 RNG, R12 UI, R13 schemas, R15 tooling, R17 licenses | **MVP** (unchanged) |
+| R10 clipboard | **MVP**, simplified: a paste box needs no clipboard permission (R24) |
+| R16 export | **MVP**, format extended for grades and rankings |
+| R2 local node, R14 localhost security | **US5 / US7** (agent API, local mode) |
+| R3 Automerge | **US7** (local mode); the MVP stores rows in Google Sheets (R20) |
+| R4 sandbox, R5 plugin packaging | **US6**; MVP built-ins use the same contracts in-process (R26) |
+| R6 relay, R8 agent tunnel | **US7** and **US5** |
+| R7 agent API | **US5** |
+| R9 Google Docs source | **US6**; in the hosted app it uses the browser token and web Picker from R19 instead of the loopback broker |
+
+---
+
+## R18. MVP runtime: hosted static web app, no backend
+
+- **Decision**: A static single-page app (React 19 + Vite) hosted on GitHub Pages at
+  `https://kpsolo.github.io/decisionator/` and deployed by GitHub Actions. It calls Google APIs
+  directly from the browser. The project runs no server of its own (SC-009).
+- **Rationale**: A share link must open with one click for anyone (US2). A static host costs
+  nothing, and keeps the project's attack surface and operations at zero. All data goes straight
+  from the browser to the user's own Google Drive.
+- **Alternatives**: Local node first (link recipients would need to install it; owner chose
+  hosted); Cloudflare Pages or Netlify (equally fine; GitHub Pages keeps everything in one repo);
+  a backend proxy for Google APIs (adds cost, a server and a data processor in the middle).
+
+## R19. Google sign-in and scopes
+
+- **Decision**: Google Identity Services **token model** in the browser, requesting only
+  `https://www.googleapis.com/auth/drive.file`. Access tokens are held in memory, never stored.
+  When a token expires (about 1 hour) the app requests a new one, silently if Google allows,
+  otherwise with one click. The user's display name and email come from Drive `about.get`, so
+  no extra profile scopes are needed.
+- **Rationale**: `drive.file` is Google's recommended **non-sensitive** per-file scope: no app
+  verification, and the app can only touch files it created or that the user opened with it
+  (FR-008). Sheets API calls work on those files with this scope.
+- **Alternatives**: `spreadsheets` scope (sensitive → verification, and access to all of the
+  user's Sheets); `drive` scope (restricted → security assessment); refresh tokens (they need a
+  backend to keep the client secret).
+
+## R20. Project storage: one Google Sheet per project ⚠ *spec impact*
+
+- **Decision**: A project is a Google Sheet in the owner's Drive. Drive `appProperties` tag it as
+  `{decisionator: "project", formatVersion: "1"}`. Tabs: `meta`, `options`, `grades`, `comments`,
+  `rankings`, `outcomes` (layout in [contracts/sheet-store.md](./contracts/sheet-store.md)).
+  - **Append-only rows** for grades, comments, rankings and outcomes (`values.append`). The latest
+    row per (participant, option) wins for grades, and the latest per participant wins for
+    rankings. Nobody ever overwrites another person's row (FR-009).
+  - `options` and `meta` are written only by the owner.
+  - One `values.batchGet` reads all tabs in a single request.
+  - "My projects" uses Drive `files.list` filtered by `appProperties`. With `drive.file`, it
+    returns only the projects the app created or the user opened.
+- **Rationale**: Appends are atomic per request, so concurrent collaborators don't conflict.
+  Stats are simple aggregations. People can still open the Sheet in Google Sheets, which builds
+  trust.
+- **Spec impact**: none beyond the clarified choice. Tampering by people with edit rights in
+  Google Sheets is an accepted MVP risk (spec Assumptions).
+- **Alternatives**: Google Doc (owner considered it; structured concurrent data is awkward);
+  JSON file in Drive (whole-file rewrites would conflict between collaborators).
+
+## R21. Sharing by link and collaborator access ⚠ *spec impact*
+
+- **Decision**:
+  - "Share" calls Drive `permissions.create` with `{type: "anyone", role: "reader" | "writer",
+    allowFileDiscovery: false}`: view = reader, contribute = writer. The Deci link is
+    `https://kpsolo.github.io/decisionator/#/p/<fileId>`, and the file ID is not secret by
+    itself.
+  - A collaborator opening the link signs in, then confirms access in a Google Picker opened with
+    `setFileIds([fileId])`. That grants the app `drive.file` access to that one file (one
+    confirmation, FR-016).
+  - **Invite by email** is also offered (`type: "user"`). It is the way to remove individual
+    people later: Drive cannot exclude one person from an "anyone with the link" permission.
+- **Spec impact**: FR-018 is refined. Turning off link sharing works for everyone at once;
+  removing an individual requires invite-by-email mode, or rotating the project to a new copy.
+  The UI explains this when the owner tries to remove someone from a link-shared project.
+- **Risk / spike (Increment 0)**: Google's documentation doesn't say whether
+  `setFileIds` lets a user grant access to a file that someone else shared only by link. A spike
+  confirms this before UI work starts. Fallback 1: the link page first opens the Sheet in Google
+  (which adds it to the visitor's "Shared with me"), then shows the Picker. Fallback 2: invite by
+  email.
+
+## R22. Password protection
+
+- **Decision**: Optional per-project password.
+  - The key is derived with PBKDF2-HMAC-SHA-256, 600 000 iterations (WebCrypto, OWASP guidance)
+    and a random 16-byte salt.
+  - Payload cells are encrypted with AES-256-GCM using a fresh 12-byte IV per cell.
+  - `meta` holds the salt, the iteration count and an encrypted verifier string, plus nothing
+    readable about the content. The Sheet is titled "Decisionator project (protected)".
+  - The password never leaves the browser. The derived key is kept in memory for the session
+    only.
+- **Rationale**: Google sharing has no passwords, so real protection requires client-side
+  encryption (FR-017, SC-007). Everything needed is built into browsers.
+- **Limits stated in the UI**: a lost password cannot be recovered. The "5 tries, then wait"
+  rule only slows casual guessing; an attacker who copies the Sheet can guess offline, so the
+  UI asks for a passphrase of at least 12 characters.
+- **Alternatives**: Argon2id (stronger, but needs a WASM dependency; it can replace PBKDF2 behind
+  the `kdf` field in `meta` later); a password check only, without encryption (the Sheet would
+  stay readable, which fails SC-007).
+
+## R23. Live updates within free quotas
+
+- **Quotas** (verified 2026-10-05):
+  - Sheets API: 300 reads and 300 writes per minute per project, and 60 per minute per user. No
+    daily limit.
+  - Drive API: 1 000 000 quota units per minute per project, 400 M units per day free.
+    `files.get` costs 5 units.
+  - Google plans charges for usage beyond quota later in 2026.
+- **Decision**:
+  - While a project tab is visible, poll Drive `files.get?fields=version` every 10 s. This costs
+    5 Drive units and no Sheets quota.
+  - Only when `version` changes, do one Sheets `values.batchGet`, at most one every 15 s per
+    client.
+  - Writes go into a local queue, flushed at most every 2 s as one append per tab.
+  - On `429`/`403 rateLimitExceeded`, use truncated exponential backoff with jitter (max 64 s)
+    and show "syncing paused, retrying in N s". The queue persists in IndexedDB, so no input is
+    lost (FR-020, SC-005).
+  - Polling stops when the tab is hidden.
+  - A client-side budget caps each client at 20 Sheets reads and 20 writes per minute, a third of
+    the per-user quota.
+- **Rationale**: Meets the 30 s freshness target (SC-004) while spending Sheets quota only on real
+  changes. The project-wide 300 reads/min is the shared ceiling for all users of the hosted app,
+  so self-hosters can configure their own Google client (R28). Quota increases can be requested
+  free of charge if needed.
+- **Alternatives**: Drive push notifications / `changes.watch` (needs a public webhook server);
+  polling Sheets directly (burns the scarce quota).
+
+## R24. Format instruction and JSON format
+
+- **Decision**:
+  - A versioned JSON format `decisionator.options/v1`, defined in
+    [contracts/options-format.schema.json](./contracts/options-format.schema.json).
+  - A plain-English **format instruction** template
+    ([contracts/format-instruction.md](./contracts/format-instruction.md)). It embeds the user's
+    pasted text and a compact example, and asks for JSON only.
+  - Input is a paste box (no clipboard permission needed).
+  - Extraction order: a fenced ```json block, then the first balanced `{…}` or `[…]`.
+  - Validation uses the Zod schema, which is also exported as JSON Schema. Errors are reported
+    per item and field, and a **correction instruction** quotes the errors back for the AI.
+- **Rationale**: Works with any assistant, including the launch list (Claude, Grok, Muse, Dots),
+  with no integration. The same format later serves connected agents (US5).
+- **Validation of SC-002**: a fixture set of real answers from each launch assistant for 5 sample
+  lists, collected manually and replayed in CI.
+
+## R25. Ranked vote tally
+
+- **Decision**: Truncated **Borda count**. On a top-N ballot, rank r earns N − r + 1 points, and
+  unranked options earn 0. Ties are broken in order by higher average grade, then more first-place
+  votes, then a seeded random draw. That seed is generated when voting closes and is recorded
+  (R11 RNG). The tally is implemented as a strategy module against the strategy contract (with
+  `ballots: "ranking"`), so it is deterministic and verifiable (FR-023, FR-024, SC-006).
+- **Rationale**: Borda yields a full order (useful for a ranked shortlist), is easy to explain
+  ("points per option"), and works with partial ballots.
+- **Alternatives**: Instant-runoff (good for a single winner, but no meaningful full order; a
+  later strategy plugin); Condorcet methods (harder to explain).
+
+## R26. Plugin architecture in the MVP
+
+- **Decision**: The MVP ships first-party modules only: the Google Sheets project store, the
+  paste/format idea source and the Borda ranking strategy. Each implements the public contracts
+  in `@decisionator/plugin-sdk` (project store, idea source, strategy) and is loaded in-process.
+  Sandboxed loading of third-party plugins (R4) arrives with US6.
+- **Rationale**: Keeps the MVP small while keeping Principle I honest. The contracts are the
+  same, so moving built-ins into the sandbox later needs no changes to them. This is recorded in
+  the plan's Complexity Tracking.
+
+## R27. Offline drafting and resilience
+
+- **Decision**: Drafts (pasted text, formatted preview) and the outgoing write queue are kept in
+  IndexedDB. A service worker caches the app shell. Without network, users can paste, format,
+  preview and queue grades and comments, which sync when they're back online.
+- **Rationale**: Covers the constitution's offline-capable core as far as a Google-backed MVP
+  allows. The remaining gap is recorded in Complexity Tracking.
+
+## R28. Google Cloud configuration and self-hosting
+
+- **Decision**: The project registers one Google Cloud project with:
+  - an OAuth **Web** client whose authorized JavaScript origin is `https://kpsolo.github.io`;
+  - an API key restricted to that referrer and to the Picker API;
+  - the OAuth consent screen published "In production", with only the non-sensitive `drive.file`
+    scope, so there is no verification and no 100-test-user cap.
+
+  Builds read `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` and `VITE_BASE_URL`, so forks and
+  self-hosters can use their own project and quota.
+- **Rationale**: Works out of the box for users (the owner's requirement), while anyone can
+  escape the shared quota ceiling.
 
 ---
 
@@ -19,7 +212,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
 
 ## R2. Application shape for "local-first + agent-reachable"
 
-- **Decision**: A **local node** — one Node.js process per user (`npx deciginator` /
+- **Decision**: A **local node** — one Node.js process per user (`npx decisionator` /
   Docker image in v1) that owns storage, the agentic API (MCP + REST), the OAuth broker and the
   sync client, and serves the web UI at `http://127.0.0.1:4178`. A desktop installer that wraps
   the same node is a follow-up feature.
@@ -69,7 +262,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
 
 ## R5. Plugin packaging and distribution
 
-- **Decision**: A plugin package is a directory or `.zip` containing `deciginator-plugin.json`
+- **Decision**: A plugin package is a directory or `.zip` containing `decisionator-plugin.json`
   (manifest, [contracts/plugin-manifest.schema.json](./contracts/plugin-manifest.schema.json)),
   one ESM bundle and optional assets. Installed from a local file or an HTTPS URL to a `.zip`
   (FR-034). The node stores packages content-addressed by SHA-256; the hash is recorded in
@@ -89,7 +282,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
   - **Relay** = append-only log store of *encrypted, signed* Automerge change batches per shared
     decision, plus an owner-signed ACL (public keys + roles). The relay verifies signatures,
     rejects writes from non-writers and reads from non-members, and never holds keys.
-  - **Invite** = link `deciginator://join?relay=…&doc=…#k=<sealed invite>`; the decision key is
+  - **Invite** = link `decisionator://join?relay=…&doc=…#k=<sealed invite>`; the decision key is
     delivered sealed to the invitee's X25519 key after they present their public key (two-step
     invite) — keys never travel in a URL query string.
   - **Revocation**: owner removes the member from the ACL (relay stops serving them immediately)
@@ -108,7 +301,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
 
 - **Decision**: Two transports over **one command layer** in the node:
   1. **MCP** (primary for agents), MCP TypeScript SDK v2 (`@modelcontextprotocol/server` with the
-     Hono adapter), Streamable HTTP at `/mcp`, plus `deciginator mcp` stdio bridge for clients
+     Hono adapter), Streamable HTTP at `/mcp`, plus `decisionator mcp` stdio bridge for clients
      that only speak stdio. Spec revision 2026-07-28.
   2. **REST** `/api/v1` with an OpenAPI 3.1 document at `/api/v1/openapi.json`, generated from
      the same Zod schemas.
@@ -154,7 +347,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
   plugin then calls `docs.googleapis.com` `documents.get` per file (host allow-listed in its
   manifest). Tokens are kept **in node memory only** (no refresh tokens persisted in v1).
   The project ships a default Google "Desktop app" OAuth client ID; self-hosters can override it
-  via `DECIGINATOR_GOOGLE_CLIENT_ID`.
+  via `DECISIONATOR_GOOGLE_CLIENT_ID`.
 - **Rationale**: `drive.file` is Google's recommended **non-sensitive** per-file scope — no app
   verification, user explicitly chooses documents (US3 #2), read limited to picked files. A
   generic broker avoids any Google-specific code in the core (Principle I) and serves future
@@ -222,7 +415,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
   (unit, integration, contract), Playwright (E2E + `@axe-core/playwright` accessibility checks),
   Changesets for versioning and changelogs, GitHub Actions CI (lint, typecheck, test, e2e on
   Linux/Windows/macOS).
-- **Contract test kits**: `@deciginator/plugin-sdk/testing` exports `runStrategyContractTests`,
+- **Contract test kits**: `@decisionator/plugin-sdk/testing` exports `runStrategyContractTests`,
   `runIdeaSourceContractTests` — the same suites run against built-in plugins in CI and by
   third-party authors locally (Principle VII).
 - **Alternatives**: Turborepo/Nx (unnecessary at this size; can add later); ESLint + Prettier
@@ -230,7 +423,7 @@ Each entry: **Decision** / **Rationale** / **Alternatives considered**. Items ma
 
 ## R16. Export format
 
-- **Decision**: `.deciginator.zip` containing `manifest.json` (format version, exported-at,
+- **Decision**: `.decisionator.zip` containing `manifest.json` (format version, exported-at,
   exporter), `decisions/<id>.json` (plain JSON per [data-model.md](./data-model.md)),
   `decisions/<id>.automerge` (full history), `ideas.json`. Never includes keys, tokens or
   grants (FR-035, FR-036). JSON Schema published in `contracts/export.schema.json` (generated
@@ -246,6 +439,9 @@ with the project's MIT license.
 
 ## Sources
 
+- [Google Sheets API usage limits](https://developers.google.com/workspace/sheets/api/limits)
+- [Google Drive API usage limits](https://developers.google.com/workspace/drive/api/guides/limits)
+- [Picker `setFileIds` announcement](https://workspaceupdates.googleblog.com/2024/11/new-file-picker-method-for-pre-selecting-google-drive-files.html)
 - [Automerge 3.0 announcement](https://automerge.org/blog/automerge-3/)
 - [Automerge Repo 2.0](https://automerge.org/blog/automerge-repo-2/)
 - [MCP TypeScript SDK v2](https://ts.sdk.modelcontextprotocol.io/v2/)

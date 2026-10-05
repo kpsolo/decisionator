@@ -1,5 +1,7 @@
 # Contract: Plugin Runtime (host ⇄ plugin RPC) — v1.0.0
 
+> **Scope: sandboxed loading ships with US6.** In the MVP, first-party modules implement the same contracts in-process (research R26).
+
 Applies to every plugin (built-in or third-party). Platform key: `platform.runtime`.
 See [research.md R4](../research.md) for the isolation model.
 
@@ -12,7 +14,7 @@ See [research.md R4](../research.md) for the isolation model.
 - For plugins that provide a strategy, `Math.random` and `crypto.getRandomValues` throw
   `DeterminismError`. Use `ctx.rng`.
 - The frame loads the plugin's `main` bundle, which MUST call `definePlugin()` from
-  `@deciginator/plugin-sdk` exactly once.
+  `@decisionator/plugin-sdk` exactly once.
 
 ## Transport
 
@@ -27,7 +29,7 @@ Event:    { v: 1, kind: "event", name: string, payload: unknown }
 
 Host → plugin calls time out (default 5 s; `strategy.decide` 2 s). On timeout or 3 consecutive
 errors the host destroys the frame, marks `lastError`, and shows
-"<plugin name> stopped responding" (FR-033). The primary flow never awaits a non-strategy
+"<plugin name> stopped responding" (FR-052). The primary flow never awaits a non-strategy
 plugin.
 
 ## Lifecycle
@@ -63,4 +65,4 @@ fails with `PERMISSION_DENIED`.
 
 The host loads a plugin only if every declared `platform.*` range is satisfied by the host's
 contract versions. Otherwise the host refuses to load it and shows
-"Built for Deciginator runtime ^2.0, this app provides 1.4" (US6 #4).
+"Built for Decisionator runtime ^2.0, this app provides 1.4" (US6 #4).

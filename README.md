@@ -1,10 +1,10 @@
-# Deciginator
+# Decisionator
 
 An open-source, modular **decision-making engine**.
 
-Collect ideas, turn them into options, enrich them (by hand or with your own AI agent),
-then decide — by picking yourself, rolling a randomizer, or running a custom strategy.
-Share the decision with friends and collaborators.
+Paste a list of ideas, let your own AI assistant turn it into structured options, then grade,
+comment and vote on them together. Share a project by link, like a Google Doc. Each project lives
+in your own Google Drive; there is no Decisionator account or server.
 
 > Status: **pre-alpha / specification phase.** Development follows
 > [Spec-Driven Development](https://github.com/github/spec-kit).
@@ -15,8 +15,9 @@ Share the decision with friends and collaborators.
   plugins built on a small, stable core.
 - **Simple by default, extensible in depth.** The default UI is a handful of obvious actions;
   every plugin can expose detailed settings for people who want them.
-- **Pluggable idea stores.** Clipboard and Google Docs ship in the box; others (e.g. Obsidian)
-  can be written as third-party plugins.
+- **Pluggable storage and sources.** The MVP stores projects in Google Sheets and takes ideas
+  from the clipboard. More stores and sources (Google Docs import, Obsidian, local-first mode)
+  are plugins.
 - **Agent-native.** A documented agentic API lets *your own* agent research and attach
   information to ideas and options.
 - **Collaborative.** Decisions can be shared with others who can view, contribute and vote.

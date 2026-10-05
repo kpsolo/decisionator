@@ -1,108 +1,118 @@
-# Implementation Plan: Decision Engine Core (MVP)
+# Implementation Plan: Decision Engine Core
 
-**Branch**: `001-decision-engine-core` | **Date**: 2026-10-05 | **Spec**: [spec.md](./spec.md)
+**Branch**: `001-decision-engine-core` | **Date**: 2026-10-05 (revised for the Google-based MVP) |
+**Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/001-decision-engine-core/spec.md`
 
 ## Summary
 
-Deciginator v1 is a **local-first decision engine** with these parts:
+The **MVP (US1–US3)** is a static web app, Decisionator ("Deci"), hosted on GitHub Pages. It runs
+entirely in the browser and has no backend of its own.
 
-- **Local node.** Each user runs a TypeScript/Node.js 24 process, started with
-  `npx deciginator` or Docker. It owns the data (Automerge 3 CRDT documents on disk) and serves
-  a React web UI on `127.0.0.1:4178`.
-- **Agentic API.** The node exposes MCP (SDK v2, spec 2026-07-28) and REST/OpenAPI, built on a
-  single command layer.
-- **Plugins.** Every capability beyond the core is a plugin: strategies (manual, random,
-  weighted, plurality vote) and idea sources (clipboard, Google Docs). Plugins run in sandboxed
-  iframes with CSP-enforced permissions. Built-ins use exactly the same contract as third-party
-  plugins.
-- **Sharing.** An optional, self-hostable **relay** stores only signed, end-to-end encrypted
-  change logs. It also provides an agent tunnel for cloud agents that cannot reach localhost.
-- **Reproducible outcomes.** Every outcome records its strategy and package hash, the input
-  snapshot and the seed. Randomness comes from a normative SHA-256 counter-mode RNG, so anyone
-  can verify an outcome.
+**User flow:**
+1. A user pastes a raw idea list.
+2. Without a connected AI, they take a versioned format instruction to any AI assistant and paste
+   back JSON in the `decisionator.options/v1` format. Deci validates it and shows a preview.
+3. Deci creates the project as a Google Sheet in the user's own Drive, using only the
+   non-sensitive `drive.file` scope.
+4. The owner shares it by link (view or contribute), optionally with a password. The password
+   triggers AES-GCM encryption in the browser.
+5. Collaborators grade options 1–5, comment and submit ranked votes. Every input is appended as
+   its own row, so collaborators never conflict.
+6. Everyone sees sortable and groupable stats. The owner closes voting, and a deterministic Borda
+   strategy records an immutable, verifiable outcome.
 
-Delivery is incremental by user story. **US1 alone is the MVP.** US2–US6 each add one
-independently demonstrable capability.
+**Quotas:** the app stays inside Google's free quotas. It polls Drive versions cheaply, reads the
+Sheet only when it has changed, queues writes and backs off on rate limits.
+
+**Modules:** storage, idea input and tallying are modules behind public contracts (project store,
+idea source, strategy).
+
+**After the MVP:** strategies (US4), the connected-AI agent API (US5), plugins and more sources
+(US6) and local-first mode with an E2E relay (US7) follow, reusing the earlier design in
+[research.md](./research.md) R2–R9.
 
 ## Technical Context
 
-**Language/Version**: TypeScript (strict, ESM). Node.js 24 LTS for the node and the relay.
-Evergreen browsers for the UI.
+**Language/Version**: TypeScript (strict, ESM). The browser runtime targets evergreen browsers.
+Node.js 24 LTS is used for tooling only in the MVP.
 
 **Primary Dependencies**:
-- Data and sync: Automerge 3, automerge-repo 2 (`@automerge/react`)
-- Server and agentic API: Hono 4 (`@hono/node-server`), MCP TypeScript SDK v2
-  (`@modelcontextprotocol/server`, `@modelcontextprotocol/hono`)
-- Schemas: Zod 4, Ajv
-- UI: React 19, Vite, React Router, Radix UI, `@rjsf/core`, markdown-it, DOMPurify
-- Crypto: `@noble/curves`, `@noble/ciphers`, `@noble/hashes`
-- Relay storage: `better-sqlite3`
+- UI: React 19, Vite, React Router (hash routing for static hosting), Radix UI, `@dnd-kit` (drag
+  to rank), markdown-it + DOMPurify.
+- Data and schemas: Zod 4 (schemas, also exported as JSON Schema), `idb` (IndexedDB).
+- Offline: `vite-plugin-pwa` / Workbox (app shell).
+- Google: Google Identity Services (token model) and the Google Picker. Drive v3 and Sheets v4
+  are called through `fetch` (no Google SDK bundle).
+- Crypto: WebCrypto (PBKDF2, AES-GCM) and `@noble/hashes` (RNG, SHA-256).
 
 **Storage**:
-- Automerge documents in the node data dir: one workspace doc plus one doc per decision.
-- Local secret state in JSON files, `0600`.
-- Content-addressed plugin store.
-- Relay: a single SQLite file holding encrypted change logs.
+- One Google Sheet per project in the owner's Drive, with append-only rows
+  ([contracts/sheet-store.md](./contracts/sheet-store.md)).
+- IndexedDB for drafts, the write queue and offline snapshots.
+- No server-side storage.
 
-**Testing**: Vitest (unit, integration, contract), the plugin-sdk contract test kits, and
-Playwright with `@axe-core/playwright` for E2E and accessibility. CI runs on Linux, Windows and
-macOS.
+**Testing**:
+- Vitest for unit tests and contract kits (project store, strategy, options-format fixtures).
+- A **fake Google backend** built on Mock Service Worker (in-memory Drive and Sheets, with 429
+  simulation).
+- Playwright plus `@axe-core/playwright`, with two browser contexts for collaboration.
+- A manual live-Google checklist before each release.
 
-**Target Platform**: The local node runs on Windows, macOS and Linux (Node 24, or Docker). The
-relay runs on any Linux host or Docker. The UI targets the last 2 versions of Chromium, Firefox
-and Safari, and must stay usable down to 360 px wide.
+**Target Platform**: The web app is served from `https://kpsolo.github.io/decisionator/`, and the
+base URL is configurable for forks. It supports the last 2 versions of Chromium, Firefox and
+Safari, desktop and mobile, down to 360 px wide.
 
-**Project Type**: A local-first web application in a pnpm monorepo: core library, local node
-server, SPA, self-hostable relay, plugin SDK and first-party plugins.
+**Project Type**: A static web application in a pnpm monorepo: app, core library, plugin SDK and
+first-party plugin packages.
 
 **Performance Goals**:
-- First interactive UI in ≤ 2 s on localhost.
-- Option add and edit reflected in ≤ 100 ms.
-- Strategy run ≤ 2 s; timeout enforced.
-- 50-item import ≤ 10 s (SC-005).
-- Shared changes visible to collaborators ≤ 3 s online.
+- App interactive in ≤ 2.5 s on a mid-range phone over 4G.
+- Stats sort and group over 200 options in < 1 s (SC-008).
+- Collaborator input visible in ≤ 30 s for 95% of cases (SC-004).
+- Paste to saved project in < 3 min, including the AI round trip (SC-001).
 
 **Constraints**:
-- Offline-capable core.
-- No third-party code in the node process.
-- No credentials at rest (OAuth tokens kept in memory only).
-- The relay never holds keys.
+- Zero backend and zero server cost (SC-009).
+- Only the `drive.file` scope.
+- Tokens and keys in memory only.
+- ≤ 20 Sheets reads and ≤ 20 writes per minute per client.
+- Polling only while the tab is visible.
 - WCAG 2.1 AA.
-- Node binds only to `127.0.0.1`, with Host/Origin checks.
 
 **Scale/Scope**:
-- 1 user per node, ≤ 20 participants per shared decision (spec assumption), relay limit 50.
-- ≤ 1 000 decisions and ≤ 10 000 ideas per workspace.
-- About 12 primary screens.
+- ≤ 200 options and ≤ 20 active collaborators per project.
+- About 8 MVP screens: home/My projects, new project (paste, format, preview), project (options
+  list and option detail), stats, vote, results, share, settings.
 
-All Technical Context unknowns were resolved in [research.md](./research.md) (R1–R17). No
-NEEDS CLARIFICATION remains.
+All Technical Context items are resolved in [research.md](./research.md) (R18–R28 for the MVP).
+One item is open as a **spike**, not a clarification: Picker `setFileIds` on link-shared files
+(R21). It has defined fallbacks.
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-| # | Principle / Constraint | How the plan complies | Pre-research | Post-design |
-|---|------------------------|-----------------------|:---:|:---:|
-| I | Minimal core, everything is a module | `core` holds only the domain model, commands and crypto. Every strategy and idea source, including manual pick, is a plugin in `plugins/`, loaded through the public runtime. The OAuth broker is a generic capability with no Google code in the core (R9). | ✅ | ✅ |
-| II | Stable, versioned contracts | Manifest JSON Schema with `platform.*` semver ranges; versioned runtime, strategy, idea-source, agentic API and relay contracts in [contracts/](./contracts/). The host refuses incompatible plugins. | ✅ | ✅ |
-| III | Simple by default, deep on demand | The primary flow (new decision → options → Decide → outcome) needs no settings. Plugin settings are generated from JSON Schema behind a Plugins area. UI slots are confined. | ✅ | ✅ |
-| IV | Agent-native | MCP and REST/OpenAPI come from one command layer, with a parity test. Grants are scoped, expiring and revocable. Agent contributions start `pending` and carry `ActorRef` attribution. Agents have no outcome, ballot, delete or share operations. A brief works with any vendor. | ✅ | ✅ |
-| V | User owns the data | Local-first storage. The relay stores only ciphertext. OAuth tokens are memory-only. Export to an open zip/JSON format. Least-privilege `drive.file` scope. Agent tunnel transit visibility is disclosed (spec FR-027a, R8). | ✅ | ✅ |
-| VI | Transparent, reproducible decisions | Outcomes are append-only and record strategy id, version and packageHash, the input snapshot, the seed and the trigger. The RNG algorithm is normative and has frozen test vectors. Viewers can verify. | ✅ | ✅ |
-| VII | Test-first for contracts and strategies | Contract test kits in `plugin-sdk/testing`, agentic API contract tests for both transports, and seeded strategy tests. tasks.md will order these tests before implementation. | ✅ | ✅ |
-| C1 | Bundled stores: clipboard + Google Docs; Obsidian external | `plugins/source-clipboard` and `plugins/source-google-docs` are bundled. Idea-source contract plus `examples/plugin-source-example` prove that external sources need no core change. | ✅ | ✅ |
-| C2 | Permission model, network limited to declared hosts | Sandboxed iframe with CSP `connect-src` built from granted `net:` permissions. Host capabilities are permission-checked. | ✅ | ✅ |
-| C3 | Failure isolation | One frame per plugin, RPC timeouts, teardown and an attributed error. A hanging-plugin E2E test. | ✅ | ✅ |
-| C4 | Offline-capable core | Create, edit, manual, random and weighted decisions need no network. The relay is optional. | ✅ | ✅ |
-| C5 | Permissive dependencies | All MIT, Apache-2.0, ISC or BSD (R17). | ✅ | ✅ |
-| C6 | WCAG 2.1 AA | Radix primitives plus axe checks in E2E. | ✅ | ✅ |
-| W | Workflow gates | Spec Kit flow followed. Conventional Commits. CI gates lint, typecheck, test, contract and e2e. Contract changes require a changeset. | ✅ | ✅ |
+| # | Principle / Constraint | MVP compliance | Pre | Post |
+|---|------------------------|----------------|:---:|:---:|
+| I | Minimal core, everything is a module | Storage (`store-google-sheets`), input (`source-paste`) and tally (`strategy-borda`) are modules behind public contracts in `plugin-sdk`. The core holds only model, stats, validation, crypto and the RNG. | ✅ | ✅ |
+| II | Stable, versioned contracts | `decisionator.options/v1`, format instruction v1, project-store v1, Sheet format v1 and strategy v1 are versioned in [contracts/](./contracts/). The Sheet carries `formatVersion`. | ✅ | ✅ |
+| III | Simple by default | The primary flow is paste → format → preview → create → grade → share → vote. Settings sit behind Share, Voting and project Settings. | ✅ | ✅ |
+| IV | Agent-native | **Partial (D1).** Any agent can take part through the published format contract. API parity, scoped grants and agent contributions arrive in US5. | ⚠️ | ⚠️ |
+| V | User owns the data | Projects live in the user's own Drive, created only on an explicit action. Least-privilege `drive.file` scope. Optional password encryption. Export. No server of ours. | ✅ | ✅ |
+| VI | Transparent, reproducible decisions | Append-only rows. Outcomes record strategy and version, the input snapshot, the tie-break and the seed. Verify re-runs the tally. | ✅ | ✅ |
+| VII | Test-first for contracts and strategies | Contract kits for project store and strategy, format fixtures, and RNG vectors, written before implementation (ordered in tasks.md). | ✅ | ✅ |
+| C1 | Bundled stores: clipboard + Google; Obsidian external | Paste input and Google (Sheets as store) in the MVP. The Google Docs source in US6. Obsidian stays external. | ✅ | ✅ |
+| C2 | Permission model for plugins | **Deferred (D3).** No third-party plugins can load in the MVP. The sandbox (R4) ships with US6. | ✅ | ✅ |
+| C3 | Failure isolation | Module calls are wrapped with timeouts and error boundaries. A full sandbox arrives with US6. | ✅ | ✅ |
+| C4 | Offline-capable core | **Partial (D2).** Drafts, preview and the grade/comment queue work offline. Creating and syncing a project needs Google. Full offline arrives with US7. | ⚠️ | ⚠️ |
+| C5 | Permissive dependencies | All MIT, Apache-2.0, ISC or BSD (dnd-kit MIT, idb ISC, Workbox MIT, MSW MIT). | ✅ | ✅ |
+| C6 | WCAG 2.1 AA | Radix primitives, a keyboard alternative for drag ranking, and axe in E2E. | ✅ | ✅ |
+| W | Workflow gates | Spec Kit flow, Conventional Commits, CI gates. | ✅ | ✅ |
 
-**Result**: PASS. There are no violations. Complexity Tracking below records structural choices
-that a reviewer might question.
+**Result**: PASS with two justified, time-boxed deviations (D1, D2) and one deferral (D3),
+recorded in Complexity Tracking. Each is resolved by a named later story.
 
 ## Project Structure
 
@@ -110,108 +120,87 @@ that a reviewer might question.
 
 ```text
 specs/001-decision-engine-core/
-├── plan.md              # This file
-├── research.md          # Phase 0: decisions R1–R17
-├── data-model.md        # Phase 1: entities, state machines, validation
-├── quickstart.md        # Phase 1: validation scenarios per user story
+├── plan.md, research.md, data-model.md, quickstart.md
 ├── contracts/
-│   ├── plugin-manifest.schema.json
-│   ├── plugin-runtime.md
-│   ├── strategy.md
-│   ├── idea-source.md
-│   ├── agentic-api.md
-│   └── relay-protocol.md
-├── checklists/
-│   └── requirements.md
-└── tasks.md             # Phase 2 (/speckit-tasks — not created here)
+│   ├── options-format.schema.json   # MVP: what the AI returns
+│   ├── format-instruction.md        # MVP: prompt + correction prompt
+│   ├── project-store.md             # MVP: storage extension point
+│   ├── sheet-store.md               # MVP: Google Sheet layout, sync and quota budget
+│   ├── strategy.md                  # MVP: Borda; US4: random/weighted (RNG vectors)
+│   ├── idea-source.md               # MVP: paste; US6: Google Docs
+│   ├── plugin-manifest.schema.json  # US6
+│   ├── plugin-runtime.md            # US6
+│   ├── agentic-api.md               # US5
+│   └── relay-protocol.md            # US7
+├── checklists/requirements.md
+└── tasks.md                         # /speckit-tasks
 ```
 
 ### Source Code (repository root)
 
 ```text
-package.json                 # pnpm workspace root: scripts lint/typecheck/test/test:contract/test:e2e
-pnpm-workspace.yaml
-biome.json
-tsconfig.base.json
-.changeset/
-.github/workflows/ci.yml
+package.json, pnpm-workspace.yaml, biome.json, tsconfig.base.json, .changeset/
+.github/workflows/ci.yml             # lint, typecheck, test, e2e
+.github/workflows/pages.yml          # build apps/web → GitHub Pages
+
+apps/
+└── web/                             # @decisionator/web — the SPA
+    ├── src/routes/                  # home, new, project/:fileId, stats, vote, results, share, settings
+    ├── src/features/                # paste-format, preview, grading, comments, stats, voting, sharing
+    ├── src/host/                    # module host: loads first-party modules via plugin-sdk contracts
+    ├── src/sync/                    # snapshot cache, write-queue UI, "syncing paused" banner
+    ├── e2e/                         # Playwright us1…us3 + axe
+    └── .env.example                 # VITE_GOOGLE_CLIENT_ID, VITE_GOOGLE_API_KEY, VITE_BASE_URL
 
 packages/
-├── core/                    # @deciginator/core — isomorphic, no I/O
-│   ├── src/model/           # Zod schemas: Decision, Option, Idea, Contribution, Ballot, Outcome…
-│   ├── src/commands/        # validated mutations on Automerge docs + authorization (owner/contribute/view/agent)
-│   ├── src/strategy-host/   # outcome recording, Rng (normative), verification
-│   ├── src/crypto/          # identity, signing, envelope encryption, sealed boxes
-│   ├── src/export/          # export/import format
-│   └── test/                # unit/
-├── plugin-sdk/              # @deciginator/plugin-sdk — what plugin authors depend on
-│   ├── src/                 # definePlugin, types for strategy/idea-source/ui-slot, RPC client, ctx
-│   ├── schema/              # plugin-manifest.schema.json (published copy of the contract)
-│   └── testing/             # runStrategyContractTests, runIdeaSourceContractTests, vectors.json
-├── node/                    # @deciginator/node — the local node + `deciginator` CLI
-│   ├── src/server/          # Hono app, localhost security, UI static serving, plugin frame serving
-│   ├── src/repo/            # automerge-repo setup, FS storage, WS adapter for the UI
-│   ├── src/agent-api/       # grants, command bindings, MCP server, REST + OpenAPI
-│   ├── src/oauth/           # generic OAuth2 + PKCE broker (loopback redirect)
-│   ├── src/plugins/         # install (file/URL), content-addressed store, registry, settings
-│   ├── src/sync/            # relay client: encrypted change log push/pull, invites, tunnel
-│   ├── src/cli/             # start, mcp (stdio bridge), test-agent
-│   └── test/                # integration/, contract/agentic-api.*
-├── ui/                      # @deciginator/ui — React SPA
-│   ├── src/app/             # routes: decisions, decision detail, ideas, plugins, settings
-│   ├── src/components/      # accessible primitives (Radix-based)
-│   ├── src/plugin-host/     # iframe sandbox manager, RPC, capability bridge, slots, rjsf settings
-│   └── test/                # component + plugin-host tests
-└── relay/                   # @deciginator/relay — self-hostable relay
-    ├── src/                 # Hono app, signed-request auth, ACL, change log, invites, tunnels
-    ├── compose.yaml, Dockerfile
-    └── test/
+├── core/                            # @decisionator/core — isomorphic, no I/O
+│   ├── src/model/                   # Zod: Project, Option, Grade, Comment, Ranking, Outcome
+│   ├── src/format/                  # instruction builder, JSON extraction, validation, correction prompt
+│   ├── src/stats/                   # aggregates, sort/group
+│   ├── src/crypto/                  # PBKDF2 + AES-GCM payload codec
+│   ├── src/rng/                     # normative SHA-256 counter RNG
+│   ├── src/export/                  # decisionator.project/v1
+│   └── test/                        # incl. fixtures/format-answers/ (SC-002)
+└── plugin-sdk/                      # @decisionator/plugin-sdk — contracts + test kits
+    ├── src/                         # ProjectStore, IdeaSource, Strategy types
+    └── testing/                     # runProjectStoreContractTests, runStrategyContractTests, vectors.json, fake-google (MSW)
 
-plugins/                     # first-party plugins: same packaging as third-party (Principle I)
-├── strategy-manual/
-├── strategy-random/
-├── strategy-weighted/
-├── strategy-plurality/
-├── source-clipboard/
-└── source-google-docs/      # each: deciginator-plugin.json, src/, test/contract.test.ts
+plugins/                             # first-party modules, packaged like third-party ones
+├── store-google-sheets/             # GIS auth, Drive/Sheets/Picker client, quota budget, queue, password codec use
+├── source-paste/                    # plain-list parser + format round trip (idea-source contract)
+└── strategy-borda/                  # truncated Borda + tie-break chain
 
-examples/                    # plugin-author templates (SC-004) + test fixtures
-├── plugin-strategy-example/
-├── plugin-source-example/
-└── fixtures/                # plugin-incompatible, plugin-hang (used by e2e)
-
-e2e/                         # Playwright: us1…us6 specs, two-node + relay harness
-docs/                        # plugin author guide, agent guide, self-hosting the relay
+# Later increments add: packages/node (US5/US7), packages/relay (US7),
+# plugins/strategy-{owner-pick,random,weighted} (US4), plugins/source-google-docs (US6),
+# plugins/store-local (US7) and docs/ for plugin authors.
 ```
 
-**Structure Decision**: The repo is a pnpm monorepo of 5 packages plus first-party plugins.
-`core` is isomorphic so that the UI (owner's local edits), the node (agent commands) and the
-relay (signature and ACL verification) share one implementation of the rules. `plugin-sdk` is
-kept separate and dependency-light because third parties depend on it. First-party plugins live
-outside `packages/` and are built and installed exactly like external ones.
+**Structure Decision**:
+- `apps/web` is the only deployable in the MVP.
+- `core` and `plugin-sdk` stay framework-free, so the US5 node and the US7 local store can reuse
+  them unchanged.
+- First-party modules live in `plugins/`, so moving them into the US6 sandbox later changes
+  packaging, not contracts.
 
 ## Delivery increments (input for `/speckit-tasks`)
 
-| Increment | Stories | Builds |
-|-----------|---------|--------|
-| 0 — Foundation | — | monorepo/tooling/CI, `core` model + commands, `plugin-sdk` contracts + test kits, node skeleton (server, repo, security), UI shell, plugin host + sandbox |
-| 1 — MVP | US1 | decisions/options UI, manual-pick strategy plugin, outcome history, persistence, export |
-| 2 | US2 | Rng + verification, random/weighted plugins, strategy chooser, example strategy plugin, docs |
-| 3 | US3 | idea pool, idea-source host flow, clipboard plugin, OAuth broker, Google Docs plugin |
-| 4 | US4 | grants, agentic API (MCP + REST), agent brief, review UI, audit log, test agent |
-| 5 | US5 | identity/crypto, relay, sync client, invites/revocation, ballots + plurality plugin, agent tunnel |
-| 6 | US6 | plugin area: install from file/URL, permission review, settings forms, compatibility + failure UX |
-
-Plugin *hosting* belongs to Increment 0, because US1's manual pick is already a plugin. The
-plugin *management UI* is US6.
+| Increment | Stories | Builds | Exit check |
+|-----------|---------|--------|------------|
+| 0: Foundation | — | Monorepo, CI, Pages deploy. Core model, stats, RNG, crypto. plugin-sdk contracts and kits. Fake Google backend. App shell. **Spike: Picker `setFileIds` on a link-shared Sheet** | Spike result recorded in research R21 |
+| 1 | US1 | Paste, format instruction, extract and validate, preview. Google sign-in. Create Sheet. Grades and comments. Stats. My projects | US1 quickstart passes |
+| 2 | US2 | Share (link roles, invite by email), collaborator open flow, password mode, polling sync, write queue and back-off | US2 quickstart passes |
+| 3 | US3 | Voting rounds, drag and keyboard ranking, Borda strategy, outcomes, Verify, results view | **MVP release v0.1** |
+| 4 | US4 | Owner pick, random, weighted-by-grade strategies and the strategy chooser | — |
+| 5 | US5 | Local node with MCP and REST agent API, connected-AI formatting, agent requests and review UI | — |
+| 6 | US6 | Plugin sandbox, manifest install, settings forms, Google Docs source | — |
+| 7 | US7 | Local store (Automerge), E2E relay, import and export between modes | — |
 
 ## Complexity Tracking
 
-> No constitution violations. These entries document structural choices for reviewers.
-
-| Choice | Why Needed | Simpler Alternative Rejected Because |
-|--------|------------|-------------------------------------|
-| Separate `relay` package and deployable | FR-027 requires an optional, self-hostable sync service, and remote agents need a tunnel | Embedding sync in the node would make every user a server; a hosted service was rejected in Q1 |
-| Plugins run in browser iframes rather than the node | An enforceable permission boundary (C2) and failure isolation (C3) | Node permission model `--allow-net` is experimental and had bypass CVEs in 2026 (R4) |
-| Two agent transports (MCP + REST) | MCP for agent-native clients; REST/OpenAPI for everything else (FR-016/017) | MCP-only excludes non-MCP agents. Both come from one schema, so the cost is low |
-| End-to-end encryption in v1 | FR-027a: the relay must not read content | Plaintext relay contradicts Principle V and the clarified spec |
+| Item | Why Needed | Simpler Alternative Rejected Because |
+|------|------------|-------------------------------------|
+| **D1**: Agent API parity deferred to US5 (Principle IV partial) | The owner's MVP needs any agent to work with zero integration. The copy-paste format contract does that. | Shipping MCP/REST now needs a local node, which the hosted MVP doesn't have; that is the US5 scope. |
+| **D2**: Offline limited to drafts and the queue (C4 partial) | Google-backed storage and sharing need network, by the owner's choice. | A local store now duplicates US7. Drafts and the queue keep users from losing work. |
+| **D3**: Plugin sandbox deferred to US6 | Only first-party modules exist in the MVP. They already use the public contracts. | Building the sandbox before any third-party plugin exists is premature. |
+| Client-side encryption for passwords | Google sharing has no passwords. Only encryption makes the data unreadable without one (SC-007). | A password gate without encryption leaves the Sheet readable. |
+| Fake Google backend in tests | CI must not depend on real Google accounts or quotas. | Live-API tests are flaky and burn the shared quota; a live checklist covers release. |

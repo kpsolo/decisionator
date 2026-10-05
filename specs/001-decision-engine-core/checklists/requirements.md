@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Decision Engine Core (MVP)
+# Specification Quality Checklist: Decision Engine Core
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-10-05
@@ -36,7 +36,11 @@
   Clarifications section.
 - "Google Docs" and "clipboard" are named because they are product-level requirements from the
   user (bundled idea sources), not implementation choices.
-- The spec is intentionally broad (six independently testable stories, P1–P6). Planning may
-  split it into several plan/task increments; US1 alone is a viable MVP.
+- The spec is intentionally broad: seven independently testable stories, P1–P7. The MVP release
+  is US1–US3, and US1 alone is already usable as a personal idea board.
 - Remaining detail deferred to `/speckit-clarify` or planning: end-to-end protection mechanism
   for the relay, rich-text format, contribution size/count limits.
+- Iteration 2 (2026-10-05): the spec was revised around the owner's first user story. The MVP is
+  US1–US3 on Google Sheets. Three clarifications were resolved with the owner (runtime, storage,
+  vote meaning), and FR-018 was refined after research R21. "Google" is named as a product
+  requirement from the owner, not an implementation choice. All items still pass.
