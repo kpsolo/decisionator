@@ -213,17 +213,17 @@ comment and view stats.
   - trim and drop empty lines;
   - default preview cap of 500 items, the format's maximum; the user can lower it (spec FR-005, Edge Cases).
 - [x] T043 [US1] Implement the paste idea source in `plugins/source-paste/src/index.ts`, following the `IdeaSource` contract (`input: "clipboard"`), and register it in the module host. It returns candidates from either validated AI JSON or the plain-list parser (FR-001, FR-005).
-- [ ] T044 [US1] Implement Sheet creation in `plugins/store-google-sheets/src/layout.ts` (FR-007):
+- [x] T044 [US1] Implement Sheet creation in `plugins/store-google-sheets/src/layout.ts` (FR-007):
   - `spreadsheets.create` with tabs `meta`, `options`, `grades`, `comments`, `rankings`, `outcomes` and their header rows exactly as in `contracts/sheet-store.md`;
   - Drive `appProperties` `decisionator=project` and `formatVersion=1`;
   - `meta` rows `formatVersion`, `title`, `description`, `protected=false`, `voting`, `createdAt` and `owner`.
-- [ ] T045 [US1] Implement row codecs in `plugins/store-google-sheets/src/rows.ts` (FR-009):
+- [x] T045 [US1] Implement row codecs in `plugins/store-google-sheets/src/rows.ts` (FR-009):
   - convert each tab's rows to and from entities;
   - validate with the core Zod models;
   - skip invalid rows with a warning naming tab and row;
   - flag rows whose `by` is not a known participant;
   - provide a payload hook for `enc:v1` (used in US2).
-- [ ] T046 [US1] Implement the Google Sheets store in `plugins/store-google-sheets/src/store.ts` (FR-007, FR-009, FR-010, FR-011):
+- [x] T046 [US1] Implement the Google Sheets store in `plugins/store-google-sheets/src/store.ts` (FR-007, FR-009, FR-010, FR-011):
   - `signIn`, `listProjects` (Drive `files.list` filtered by `appProperties`), `createProject`, `openProject` (one `values.batchGet`), `append` (author stamped from `about.get`, via queue and budget), `updateOptions` (owner, `values.batchUpdate`), `updateMeta` and `export`;
   - T037 must pass.
 - [ ] T047 [US1] Build the paste step in `apps/web/src/features/paste-format/PasteStep.tsx` (FR-001):
