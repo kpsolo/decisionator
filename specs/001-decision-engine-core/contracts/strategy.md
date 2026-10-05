@@ -1,4 +1,4 @@
-# Contract: Decision Strategy — v1.0.0
+# Contract: Decision Strategy — v1.1.0
 
 > **Scope:** the Borda ranking strategy ships in the MVP (US3). Owner pick, random and weighted ship in US4.
 
@@ -85,3 +85,11 @@ frozen in `plugin-sdk/testing/vectors.json`.
 
 For the built-in weighted strategy it also checks that weight 0 is never chosen and that the
 frequency distribution is within tolerance over 10 000 seeds (US4 #3).
+
+## Changelog
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.1.0 (unreleased) | 2026-10-05 | Add optional `grades` aggregation to `StrategyInput` for Borda tie-breaking and weighted-by-grade strategies (FR-023, FR-030) |
+| 1.0.0 | 2026-10-05 | Initial decision strategy contract |
+

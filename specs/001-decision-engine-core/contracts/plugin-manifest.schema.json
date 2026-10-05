@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://decisionator.dev/schemas/plugin-manifest/1.1.json",
   "title": "Deci plugin manifest (decisionator-plugin.json)",
+  "$comment": "Changelog:\n- 1.1.0 (2026-10-05, unreleased pre-implementation): Add projectStore extension point and gis-token OAuth flow (Principle I, FR-025).\n- 1.0.0 (2026-10-05): Initial plugin manifest schema.",
   "type": "object",
   "additionalProperties": false,
   "required": [

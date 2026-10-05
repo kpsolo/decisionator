@@ -72,3 +72,11 @@ Free quota reference (2026-10-05):
 
 `export` returns the decrypted snapshot as `decisionator.project/v1` JSON. The same structure is
 used to import into local mode in US7.
+
+## Changelog
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.1.0 (unreleased) | 2026-10-05 | Add delete project operation (`files.update {trashed: true}`) per FR-025; disclose readable metadata fields (`by`, `optionId`, `at`) in password mode per FR-017 and SC-007 |
+| 1.0.0 | 2026-10-05 | Initial Google Sheets store format specification |
+

@@ -1,4 +1,4 @@
-# Contract: Project Store — v1.0.0
+# Contract: Project Store — v1.1.0
 
 The extension point that keeps project storage pluggable (spec FR-011, Principle I).
 - MVP implementation: `store-google-sheets` ([sheet-store.md](./sheet-store.md)).
@@ -62,3 +62,11 @@ covers:
 - `deleteProject` by the owner makes `openProject` fail with "unavailable" for everyone, and a
   non-owner calling it gets `PERMISSION_DENIED`;
 - queue behavior under simulated 429s.
+
+## Changelog
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.1.0 (unreleased) | 2026-10-05 | Add `deleteProject` (owner only, moves Sheet to Drive trash) and `forgetProject` (participant, clears local data and listing) per constitution Principle V and FR-025 |
+| 1.0.0 | 2026-10-05 | Initial project store contract |
+

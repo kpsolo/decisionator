@@ -69,7 +69,7 @@ Safari, desktop and mobile, down to 360 px wide.
 first-party plugin packages.
 
 **Performance Goals**:
-- App interactive in ≤ 2.5 s on a mid-range phone over 4G.
+- App interactive in ≤ 2.5 s on a mid-range phone over 4G (engineering aim; verified via Lighthouse performance audit in release checklist T088).
 - Stats sort and group over 200 options in < 1 s (SC-008).
 - Collaborator input visible in ≤ 30 s for 95% of cases (SC-004).
 - Paste to saved project in < 3 min, including the AI round trip (SC-001).
@@ -173,9 +173,22 @@ plugins/                             # first-party modules, packaged like third-
 ├── source-paste/                    # plain-list parser + format round trip (idea-source contract)
 └── strategy-borda/                  # truncated Borda + tie-break chain
 
+scripts/                             # tooling, code generation, soak testing
+├── gen-schemas.ts                   # generate JSON schemas from Zod (T024)
+└── soak/                            # twenty-collaborators soak test (T083)
+
+docs/                                # user, deployer, and author documentation
+├── self-hosting.md                  # self-hosting / Google Cloud setup (T084)
+└── plugin-authors.md                # contract guide and testing kits (T085)
+
+examples/                            # minimal standalone example plugins for MVP contracts (T086)
+├── plugin-store-memory/             # in-memory ProjectStore implementation
+├── plugin-strategy-example/         # example Decision Strategy implementation
+└── plugin-source-example/           # example Idea Source implementation
+
 # Later increments add: packages/node (US5/US7), packages/relay (US7),
 # plugins/strategy-{owner-pick,random,weighted} (US4), plugins/source-google-docs (US6),
-# plugins/store-local (US7) and docs/ for plugin authors.
+# plugins/store-local (US7).
 ```
 
 **Structure Decision**:

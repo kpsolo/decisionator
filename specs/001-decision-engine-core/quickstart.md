@@ -61,6 +61,9 @@ release.
 6. Grade 3 options and comment on one. Open **Stats**, sort by average grade and group by
    category. **Expect**: correct averages and groups.
 7. Reload and open **My projects**. **Expect**: the project is listed with its data intact.
+8. Delete project: click **Settings → Delete project**, type the project name to confirm.
+   **Expect**: the project's Sheet is moved to Google Drive trash, local draft/queue cleared, and
+   the project leaves **My projects** (spec US1 #9, FR-025, constitution Principle V).
 - Covered by `apps/web/e2e/us1-create.spec.ts`, `packages/core/test/format/*` (including the
   answers fixture set for SC-002) and `plugins/store-google-sheets/test/contract.test.ts`.
 

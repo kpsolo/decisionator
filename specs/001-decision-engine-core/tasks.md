@@ -194,7 +194,7 @@ comment and view stats.
 - [ ] T036 [P] [US1] Write the SC-002 replay test over the fixture set in `packages/core/test/fixtures/format-answers/` (already collected: 5 sample lists × Claude and Gemini for template versions 1.0, 1.1 and 1.2; v1.2 is current):
   - a replay test in `packages/core/test/format/fixtures.test.ts` asserting that ≥ 90% of the **current template version's** answers validate on the first paste, and reporting older versions without gating on them.
 - [ ] T037 [P] [US1] Wire `runProjectStoreContractTests` to the Google Sheets store and the fake backend in `plugins/store-google-sheets/test/contract.test.ts` (FR-009, FR-011).
-- [ ] T038 [P] [US1] Write the E2E test `apps/web/e2e/us1-create.spec.ts` (fake Google), covering quickstart US1 steps 1–7: the SC-001 timing (< 3 min with a scripted AI answer) and an axe check on the new-project, project and stats screens (FR-001, FR-002, FR-006, FR-007, FR-012, FR-013).
+- [ ] T038 [P] [US1] Write the E2E test `apps/web/e2e/us1-create.spec.ts` (fake Google), covering quickstart US1 steps 1–8: the SC-001 timing (< 3 min with a scripted AI answer), the delete project flow (confirm by typing name, Sheet in Drive trash, removed from "My projects") (FR-025), and an axe check on the new-project, project, stats and delete-confirmation dialogs (FR-001, FR-002, FR-006, FR-007, FR-012, FR-013, FR-025).
 
 ### Implementation for User Story 1
 
@@ -386,7 +386,7 @@ closes voting. The result shows the winner, the order and the points, and Verify
   - `examples/plugin-strategy-example/`: a simple strategy (`runStrategyContractTests`);
   - `examples/plugin-source-example/`: an idea source (`runIdeaSourceContractTests`).
 - [ ] T087 Run an axe audit across all MVP screens and fix every WCAG 2.1 AA violation (FR-082); record the result in `apps/web/e2e/README.md`.
-- [ ] T088 Run the live Google checklist from `specs/001-decision-engine-core/quickstart.md` against the hosted build. Record the results in `docs/releases/v0.1.md`, together with a "Known limitations" section disclosing the staged-compliance deferrals from plan.md (no agent API until US5; offline limited to drafts and the write queue until US7).
+- [ ] T088 Run the live Google checklist from `specs/001-decision-engine-core/quickstart.md` against the hosted build. Measure load performance against the ≤ 2.5 s interactive aim on mobile 4G (Lighthouse audit). Record the results in `docs/releases/v0.1.md`, together with a "Known limitations" section disclosing the staged-compliance deferrals from plan.md (no agent API until US5; offline limited to drafts and the write queue until US7).
 - [ ] T089 Update `README.md` with the hosted URL `https://kpsolo.github.io/decisionator/`, a 3-step "how it works" and screenshots. Add a changeset and tag `v0.1.0`.
 
 **Checkpoint**: the MVP is released.
