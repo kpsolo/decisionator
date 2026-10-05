@@ -66,26 +66,26 @@ story work starts until this phase is done.**
 
 ### Contracts and test kits (write first)
 
-- [ ] T011 [P] Write `packages/core/test/rng.test.ts` with the frozen vectors from `contracts/strategy.md`:
+- [x] T011 [P] Write `packages/core/test/rng.test.ts` with the frozen vectors from `contracts/strategy.md`:
   - seed `000102030405060708090a0b0c0d0e0f`: `nextUint32()`×3 = `2237479810, 1432266169, 209670291`, and `int(4)`×5 = `2, 1, 3, 2, 0`;
   - seed `ffffffffffffffffffffffffffffffff`: `int(10)`×5 = `3, 8, 9, 1, 4`, and `float()` = `0.060539633583655994`.
-- [ ] T012 [P] Create `packages/plugin-sdk/testing/vectors.json` with the same vectors (single source for third-party authors).
-- [ ] T013 Implement the normative SHA-256 counter-mode RNG in `packages/core/src/rng/index.ts`, using `@noble/hashes`:
+- [x] T012 [P] Create `packages/plugin-sdk/testing/vectors.json` with the same vectors (single source for third-party authors).
+- [x] T013 Implement the normative SHA-256 counter-mode RNG in `packages/core/src/rng/index.ts`, using `@noble/hashes`:
   - `block(i) = SHA-256(seed ‖ uint32_be(i))`;
   - each block gives 8 big-endian words, consumed in order;
   - `int(n)` uses rejection sampling with `limit = floor(2^32 / n) * n`;
   - `float()` = `((a >>> 5) * 2^26 + (b >>> 6)) / 2^53`;
   - T011 must pass.
-- [ ] T014 [P] Define the Zod schemas `Project` and `Option` in `packages/core/src/model/project.ts` and `packages/core/src/model/option.ts`:
+- [x] T014 [P] Define the Zod schemas `Project` and `Option` in `packages/core/src/model/project.ts` and `packages/core/src/model/option.ts`:
   - Project: `title` "1–200 chars"; `description` "≤ 20 000 chars"; `voting` `{state: "open"|"closed", round: int ≥ 1, topN: 1–10 (default 3), liveResults: bool}`; `formatVersion: 1`.
   - Option: `title` "1–200 chars; duplicates allowed, flagged"; `category` "≤ 60 chars"; `tags` "≤ 10, each ≤ 40 chars"; `pros`/`cons` "≤ 20 each"; `effort` `XS|S|M|L|XL`; `links` "≤ 10, http(s)"; `status` `active|removed`.
-- [ ] T015 [P] Define the Zod schemas `Grade`, `Comment` and `Ranking` in `packages/core/src/model/entries.ts`:
+- [x] T015 [P] Define the Zod schemas `Grade`, `Comment` and `Ranking` in `packages/core/src/model/entries.ts`:
   - Grade: `value` 1–5.
   - Comment: `body` "1–10 000 chars", optional `replaces` and `hidden`.
   - Ranking: `ranking` "ordered, unique, active options, length 1..topN", plus `round`.
   - All carry `id` (ULID), `at` and `by`.
-- [ ] T016 [P] Define the Zod schema `OutcomeRecord` in `packages/core/src/model/outcome.ts` with fields `round?`, `strategy {id, version}`, `settings`, `inputs {options, ballots, grades}`, `result {winner, order[{optionId, points, firstPlaces}]}`, `tieBreak`, `seed?` (hex 32), `triggeredBy` and `at`.
-- [ ] T017 [P] Write model tests in `packages/core/test/model.test.ts` covering every boundary above (lengths, enum values, ballot uniqueness and length ≤ topN).
+- [x] T016 [P] Define the Zod schema `OutcomeRecord` in `packages/core/src/model/outcome.ts` with fields `round?`, `strategy {id, version}`, `settings`, `inputs {options, ballots, grades}`, `result {winner, order[{optionId, points, firstPlaces}]}`, `tieBreak`, `seed?` (hex 32), `triggeredBy` and `at`.
+- [x] T017 [P] Write model tests in `packages/core/test/model.test.ts` covering every boundary above (lengths, enum values, ballot uniqueness and length ≤ topN).
 - [ ] T018 Define the TypeScript contracts in `packages/plugin-sdk/src/`, exactly as specified in `contracts/project-store.md`, `contracts/idea-source.md` and `contracts/strategy.md`:
   - `project-store.ts`: `ProjectStore`, `Entry`, `ProjectSnapshot`, `ShareRequest`, `ShareState`, `AppendResult`;
   - `idea-source.ts`;
