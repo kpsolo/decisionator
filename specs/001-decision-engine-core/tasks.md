@@ -199,6 +199,7 @@ comment and view stats.
 
 - [ ] T039 [US1] Build the format instruction in `packages/core/src/format/instruction.ts`:
   - `buildInstruction(pastedText, localeHint?)` produces the template from `contracts/format-instruction.md` verbatim, with the paste between `<<<IDEAS` and `IDEAS>>>`;
+  - `detectLanguage(pastedText)` fills the hint per contract § Language hint (`franc-min` after stripping list markers; under 20 characters or no clear winner → UI language). The format step shows the chosen language and lets the user change it;
   - `buildCorrection(errors[])` produces the correction template.
 - [ ] T040 [US1] Implement extraction in `packages/core/src/format/extract.ts`, following extraction rules 1–4 of `contracts/format-instruction.md` (T035 cases pass).
 - [ ] T041 [US1] Implement validation in `packages/core/src/format/validate.ts`:

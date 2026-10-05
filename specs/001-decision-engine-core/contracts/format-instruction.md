@@ -1,4 +1,4 @@
-# Contract: Format Instruction — v1.1.0
+# Contract: Format Instruction — v1.2.0
 
 The text Deci shows when no AI is connected (spec FR-002). The user copies it to any AI
 assistant and pastes the answer back. The same template is sent automatically to connected
@@ -8,7 +8,8 @@ agents in US5. The template is versioned together with
 ## Template
 
 `{{PASTED_TEXT}}` is the user's raw paste, inserted verbatim between the markers.
-`{{LOCALE_HINT}}` is optional ("Write descriptions in Ukrainian.").
+`{{LOCALE_HINT}}` is filled by Deci (see "Language hint" below), for example "Write all text in
+English, even if you usually reply in another language."
 
 ````text
 Turn the idea list below into JSON for Deci.
@@ -24,7 +25,8 @@ Rules:
 - For each option: "title" (short, required; drop side notes such as "??" or "(check)"),
   "description" (1–3 sentences), "category" (one short group name; reuse the same names),
   "tags" (up to 5), "links" (any URLs from the list, as [{"url": "..."}]),
-  and optionally your own short estimates: "pros", "cons", "effort" (XS, S, M, L or XL).
+  and optionally your own short estimates: "pros" and "cons" (each a list of short phrases,
+  e.g. ["Fast to build"]) and "effort" (one of XS, S, M, L, XL).
 - Write all text in the same language as the idea list, unless told otherwise below.
 {{LOCALE_HINT}}
 
@@ -38,6 +40,23 @@ Idea list:
 {{PASTED_TEXT}}
 IDEAS>>>
 ````
+
+## Language hint
+
+Deci always fills `{{LOCALE_HINT}}` with an explicit language, because "the same language as the
+list" alone was not enough: in fixture `v1.1/02/gemini` Gemini translated an English list into
+Ukrainian.
+
+1. If the user picked an output language in the format step, use it.
+2. Otherwise, detect the language of the pasted text in the browser, with a small client-side
+   detector (`franc-min`, MIT) over the text after list markers are stripped.
+3. If detection is not confident (text under 20 characters, or no clear winner), use the UI
+   language.
+
+Hint text: `Write all text in <Language>, even if you usually reply in another language.` The user
+can change the language in the format step before copying. The fixture generator uses a
+script-based stand-in (Cyrillic → Ukrainian, Latin with English stop words → English), and an
+`inputs/<name>.hint.txt` file overrides it.
 
 ## Correction template
 
@@ -77,5 +96,6 @@ answers and keep this pass rate.
 
 | Version | Date | Change | Evidence |
 |---------|------|--------|----------|
+| 1.2.0 | 2026-10-05 | `pros`/`cons` stated as lists of short phrases, with an example; `{{LOCALE_HINT}}` always filled with an explicit language | v1.1 Gemini answers: `pros`/`cons` as strings (01); Ukrainian output for an English list despite the same-language rule (02) |
 | 1.1.0 | 2026-10-05 | Same-language rule; skip non-ideas and merge duplicates (replaces "keep unclear text as title"); clean titles; no invented facts, one sentence for title-only ideas; URLs into `links`; project title from the list's heading; "no citations"; neutral example project title | v1.0 Gemini answers: Ukrainian output without a hint (02, 05), "ask Ben…" kept as an option (02), notes left in titles (02), invented features (03), copied example project title (01), `[cite: N]` markers (02–05) |
 | 1.0.0 | 2026-10-05 | Initial template | — |

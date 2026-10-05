@@ -1,0 +1,175 @@
+Turn the idea list below into JSON for Deci.
+
+Rules:
+- Reply with ONLY one JSON code block: no other text, no citations.
+- Use exactly this structure: {"format": "decisionator.options/v1", "project": {"title": "..."}, "options": [ ... ]}
+- Project title: the list's own heading if it has one, otherwise a short summary of the list.
+- One option per distinct idea; merge duplicates. Skip lines that are not ideas
+  (headings, notes, to-dos, questions for people).
+- For titles and descriptions use only what the list says; do not invent ideas, features or facts.
+  If an idea has only a title, write at most one short sentence.
+- For each option: "title" (short, required; drop side notes such as "??" or "(check)"),
+  "description" (1–3 sentences), "category" (one short group name; reuse the same names),
+  "tags" (up to 5), "links" (any URLs from the list, as [{"url": "..."}]),
+  and optionally your own short estimates: "pros" and "cons" (each a list of short phrases,
+  e.g. ["Fast to build"]) and "effort" (one of XS, S, M, L, XL).
+- Write all text in the same language as the idea list, unless told otherwise below.
+Write all text in English, even if you usually reply in another language.
+
+Example of the expected shape:
+```json
+{"format":"decisionator.options/v1","project":{"title":"Weekend plans"},"options":[{"title":"Picnic in the park","description":"Bring food and games to the city park.","category":"Outdoors","tags":["food","friends"],"effort":"XS"}]}
+```
+
+Idea list:
+<<<IDEAS
+1. Obsession AI
+An intelligent news engine where users follow hyper-specific niche topics or micro-trends rather than broad categories. It leverages LLMs to synthesize noise-free daily digests drawn from global articles, forums, and newsletters.
+
+2. QuestLock
+A friction-based app locker that restricts access to addictive social media until you solve quick logic or math puzzles. It turns mindless screen opening into an intentional, mentally stimulating action.
+
+3. BrainTime
+A gamified screen-time manager that requires users to 'earn' recreational app minutes by solving cognitive exercises and trivia. It replaces standard timers with a reward system that promotes daily mental fitness.
+
+4. OrthoPlanes
+A minimalist, zen-style endless flight game rendered in a clean orthographic perspective with relaxing physics. Players glide through procedurally generated atmospheric landscapes while dodging environmental obstacles.
+
+5. TrustVerify
+An automated risk and trust intelligence platform that evaluates the credibility of SaaS tools, new web domains, and local business sites. It combines SSL telemetry, domain age, security breach databases, and authentic customer sentiment into an instant trust score.
+
+6. CleanIngred AI
+A mobile scanner that analyzes food and cosmetic ingredient labels via camera to detect toxic additives, allergens, and microplastics. It translates complex chemical names into plain language and suggests clean, healthier alternatives.
+
+7. RentLocal
+A peer-to-peer rental marketplace that allows neighbors to borrow and lend household tools, camping gear, and electronics. Built-in insurance verification, deposits, and local pickup coordination make renting safer and cheaper than buying.
+
+8. AdaptFolio
+An AI portfolio builder that dynamically adapts visual styling, case studies, and copy to match the viewer's industry profile (e.g., enterprise, early-stage startup, or agency). Designers share a single link that personalizes its pitch depending on who is opening it.
+
+9. LifePart (Memento Mori)
+An existential data-visualization tool that maps the user's lived lifespan against global demographics, historical figures, and various professions. It offers perspective on mortality by illustrating life milestones (e.g., comparing your remaining time to the average life of a Tokyo firefighter).
+
+10. InfoVault
+A curated search platform and design repository showcasing top-tier data visualizations categorized by format (interactive, web, print) and industry. It provides designers and journalists with visual breakdowns, color swatches, and source data references.
+
+11. ItemDescriber API
+A developer-first multimodal API that accepts product images or barcodes and generates standardized e-commerce titles, attributes, and SEO-optimized descriptions. It automates catalog enrichment and inventory digitization for retailers within milliseconds.
+
+12. MockScreens
+A high-fidelity mockup generator for creating realistic social media posts, direct message exchanges, and OS notification screenshots. It helps marketers, UI designers, and content creators build clean visual assets for presentations and ad campaigns.
+
+13. DesignTV
+A continuous ambient video-streaming platform tailored for studio monitors, broadcasting award-winning websites, motion design reels, and live web showcases. It functions as an effortless source of passive background inspiration for creative teams and design agencies.
+
+14. TeleFocus
+A lightweight Telegram client extension that enforces daily reading limits on public broadcast channels to curb doomscrolling. It greys out channel feeds once quotas are reached while keeping direct chats and notifications accessible.
+
+15. ProVocab
+A career-targeted language flashcard app tailored for designers, marketers, and developers working in international teams. It builds professional fluency through role-specific vocabulary, critique templates, and real workplace audio dialogues.
+
+16. PupilCheck AI
+A health-monitoring mobile app that uses smartphone cameras to measure pupil dilation response and symmetry. It screens for signs of fatigue, concussion risks, and neurological strain to provide early biometric wellness insights.
+
+17. JoyChronicle
+A minimalist micro-journaling app that prompts users to record daily gratitude alongside an automated snapshot of that day's major world headlines. Over time, it creates a personal memory vault that pairs individual wellbeing with historic context.
+
+18. VisuWord
+A vocabulary-building app that pairs foreign terms with vivid, AI-generated visual mnemonics and contextual illustrations. By anchoring words directly to memorable visual imagery rather than text translations, it dramatically increases retention speed.
+
+19. FloraFlow
+A plant care companion app that generates dynamic watering schedules based on plant species, pot volume, and ambient weather. It pairs with optional Bluetooth soil sensors to alert owners before root rot or dehydration sets in.
+
+20. LinguaCoach AI
+An interactive language tutor that listens to users read aloud, highlighting pronunciation slips and grammatical hesitations in real time. It automatically compiles missed words into targeted spaced-repetition drills to build spoken confidence.
+
+21. CareerLongevity
+An interactive web visualization exploring life expectancy, chronic stress indicators, and physical hazards across hundreds of modern professions. Users can filter by industry and lifestyle factors to see how career trajectories correlate with long-term vitality.
+
+22. Shortly Reader
+A speed-reading extension that extracts main takeaways from long-form articles into bulleted briefs with instant inline translation. It allows professionals to digest multi-language reports in seconds without breaking their browsing workflow.
+
+23. AutoPal
+A digital car concierge app that translates OBD2 engine error codes into plain language and tracks routine maintenance schedules. It connects vehicle owners with vetted local repair shops and provides transparent repair cost benchmarks to prevent overcharging.
+
+24. LexicaRare
+A vocabulary app dedicated to teaching rare, articulate, and literary words through etymological stories and historical excerpts. It uses spaced repetition and sentence-writing prompts to help writers and speakers expand their active lexicon.
+
+25. InstaMap
+A travel planner that extracts geotags and venue mentions from saved Instagram collections and renders them onto an interactive map. It automatically organizes visual travel inspiration into exportable itineraries for Google Maps and Apple Maps.
+
+26. CelestialAlign
+An AR photography tool that calculates the exact future date and minute the sun or moon will intersect a designated landmark on your camera screen. It takes the guesswork out of astro- and landscape photography through live solar/lunar path overlays.
+
+27. LabTrack Health
+A universal medical dashboard that aggregates bloodwork and test reports from multiple diagnostic laboratories like Synevo into a single record. It tracks biomarker trends over time against clinical reference ranges and offers plain-English medical summaries.
+
+28. PrintPop
+An automated photo-to-merch platform that turns Instagram albums into custom magnetic tiles or skin-safe temporary tattoo sheets. Customers connect their social accounts, crop selections, and order customized physical keepsakes in a few taps.
+
+29. PackCraft 3D
+A browser-based packaging design tool that lets brands customize 3D boxes and dielines with real-time AR surface previews before manufacturing. It includes an AR mobile viewer to project packaging prototypes and art prints accurately onto physical walls and counters.
+
+30. InkLetter
+A web platform and API that translates typed digital notes into authentic, robotically penned handwritten letters on physical stationery. It gives businesses and individuals an automated way to send personalized, tactile thank-you notes at digital scale.
+
+31. CardTranslate
+A community platform for translating indie tabletop and card games, offering printable translation sleeve overlays and digital rulebooks. It allows international board game fans to enjoy localized versions of foreign card games with print-and-play precision.
+
+32. LaunchHub UA
+A community-driven discovery and upvoting portal dedicated to spotlighting early-stage tech products, indie apps, and AI tools across Ukraine and Eastern Europe. It connects local founders with early adopters, tech talent, and regional angel investors.
+
+33. FlipVintage
+A circular economy tool that assists vintage pickers and thrift sellers in sourcing, evaluating, and buying used home goods from private sellers. It utilizes image recognition to pull historical resale prices from eBay and marketplaces, identifying profitable items instantly.
+
+34. VideoJournal
+A minimalist video magazine that delivers an editorial daily playlist of five exceptional, high-craft short films, documentaries, and video essays. It replaces algorithmic feeds with intentional, ad-free visual journalism.
+
+35. WeekendConcierge AI
+An AI-powered concierge that designs personalized weekend itineraries, dinner bookings, and group events tailored to your social circle's taste and budget. It coordinates restaurant reservations, purchases tickets, and sends automated calendar invites to your guests.
+
+36. DecisionPro
+A structured decision-making platform where users build weighted pro/con evaluation models for major life or business choices. Users can optionally submit anonymized decision dilemmas to verified industry experts for quick, paid peer audits.
+
+37. DealAlert
+A cross-platform listing tracker and browser extension that monitors classifieds, product availability, and discount changes across multiple websites. It pings users immediately via Telegram or push notifications when listings meet their custom criteria.
+
+38. YouGarderobe
+A digital closet app that categorizes your wardrobe via photo or video, automatically detecting color schemes, fabrics, and aesthetics. It pulls local weather forecasts and your calendar to generate cohesive outfit suggestions tailored to your mood.
+
+39. RenoBudget
+A home renovation management app that tracks contractor estimates, receipts, building materials, and milestone payments in one collaborative space. It visualizes expenses in real time against your original budget to prevent financial surprises.
+
+40. ExploreUA
+An illustrated travel guide app featuring curated thematic walking routes, architectural backstories, and local lore across Ukrainian cities. It includes offline interactive maps and gamified digital badges that unlock as travelers visit historic landmarks.
+
+41. MindfulWake
+A persistent alarm clock app that only turns off once you identify and log your current emotional and physical state using Nonviolent Communication (NVC) prompts. It eliminates unconscious snoozing by forcing quick emotional awareness upon waking.
+
+42. IconAuditor
+A design audit tool that evaluates app icons by measuring pixel density, contrast ratios, and visual weight across different operating system backgrounds. It flags visibility issues and previews icon legibility before store submission.
+
+43. HyperFocal Pro
+An optical depth-of-field and hyperfocal distance calculator engineered for landscape and street photographers. It maps focal lengths and apertures against specific sensor sizes with an intuitive visual slider to guarantee edge-to-edge sharpness.
+
+44. NewsQuest
+A current-events puzzle game that connects breaking world headlines to historical Wikipedia articles. Players earn points by solving context paths, linking today's geopolitical and scientific news back to its historic origins.
+
+45. DailyWords & Compliments
+A bilingual daily affirmation app delivering curated philosophical quotes, compliments, and idiomatic translations with native audio pronunciation. It features customizable lock-screen widgets that combine positive mindset reinforcement with foreign language acquisition.
+
+46. StyleCurator
+An e-commerce styling platform that pairs algorithmic fit models with human fashion advisors to ship personalized menswear boxes to customers' doors. Shoppers try clothes on at home, keep what they like, and return the rest with zero subscription friction.
+
+47. DoodleClash AI
+A real-time multiplayer drawing and guessing party game supporting multiple languages (including Ukrainian) with an integrated AI sketch guesser. Friends can compete in private rooms or challenge neural vision models in fast-paced drawing rounds.
+
+48. YieldSim
+A financial modeling calculator that simulates compound interest, dividend reinvestment, and inflation-adjusted retirement horizons. It features Monte Carlo risk simulations and visual asset allocation charts to help retail investors plan savings targets accurately.
+
+49. TapLog
+A zero-friction productivity timer that pairs with physical Bluetooth shortcut buttons (like Flic) to start, pause, and switch task timers instantly. It syncs with billing software to automatically convert physical clicks into clean, invoice-ready timesheets.
+
+50. AudioBilingual
+An immersive language-learning player that synchronizes foreign audiobook narration with line-by-line bilingual transcripts. Listeners can tap any spoken phrase to pause, hear a pronunciation breakdown, and review side-by-side translated text.
+IDEAS>>>

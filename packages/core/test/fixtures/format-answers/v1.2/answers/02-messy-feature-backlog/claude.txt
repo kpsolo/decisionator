@@ -1,0 +1,178 @@
+```json
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "IDEAS for Deci v2"
+  },
+  "options": [
+    {
+      "title": "Dark mode",
+      "description": "A dark color theme for the app.",
+      "category": "UI & Usability",
+      "tags": [
+        "theme",
+        "accessibility"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Export to PDF",
+      "description": "Export decision results as a PDF so they can be attached to emails.",
+      "category": "Sharing & Export",
+      "tags": [
+        "export",
+        "pdf",
+        "email"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Slack bot for vote results",
+      "description": "A Slack bot that posts the vote result into a channel.",
+      "category": "Integrations",
+      "tags": [
+        "slack",
+        "bot",
+        "notifications"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Mobile app",
+      "description": "A native mobile app.",
+      "category": "Platform",
+      "tags": [
+        "mobile"
+      ],
+      "effort": "XL"
+    },
+    {
+      "title": "Import from Trello boards",
+      "description": "Import options from Trello boards.",
+      "category": "Integrations",
+      "tags": [
+        "trello",
+        "import"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Notion integration",
+      "description": "Pull a Notion database in as options.",
+      "category": "Integrations",
+      "tags": [
+        "notion",
+        "import"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Keyboard shortcuts",
+      "description": "Keyboard shortcuts for common actions.",
+      "category": "UI & Usability",
+      "tags": [
+        "keyboard",
+        "accessibility"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Anonymous voting mode",
+      "description": "A voting mode that hides who voted for what, because people are shy in public votes.",
+      "category": "Voting",
+      "tags": [
+        "voting",
+        "privacy"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Decision templates",
+      "description": "Templates for common decisions such as hiring, vendor choice and team lunch.",
+      "category": "Templates",
+      "tags": [
+        "templates",
+        "onboarding"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Voting deadline",
+      "description": "Set a deadline for voting that auto-closes at a set time and sends a reminder.",
+      "category": "Voting",
+      "tags": [
+        "voting",
+        "deadline",
+        "reminders"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Comments with @mentions",
+      "description": "Mention people in comments with @name.",
+      "category": "Collaboration",
+      "tags": [
+        "comments",
+        "mentions",
+        "notifications"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Weighted criteria",
+      "description": "Score options against weighted criteria, for example price 40%, quality 30% and speed 30%.",
+      "category": "Voting",
+      "tags": [
+        "criteria",
+        "scoring"
+      ],
+      "effort": "L"
+    },
+    {
+      "title": "Emoji reactions on options",
+      "description": "Let people react to options with emoji such as 👍 and 🔥.",
+      "category": "Collaboration",
+      "tags": [
+        "reactions",
+        "emoji"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Show who hasn't voted yet",
+      "description": "Show which participants have not voted yet.",
+      "category": "Voting",
+      "tags": [
+        "voting",
+        "participation"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Link previews in options",
+      "description": "Show previews for URLs inside options, e.g. a product page.",
+      "category": "UI & Usability",
+      "tags": [
+        "links",
+        "previews"
+      ],
+      "effort": "M",
+      "links": [
+        {
+          "url": "https://example.com/product"
+        }
+      ]
+    },
+    {
+      "title": "Undo grade changes",
+      "description": "Undo accidental grade changes.",
+      "category": "UI & Usability",
+      "tags": [
+        "undo",
+        "grades"
+      ],
+      "effort": "S"
+    }
+  ]
+}
+```

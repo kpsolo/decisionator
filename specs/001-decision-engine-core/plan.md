@@ -41,7 +41,8 @@ Node.js 24 LTS is used for tooling only in the MVP.
 **Primary Dependencies**:
 - UI: React 19, Vite, React Router (hash routing for static hosting), Radix UI, `@dnd-kit` (drag
   to rank), markdown-it + DOMPurify.
-- Data and schemas: Zod 4 (schemas, also exported as JSON Schema), `idb` (IndexedDB).
+- Data and schemas: Zod 4 (schemas, also exported as JSON Schema), `idb` (IndexedDB),
+  `franc-min` (language of the pasted list, for the format instruction's hint).
 - Offline: `vite-plugin-pwa` / Workbox (app shell).
 - Google: Google Identity Services (token model) and the Google Picker. Drive v3 and Sheets v4
   are called through `fetch` (no Google SDK bundle).

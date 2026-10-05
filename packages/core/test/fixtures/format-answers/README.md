@@ -9,13 +9,14 @@ validation and asserts that at least 90% validate on the first paste.
 
 ```text
 inputs/<NN-name>.txt                        raw idea list, exactly as a user would paste it (shared by all versions)
-inputs/<NN-name>.hint.txt                   optional {{LOCALE_HINT}} line
+inputs/<NN-name>.hint.txt                   optional {{LOCALE_HINT}} override (otherwise the language is detected)
 v<X.Y>/instructions/<NN-name>.txt           instruction generated from template version X.Y; paste this into the assistant
 v<X.Y>/answers/<NN-name>/<assistant>.txt    the assistant's full reply to that instruction, unedited
 ```
 
-**Current template: v1.1.** `v1.0/` is kept as the baseline; the SC-002 gate counts only the
-current version's answers.
+**Current template: v1.2.** `v1.0/` and `v1.1/` are kept as baselines; the SC-002 gate counts
+only the current version's answers. Hint files and the generator's language detection apply to the
+current version.
 
 Assistant file names: `claude.txt` and `gemini.txt`, the launch compatibility list.
 
@@ -28,8 +29,8 @@ node packages/core/test/fixtures/format-answers/build-instructions.mjs
 ## Collecting an answer
 
 1. Open a **new chat** in the assistant, with default settings and no custom instructions.
-2. Paste the whole `v1.1/instructions/<NN-name>.txt` file as one message (as text, not as an attached file).
-3. Copy the **entire** reply, unedited, into `v1.1/answers/<NN-name>/<assistant>.txt`.
+2. Paste the whole `v1.2/instructions/<NN-name>.txt` file as one message (as text, not as an attached file).
+3. Copy the **entire** reply, unedited, into `v1.2/answers/<NN-name>/<assistant>.txt`.
 4. Add a line to the table below.
 
 Never fix an answer by hand. A broken answer is exactly what the test should count.
@@ -49,6 +50,8 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 
 ## Results so far
 
+**v1.2:** Claude 5/5 valid; Gemini 0/5 collected.
+
 **v1.1: 10/10 valid** after extraction rules (9/10 strictly: Gemini 01 gave `pros`/`cons` as
 strings, now handled by extraction rule 6). Compared with v1.0, Gemini's answers lost all
 `[cite: N]` markers (pasted as text), kept titles clean, dropped non-ideas (02: 16/16), stopped
@@ -61,6 +64,14 @@ including rule 5 for citation markers. Gemini never used a code fence, and 4 of 
 carried `[cite: N]` markers.
 
 ## Collected answers
+
+### v1.2
+
+| List | Assistant | Model / app | Date | Notes |
+|------|-----------|-------------|------|-------|
+| 01–03, 05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Same as v1.1 (already compliant) |
+| 04 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Titles and tags fully in Ukrainian per the new "all text" hint |
+| 01–05 | gemini | — | — | to collect |
 
 ### v1.1
 
