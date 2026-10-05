@@ -2,18 +2,22 @@ const VERIFIER_CONSTANT = "decisionator:verifier:v1";
 
 function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
   }
   let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+    const b = bytes[i];
+    if (b !== undefined) {
+      binary += String.fromCharCode(b);
+    }
   }
   return btoa(binary);
 }
 
 function base64ToBytes(base64: string): Uint8Array {
   if (typeof Buffer !== "undefined") {
-    return new Uint8Array(Buffer.from(base64, "base64"));
+    const buf = Buffer.from(base64, "base64");
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -53,7 +57,7 @@ export async function deriveKey(
   return globalThis.crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt,
+      salt: salt as BufferSource,
       iterations,
       hash: "SHA-256",
     },
@@ -77,7 +81,7 @@ export async function encrypt(plaintext: string, key: CryptoKey): Promise<string
   const encoded = encoder.encode(plaintext);
 
   const ciphertextBuffer = await globalThis.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as BufferSource },
     key,
     encoded
   );
@@ -97,13 +101,19 @@ export async function decrypt(encrypted: string, key: CryptoKey): Promise<string
     throw new Error("Invalid encrypted payload format: expected enc:v1:...");
   }
 
-  const iv = base64ToBytes(parts[2]);
-  const ciphertext = base64ToBytes(parts[3]);
+  const ivPart = parts[2];
+  const cipherPart = parts[3];
+  if (!ivPart || !cipherPart) {
+    throw new Error("Invalid encrypted payload parts");
+  }
+
+  const iv = base64ToBytes(ivPart);
+  const ciphertext = base64ToBytes(cipherPart);
 
   const decryptedBuffer = await globalThis.crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as BufferSource },
     key,
-    ciphertext
+    ciphertext as BufferSource
   );
 
   const decoder = new TextDecoder();

@@ -71,7 +71,7 @@ export function validateManifest(
     throw new Error(`Manifest schema validation failed: ${errors}`);
   }
 
-  const typedManifest = manifest as PluginManifest;
+  const typedManifest = manifest as unknown as PluginManifest;
 
   // Verify platform range compatibility (Constitution §II)
   for (const [key, range] of Object.entries(typedManifest.platform)) {

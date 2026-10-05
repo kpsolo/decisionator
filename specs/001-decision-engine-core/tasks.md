@@ -129,14 +129,14 @@ story work starts until this phase is done.**
   - register first-party modules only through the `plugin-sdk` interfaces;
   - wrap every call with a timeout (default 5 s, strategies 2 s) and error capture;
   - raise errors attributed to the module (research R26, constitution C3).
-- [ ] T026 [P] Create the app shell in `apps/web/src/app/App.tsx`, `apps/web/src/app/routes.tsx` and `apps/web/src/app/theme.css`:
+- [x] T026 [P] Create the app shell in `apps/web/src/app/App.tsx`, `apps/web/src/app/routes.tsx` and `apps/web/src/app/theme.css`:
   - routes `#/`, `#/new`, `#/p/:fileId`, `#/p/:fileId/stats`, `#/p/:fileId/vote`, `#/p/:fileId/results`, `#/p/:fileId/share`, `#/settings`;
   - Radix-based primitives;
   - CSS-variable light/dark themes;
   - a layout that works from 360 px wide.
-- [ ] T027 [P] Implement the IndexedDB layer in `apps/web/src/sync/db.ts` using `idb`, with stores `drafts`, `queue` and `snapshots` (data-model "Draft" and "Queued write").
-- [ ] T028 [P] Configure `vite-plugin-pwa` in `apps/web/vite.config.ts` to cache the app shell, with no runtime caching of Google API responses.
-- [ ] T029 [P] Add Google configuration in `apps/web/src/config/google.ts`: read `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` and `VITE_BASE_URL`, and fail with a clear message when missing (research R28).
+- [x] T027 [P] Implement the IndexedDB layer in `apps/web/src/sync/db.ts` using `idb`, with stores `drafts`, `queue` and `snapshots` (data-model "Draft" and "Queued write").
+- [x] T028 [P] Configure `vite-plugin-pwa` in `apps/web/vite.config.ts` to cache the app shell, with no runtime caching of Google API responses.
+- [x] T029 [P] Add Google configuration in `apps/web/src/config/google.ts`: read `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` and `VITE_BASE_URL`, and fail with a clear message when missing (research R28).
 
 ### Google plumbing and the access spike
 
