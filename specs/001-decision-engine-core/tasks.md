@@ -458,11 +458,11 @@ self-hostable relay.
 **Independent Test**: share between two devices via a self-hosted relay; relay storage has no
 readable option titles.
 
-- [ ] T112 [US7] **Planning checkpoint**: refine plan.md for local mode. Decide whether the local store runs in the browser (IndexedDB + Automerge) or in `packages/node`, and how it maps the grade/comment/ranking entries onto Automerge documents. Update `contracts/relay-protocol.md` if needed.
-- [ ] T113 [P] [US7] Write relay tests in `packages/relay/test/relay.test.ts`: signed requests, ACL enforcement, the append-only change log, the two-step invite, revocation with key rotation, and the limits table (FR-071).
-- [ ] T114 [US7] Build `packages/relay/`: Hono with SQLite storage, implementing `contracts/relay-protocol.md`, plus `Dockerfile` and `compose.yaml` (FR-071).
-- [ ] T115 [US7] Build `plugins/store-local/`: a `ProjectStore` backed by Automerge 3, synced through the relay with XChaCha20-Poly1305 and Ed25519 (`@noble/*`). It must pass `runProjectStoreContractTests` (FR-070, FR-071).
-- [ ] T116 [US7] Build import/export between modes in `apps/web/src/features/project/MoveProject.tsx`, using `decisionator.project/v1` (FR-072).
+- [x] T112 [US7] **Planning checkpoint**: refine plan.md for local mode. Decide whether the local store runs in the browser (IndexedDB + Automerge) or in `packages/node`, and how it maps the grade/comment/ranking entries onto Automerge documents. Update `contracts/relay-protocol.md` if needed.
+- [x] T113 [P] [US7] Write relay tests in `packages/relay/test/relay.test.ts`: signed requests, ACL enforcement, the append-only change log, the two-step invite, revocation with key rotation, and the limits table (FR-071).
+- [x] T114 [US7] Build `packages/relay/`: Hono with SQLite storage, implementing `contracts/relay-protocol.md`, plus `Dockerfile` and `compose.yaml` (FR-071).
+- [x] T115 [US7] Build `plugins/store-local/`: a `ProjectStore` backed by Automerge 3, synced through the relay with XChaCha20-Poly1305 and Ed25519 (`@noble/*`). It must pass `runProjectStoreContractTests` (FR-070, FR-071).
+- [x] T116 [US7] Build import/export between modes in `apps/web/src/features/project/MoveProject.tsx`, using `decisionator.project/v1` (FR-072).
 
 ---
 

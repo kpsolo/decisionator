@@ -215,7 +215,25 @@ examples/                            # minimal standalone example plugins for MV
 | 4 | US4 | Owner pick, random, weighted-by-grade strategies and the strategy chooser | — |
 | 5 | US5 | Local node with MCP and REST agent API, connected-AI formatting, agent requests and review UI | — |
 | 6 | US6 | Plugin sandbox, manifest install, settings forms, Google Docs source | — |
-| 7 | US7 | Local store (Automerge), E2E relay, import and export between modes | — |
+| 7 | US7 | Local store (Automerge 3 + IndexedDB in browser, Node support), E2E encrypted relay (Hono + SQLite + WebSocket), import and export between modes | — |
+
+### US7 Architectural Refinement (T112 Planning Checkpoint)
+- **Local Store Location & Runtime**: `plugins/store-local` implements `ProjectStore` using `@automerge/automerge` and browser IndexedDB (via `idb`) for client-side persistence, with parity in Node environments.
+- **Data Mapping**:
+  - Each decision project corresponds to an Automerge document containing:
+    - `meta`: title, description, protected, voting configuration, owner, createdAt
+    - `options`: list/map of Option objects
+    - `grades`: append list of Grade entries (latest per user+option wins)
+    - `comments`: append list of Comment entries (with author, timestamp, hidden flag)
+    - `rankings`: append list of Ranking ballots (latest per user wins)
+    - `outcomes`: append list of Outcome records
+    - `contributions`: append list of agent contributions
+  - Replicates the exact semantics of `SheetStore` while benefiting from Automerge's immutable hash-chained CRDT changes.
+- **Relay & Sync**:
+  - `packages/relay`: standalone Hono server with SQLite storage implementing `contracts/relay-protocol.md`.
+  - Authenticated via Ed25519 signed requests (`X-Dcg-Key`, `X-Dcg-Timestamp`, `X-Dcg-Signature`).
+  - Stores encrypted `ChangeBatch` (XChaCha20-Poly1305 payload) and signed ACLs.
+  - Implements two-step invites, live WebSocket change notifications, and remote agent WebSocket tunneling (`/v1/tunnels`).
 
 ## Complexity Tracking
 

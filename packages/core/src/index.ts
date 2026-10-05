@@ -7,6 +7,7 @@ export * from "./model/outcome.js";
 export * from "./model/contribution.js";
 export * from "./model/agent.js";
 export * from "./crypto/payload-codec.js";
+export * from "./crypto/relay-crypto.js";
 export * from "./export/project-v1.js";
 export * from "./format/instruction.js";
 export * from "./format/extract.js";
