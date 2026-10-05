@@ -337,38 +337,38 @@ closes voting. The result shows the winner, the order and the points, and Verify
 
 ### Tests for User Story 3 (write first, must fail)
 
-- [ ] T073 [P] [US3] Write Borda strategy tests in `plugins/strategy-borda/test/contract.test.ts` (FR-023, FR-024):
+- [x] T073 [P] [US3] Write Borda strategy tests in `plugins/strategy-borda/test/contract.test.ts` (FR-023, FR-024):
   - `runStrategyContractTests`;
   - rank r on a top-N ballot earns N − r + 1 points, and unranked options earn 0;
   - partial ballots;
   - the tie-break chain is higher average grade → more first places → seeded random draw, with the seed recorded only when the random step is needed;
   - determinism over 100 runs (SC-006).
-- [ ] T074 [P] [US3] Write the E2E test `apps/web/e2e/us3-vote.spec.ts`, covering quickstart US3 steps 1–5 (re-vote replaces, close, tie broken by average grade, Verify, reopen → round 2) and an axe check on the vote and results screens (FR-021, FR-022, FR-023, FR-024).
+- [x] T074 [P] [US3] Write the E2E test `apps/web/e2e/us3-vote.spec.ts`, covering quickstart US3 steps 1–5 (re-vote replaces, close, tie broken by average grade, Verify, reopen → round 2) and an axe check on the vote and results screens (FR-021, FR-022, FR-023, FR-024).
 
 ### Implementation for User Story 3
 
-- [ ] T075 [US3] Implement the Borda strategy in `plugins/strategy-borda/src/index.ts` and `plugins/strategy-borda/decisionator-plugin.json` (FR-023):
+- [x] T075 [US3] Implement the Borda strategy in `plugins/strategy-borda/src/index.ts` and `plugins/strategy-borda/decisionator-plugin.json` (FR-023):
   - `provides.strategy {usesRandomness: true, minOptions: 2, ballots: "ranking"}`;
   - a settings schema with `topN` 1–10, default 3;
   - `check` and `decide` per `contracts/strategy.md` and research R25.
-- [ ] T076 [US3] Implement voting rounds in `packages/core/src/voting/rounds.ts` (FR-021, FR-022):
+- [x] T076 [US3] Implement voting rounds in `packages/core/src/voting/rounds.ts` (FR-021, FR-022):
   - the state machine `open(n) → closed(n) → open(n+1)`;
   - effective ballot = latest per (by, round) with `at` ≤ the close time;
   - ballots must be unique, ≤ topN and only from active options.
-- [ ] T077 [US3] Implement the tally host in `packages/core/src/strategy-host/tally.ts` (FR-024):
+- [x] T077 [US3] Implement the tally host in `packages/core/src/strategy-host/tally.ts` (FR-024):
   - build `StrategyInput` (options, effective ballots, aggregated grades) from a snapshot;
   - generate a 128-bit seed from a CSPRNG at close;
   - call the strategy through the module host;
   - build an immutable `OutcomeRecord` (data-model § Outcome);
   - append it via the store.
-- [ ] T078 [US3] Build the ballot UI in `apps/web/src/features/voting/RankBallot.tsx`: drag to rank with `@dnd-kit` and an equivalent keyboard control (move up/down); top N from `meta.voting.topN`; submit and resubmit replace the ballot (FR-021).
-- [ ] T079 [US3] Build owner voting controls in `apps/web/src/features/voting/VotingControls.tsx`: open, close and reopen voting; set `topN` 1–10 and `liveResults` on/off; owner only (writes `meta.voting`) (FR-022).
-- [ ] T080 [US3] Build the results view in `apps/web/src/features/voting/ResultsView.tsx` (FR-022, FR-024):
+- [x] T078 [US3] Build the ballot UI in `apps/web/src/features/voting/RankBallot.tsx`: drag to rank with `@dnd-kit` and an equivalent keyboard control (move up/down); top N from `meta.voting.topN`; submit and resubmit replace the ballot (FR-021).
+- [x] T079 [US3] Build owner voting controls in `apps/web/src/features/voting/VotingControls.tsx`: open, close and reopen voting; set `topN` 1–10 and `liveResults` on/off; owner only (writes `meta.voting`) (FR-022).
+- [x] T080 [US3] Build the results view in `apps/web/src/features/voting/ResultsView.tsx` (FR-022, FR-024):
   - winner, full order with points and first places, tie-break used, ballots counted;
   - round history;
   - "voting in progress (N ballots)" when live results are off.
-- [ ] T081 [US3] Build Verify in `apps/web/src/features/voting/VerifyButton.tsx`: re-run the tally on the outcome's recorded `inputs` and `seed` with the same strategy version, then show "Reproduced ✓", "Mismatch" or "Strategy unavailable" (FR-024).
-- [ ] T082 [US3] Add the `bordaPoints` sort key to `apps/web/src/features/stats/StatsView.tsx`, shown only when results are visible (FR-013).
+- [x] T081 [US3] Build Verify in `apps/web/src/features/voting/VerifyButton.tsx`: re-run the tally on the outcome's recorded `inputs` and `seed` with the same strategy version, then show "Reproduced ✓", "Mismatch" or "Strategy unavailable" (FR-024).
+- [x] T082 [US3] Add the `bordaPoints` sort key to `apps/web/src/features/stats/StatsView.tsx`, shown only when results are visible (FR-013).
 
 **Checkpoint**: US1–US3 are complete. This is the owner's full first user story.
 

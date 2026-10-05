@@ -272,6 +272,12 @@ export function ProjectViewPage() {
           >
             Statistics & Distributions
           </button>
+          <Link to={`/p/${fileId}/vote`} className="btn btn-outline" style={{ fontSize: 13 }}>
+            Vote
+          </Link>
+          <Link to={`/p/${fileId}/results`} className="btn btn-outline" style={{ fontSize: 13 }}>
+            Results
+          </Link>
           <Link to={`/p/${fileId}/share`} className="btn btn-outline" style={{ fontSize: 13 }}>
             Share Link
           </Link>
@@ -280,7 +286,10 @@ export function ProjectViewPage() {
 
       {/* Main Content */}
       {activeTab === "stats" ? (
-        <StatsView stats={Array.from(statsMap.values())} />
+        <StatsView
+          stats={Array.from(statsMap.values())}
+          showBordaSort={snapshot.outcomes.length > 0}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {snapshot.options.map((opt) => {

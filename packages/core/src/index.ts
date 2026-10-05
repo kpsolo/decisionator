@@ -10,3 +10,5 @@ export * from "./format/instruction.js";
 export * from "./format/extract.js";
 export * from "./format/validate.js";
 export * from "./stats/aggregate.js";
+export * from "./voting/rounds.js";
+export * from "./strategy-host/tally.js";

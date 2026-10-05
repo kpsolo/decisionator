@@ -5,9 +5,10 @@ import { useMemo, useState } from "react";
 
 export interface StatsViewProps {
   stats: OptionStats[];
+  showBordaSort?: boolean;
 }
 
-export const StatsView: React.FC<StatsViewProps> = ({ stats }) => {
+export const StatsView: React.FC<StatsViewProps> = ({ stats, showBordaSort = false }) => {
   const [sortBy, setSortBy] = useState<SortKey>("average");
   const [groupBy, setGroupBy] = useState<GroupKey>("none");
   const [viewMode, setViewMode] = useState<"visual" | "table">("visual");
@@ -47,6 +48,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ stats }) => {
               <option value="average">Highest Average</option>
               <option value="count">Most Ratings</option>
               <option value="comments">Most Comments</option>
+              {showBordaSort && <option value="bordaPoints">Borda Points</option>}
               <option value="title">Title (A-Z)</option>
             </select>
           </label>
