@@ -11,7 +11,7 @@ agents in US5. The template is versioned together with
 `{{LOCALE_HINT}}` is optional ("Write descriptions in Ukrainian.").
 
 ````text
-Turn the idea list below into JSON for Decisionator.
+Turn the idea list below into JSON for Deci.
 
 Rules:
 - Reply with ONLY one JSON code block, no other text.
@@ -41,7 +41,7 @@ Used after validation fails (FR-004). `{{ERRORS}}` is a bullet list such as
 `- options[3].title: missing`.
 
 ````text
-Your JSON for Decisionator has these problems:
+Your JSON for Deci has these problems:
 {{ERRORS}}
 Reply with the corrected JSON only, in one code block, same structure as before.
 ````

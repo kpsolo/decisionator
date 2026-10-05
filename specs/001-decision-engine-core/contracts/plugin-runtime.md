@@ -65,4 +65,4 @@ fails with `PERMISSION_DENIED`.
 
 The host loads a plugin only if every declared `platform.*` range is satisfied by the host's
 contract versions. Otherwise the host refuses to load it and shows
-"Built for Decisionator runtime ^2.0, this app provides 1.4" (US6 #4).
+"Built for Deci runtime ^2.0, this app provides 1.4" (US6 #4).

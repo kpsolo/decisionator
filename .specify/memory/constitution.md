@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: (template) → 1.0.0 → 1.0.1 (PATCH: project renamed to Decisionator)
+- Version change: (template) → 1.0.0 → 1.0.1 → 1.0.2 (PATCH: project renamed, finally to Deci)
 - Modified principles: n/a (initial ratification)
 - Added principles:
   I. Minimal Core, Everything Is a Module
@@ -17,9 +17,9 @@ Sync Impact Report
 - Deferred TODOs: none
 -->
 
-# Decisionator Constitution
+# Deci Constitution
 
-Decisionator is an open-source, modular decision-making engine: people collect ideas, shape them
+Deci is an open-source, modular decision-making engine: people collect ideas, shape them
 into options, enrich them (manually or through their own AI agents), decide using a pluggable
 strategy, and share the result with collaborators.
 
@@ -179,4 +179,4 @@ conflicts with it, the constitution wins.
 - **Runtime guidance**: day-to-day agent guidance lives in `CLAUDE.md` (kept up to date as
   plans introduce tech stack and conventions) and MUST stay consistent with this document.
 
-**Version**: 1.0.1 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-05
+**Version**: 1.0.2 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-05

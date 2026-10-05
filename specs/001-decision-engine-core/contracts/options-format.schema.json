@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://decisionator.dev/schemas/options/v1.json",
-  "title": "Decisionator options format v1 (decisionator.options/v1)",
+  "title": "Deci options format v1 (decisionator.options/v1)",
   "description": "What an AI assistant (or a connected agent) returns when asked to format a raw idea list. Lenient on input: unknown fields are ignored with a warning, not rejected.",
   "type": "object",
   "required": ["format", "options"],

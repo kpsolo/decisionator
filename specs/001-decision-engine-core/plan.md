@@ -7,7 +7,7 @@
 
 ## Summary
 
-The **MVP (US1–US3)** is a static web app, Decisionator ("Deci"), hosted on GitHub Pages. It runs
+The **MVP (US1–US3)** is a static web app, Deci, hosted on GitHub Pages. It runs
 entirely in the browser and has no backend of its own.
 
 **User flow:**

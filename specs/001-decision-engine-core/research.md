@@ -99,7 +99,7 @@ Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as foll
     and a random 16-byte salt.
   - Payload cells are encrypted with AES-256-GCM using a fresh 12-byte IV per cell.
   - `meta` holds the salt, the iteration count and an encrypted verifier string, plus nothing
-    readable about the content. The Sheet is titled "Decisionator project (protected)".
+    readable about the content. The Sheet is titled "Deci project (protected)".
   - The password never leaves the browser. The derived key is kept in memory for the session
     only.
 - **Rationale**: Google sharing has no passwords, so real protection requires client-side

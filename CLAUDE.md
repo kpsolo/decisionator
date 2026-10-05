@@ -1,8 +1,9 @@
-# Decisionator — agent guide
+# Deci — agent guide
 
 Open-source, modular decision-making engine (ideas → options → grades/votes → outcome → share),
-plugin-based, agent-native. "Deci" for short. The MVP is a static web app that stores each project
-as a Google Sheet in the owner's Drive; local-first mode comes later (US7).
+plugin-based, agent-native. Product name: Deci; the repo, npm scope and technical IDs use
+`decisionator`. The MVP is a static web app that stores each project as a Google Sheet in the
+owner's Drive; local-first mode comes later (US7).
 
 ## Read first
 

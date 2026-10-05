@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://decisionator.dev/schemas/plugin-manifest/1.0.json",
-  "title": "Decisionator plugin manifest (decisionator-plugin.json)",
+  "title": "Deci plugin manifest (decisionator-plugin.json)",
   "type": "object",
   "additionalProperties": false,
   "required": ["manifestVersion", "id", "name", "version", "platform", "main", "provides"],

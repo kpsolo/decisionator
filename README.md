@@ -1,10 +1,10 @@
-# Decisionator
+# Deci
 
 An open-source, modular **decision-making engine**.
 
 Paste a list of ideas, let your own AI assistant turn it into structured options, then grade,
 comment and vote on them together. Share a project by link, like a Google Doc. Each project lives
-in your own Google Drive; there is no Decisionator account or server.
+in your own Google Drive; there is no Deci account or server.
 
 > Status: **pre-alpha / specification phase.** Development follows
 > [Spec-Driven Development](https://github.com/github/spec-kit).

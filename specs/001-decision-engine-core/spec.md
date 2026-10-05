@@ -15,7 +15,7 @@ add relevant data to an option or idea (like some research) and share with frien
 collaborators."
 
 **First user story (owner, 2026-10-05)**: "I have a list of ideas to build a software
-product/app. I paste it from the clipboard. If Decisionator doesn't have a configured AI to
+product/app. I paste it from the clipboard. If Deci doesn't have a configured AI to
 format the options properly, it asks the user to use a format. The user goes to their agent,
 asks it to format the options and comes back with properly formatted JSON. Deci forms a project
 to share. The user goes through each option and makes comments or sets grades. It should be
@@ -47,7 +47,7 @@ limits must stay within free API usage."
   rankings and comments as rows).
 - Q: What does "vote" mean next to grades? → A: Each collaborator grades each option 1–5 and
   also submits a ranked vote of their top options, tallied by a ranking strategy.
-- Q: Product name? → A: Decisionator ("Deci" for short).
+- Q: Product name? → A: Deci. The repository and technical identifiers keep the lowercase name `decisionator`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -56,7 +56,7 @@ independently testable, and US1 alone is useful as a personal idea board.
 
 ### User Story 1 - Turn a pasted idea list into a graded project (Priority: P1)
 
-A person has a raw list of product ideas. They paste it into Decisionator. Without a connected
+A person has a raw list of product ideas. They paste it into Deci. Without a connected
 AI, Deci gives them a ready-made instruction and format. The person copies it to their own AI
 agent (any chat assistant), gets back formatted JSON and pastes that into Deci. Deci shows a
 preview of the options, and on confirmation creates a project saved in the person's own Google
@@ -243,7 +243,7 @@ the behavior change. Disable it and confirm the rest of the app works unchanged.
 
 ### User Story 7 - Local-first mode without Google (Priority: P7)
 
-A privacy-minded user or team runs Decisionator without Google: data on their own device, and
+A privacy-minded user or team runs Deci without Google: data on their own device, and
 sharing through a self-hostable relay that only stores end-to-end encrypted data.
 
 **Why this priority**: Keeps the project's local-first, user-owns-the-data direction available
@@ -335,7 +335,7 @@ device, and confirm the relay's storage contains no readable option titles.
 - **FR-015**: Owners MUST be able to share a project by link with an access level: view, or
   contribute (grade, comment, vote).
 - **FR-016**: Opening a link MUST require at most one Google sign-in and one access confirmation.
-  No Decisionator account exists.
+  No Deci account exists.
 - **FR-017**: Owners MAY protect a project with a password. Password-protected project content
   MUST be encrypted in the browser before it is stored in Google, so that neither Google nor
   anyone with Sheet access can read it without the password. The password MUST never be stored
