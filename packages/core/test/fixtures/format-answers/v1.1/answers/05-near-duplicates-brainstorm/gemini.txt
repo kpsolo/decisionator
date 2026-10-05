@@ -1,0 +1,71 @@
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "Brainstorm: how do we get more people to try Deci?"
+  },
+  "options": [
+    {
+      "title": "Post on Product Hunt",
+      "description": "Launch and post Deci on producthunt.com to attract new users.",
+      "category": "Launch Platforms",
+      "tags": ["product-hunt", "launch", "marketing"],
+      "effort": "M"
+    },
+    {
+      "title": "Write a blog post about the Borda count",
+      "description": "Write a blog post explaining the Borda count voting method.",
+      "category": "Content",
+      "tags": ["blog", "content", "borda-count", "education"],
+      "effort": "S"
+    },
+    {
+      "title": "Twitter/X thread on ranked voting",
+      "description": "Publish an X thread explaining ranked voting and why it beats simple polls.",
+      "category": "Social Media",
+      "tags": ["twitter", "x", "social", "ranked-voting"],
+      "effort": "XS"
+    },
+    {
+      "title": "Ask friends to share the link",
+      "description": "Reach out to friends and ask them to share the link to Deci.",
+      "category": "Word of Mouth",
+      "tags": ["friends", "referrals", "outreach"],
+      "effort": "XS"
+    },
+    {
+      "title": "Share in Ukrainian startup Telegram channels",
+      "description": "Share Deci in Telegram channels for UA founders and Ukrainian startups.",
+      "category": "Community Outreach",
+      "tags": ["telegram", "startups", "ukraine", "community"],
+      "effort": "XS"
+    },
+    {
+      "title": "Create a short YouTube demo video",
+      "description": "Produce a 2-minute short demo video of Deci for YouTube.",
+      "category": "Video Content",
+      "tags": ["youtube", "video", "demo"],
+      "effort": "M"
+    },
+    {
+      "title": "Reddit r/SideProject post",
+      "description": "Create a post showcasing Deci on the Reddit r/SideProject community.",
+      "category": "Community Outreach",
+      "tags": ["reddit", "side-project", "community"],
+      "effort": "XS"
+    },
+    {
+      "title": "Create ready-made decision templates",
+      "description": "Build a template gallery offering ready-made decision templates for hiring, trips, and lunch.",
+      "category": "Product",
+      "tags": ["product", "templates", "onboarding"],
+      "effort": "M"
+    },
+    {
+      "title": "Integrate with Slack",
+      "description": "Integrate Deci with Slack so teams can discover and use the tool.",
+      "category": "Product Integrations",
+      "tags": ["slack", "integration", "b2b", "teams"],
+      "effort": "L"
+    }
+  ]
+}

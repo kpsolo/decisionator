@@ -49,7 +49,12 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 
 ## Results so far
 
-**v1.1:** Claude 5/5 valid; Gemini 0/5 collected.
+**v1.1: 10/10 valid** after extraction rules (9/10 strictly: Gemini 01 gave `pros`/`cons` as
+strings, now handled by extraction rule 6). Compared with v1.0, Gemini's answers lost all
+`[cite: N]` markers (pasted as text), kept titles clean, dropped non-ideas (02: 16/16), stopped
+inventing features (03: one sentence each, 73 characters on average versus 222), and took project
+titles from headings. **Still open:** Gemini wrote list 02 in Ukrainian despite the same-language
+rule (05 is now English).
 
 **v1.0 (baseline): 10/10 answers validate (100%; SC-002 target ≥ 90%)**, counted after the extraction rules,
 including rule 5 for citation markers. Gemini never used a code fence, and 4 of its 5 answers
@@ -62,7 +67,11 @@ carried `[cite: N]` markers.
 | List | Assistant | Model / app | Date | Notes |
 |------|-----------|-------------|------|-------|
 | 01–05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | v1.0 answers adjusted to the new rules: project titles from headings, side notes removed, no inferred details in title-only ideas, URLs in `links` |
-| 01–05 | gemini | — | — | to collect |
+| 01 | gemini | Gemini (app) | 2026-10-05 | Strictly invalid: `pros`/`cons` are strings in all 50 options (valid with rule 6). Titles and descriptions verbatim, English, project title "50 App Ideas" |
+| 02 | gemini | Gemini (app) | 2026-10-05 | Valid; 16/16, non-ideas dropped, clean titles, URL in `links`, but all titles and descriptions translated to Ukrainian |
+| 03 | gemini | Gemini (app) | 2026-10-05 | Valid; 20/20, titles verbatim, one short sentence each, no pros/cons |
+| 04 | gemini | Gemini (app) | 2026-10-05 | Valid; 12/12, Ukrainian as hinted (titles translated too), concise, no embellishment |
+| 05 | gemini | Gemini (app) | 2026-10-05 | Valid; 9/9 merged, English, project title = the list's heading |
 
 ### v1.0 (baseline)
 

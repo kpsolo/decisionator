@@ -61,6 +61,9 @@ Reply with the corrected JSON only, in one code block, same structure as before.
 5. Assistant citation markers are removed from every string, with one warning per answer. These
    are tokens matching `\[cite(?:_start|_end)?(?::[^\]]*)?\]`, such as Gemini's `[cite: 5]` and
    `[cite_start]`. Found in fixture `05/gemini` (2026-10-05).
+6. A single string where a list of strings is expected (`tags`, `pros`, `cons`) is wrapped into a
+   one-item list, with one warning per answer. Found in fixture `v1.1/01/gemini` (2026-10-05),
+   where all 50 options gave `pros` and `cons` as strings.
 
 ## Quality gate
 
