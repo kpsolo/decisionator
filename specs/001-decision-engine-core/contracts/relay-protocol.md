@@ -3,7 +3,7 @@
 > **Scope: post-MVP (US7, local-first mode).** The MVP shares projects through Google Drive ([sheet-store.md](./sheet-store.md)).
 
 The relay is a self-hostable service (`packages/relay`, Docker image). It carries **encrypted**
-shared-decision changes and **agent tunnels**. It never holds decision keys
+shared-project changes and **agent tunnels**. It never holds project keys
 ([research R6, R8](../research.md)).
 
 ## Authentication
@@ -36,7 +36,7 @@ type SignedAcl = {
 };
 
 type ChangeBatch = {
-  keyEpoch: number;                        // which decision key encrypted it
+  keyEpoch: number;                        // which project key encrypted it
   nonce: string;                           // 24-byte XChaCha20 nonce, base64
   ciphertext: string;                      // XChaCha20-Poly1305(Automerge change bytes[]), base64
   signerKey: string;
@@ -56,7 +56,7 @@ relay accepted it. This protects against a compromised relay.
 2. The invitee's node calls `POST /v1/invites/{inviteId}/accept` with its public keys.
    The relay queues the request for the owner.
 3. The owner's node, while online, confirms the invite. It adds the member to the ACL and posts
-   `sealedKey = sealedBox(X25519(invitee), decisionKey[epoch])` to
+   `sealedKey = sealedBox(X25519(invitee), projectKey[epoch])` to
    `/v1/invites/{inviteId}/key`.
 4. The invitee fetches the sealed key, decrypts it locally and pulls the changes.
 

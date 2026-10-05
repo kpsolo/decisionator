@@ -368,7 +368,7 @@ Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as foll
   click, permission `clipboard:read`) and passes the string to the plugin's `parse` call; the
   plugin never touches the clipboard API directly. Parsing: split lines, strip bullets
   (`-`, `*`, `•`, `1.`, `1)`, `[ ]`), trim, drop empties; `Title — description` or
-  `Title: description` splits into title/description. Preview cap 500 items, adjustable.
+  `Title: description` splits into title/description. Preview cap 500 items (the format's maximum); the user can lower it.
 - **Rationale**: Clipboard access requires a user gesture in the top-level document; mediation
   keeps the permission model enforceable.
 

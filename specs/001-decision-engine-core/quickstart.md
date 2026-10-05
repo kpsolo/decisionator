@@ -62,7 +62,7 @@ release.
    category. **Expect**: correct averages and groups.
 7. Reload and open **My projects**. **Expect**: the project is listed with its data intact.
 - Covered by `apps/web/e2e/us1-create.spec.ts`, `packages/core/test/format/*` (including the
-  answers fixture set for SC-002) and `packages/store-google-sheets/test/contract.test.ts`.
+  answers fixture set for SC-002) and `plugins/store-google-sheets/test/contract.test.ts`.
 
 ### US2: Share and collaborate
 
@@ -93,7 +93,7 @@ release.
    and the outcome says so.
 4. Click **Verify**. **Expect**: "Reproduced ✓" (SC-006).
 5. Reopen voting and close it again. **Expect**: round 2 is appended, and round 1 is unchanged.
-- Covered by `packages/strategy-borda/test/contract.test.ts` (Borda cases, tie-break chain, RNG
+- Covered by `plugins/strategy-borda/test/contract.test.ts` (Borda cases, tie-break chain, RNG
   vectors from [contracts/strategy.md](./contracts/strategy.md)) and `apps/web/e2e/us3-vote.spec.ts`.
 
 ## Live Google checklist (manual, before each release)

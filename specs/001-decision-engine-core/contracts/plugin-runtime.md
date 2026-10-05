@@ -48,7 +48,7 @@ fails with `PERMISSION_DENIED`.
 | Capability | Permission | Signature |
 |------------|-----------|-----------|
 | `ctx.oauth.getToken(provider, {interactive})` | `oauth:<provider>` | → `{ accessToken, expiresAt, callbackParams: Record<string,string> }` |
-| `ctx.decision.get()` | `decision:read` | → read-only snapshot of the current decision (options, contributions accepted) |
+| `ctx.project.get()` | `project:read` | → read-only snapshot of the current project (options, contributions accepted) |
 | `ctx.log(level, msg)` | none | Shown in the plugin's diagnostics panel |
 | `ctx.ui.resize(height)` | UI slot | Within the slot's `maxHeight` |
 | `ctx.ui.notify(msg, level)` | UI slot | Toast attributed to the plugin |

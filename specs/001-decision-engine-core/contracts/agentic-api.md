@@ -18,7 +18,7 @@ same Zod schemas, so they stay in parity (Principle IV, FR-040).
 - The node resolves token → grant and checks, in order: grant `open` and not expired → target
   still exists → operation permitted by `permissions` → rate and size limits.
 - Failures return MCP tool errors or REST `401/403/404/409/413/429` with a plain-language
-  `message`. Refused writes outside the scope are appended to the decision's `auditLog` (FR-044,
+  `message`. Refused writes outside the scope are appended to the project's `auditLog` (FR-044,
   US5 #4).
 - The agent sets its self-declared name once, through `agent_hello`, or per call with the
   `X-Agent-Name` header. That name is stored in `ActorRef.agentName`.
@@ -29,11 +29,11 @@ same Zod schemas, so they stay in parity (Principle IV, FR-040).
 |----------|------|-----------|-------------|
 | `agent_hello` | `POST /session` | any | Declares the agent name. Returns the request instruction, target, permissions, expiry, limits and the rules text. |
 | `get_request` | `GET /request` | any | The agent request: instruction, target, status. |
-| `get_context` | `GET /context` | `read` | Decision title and description, the options in scope (all options for a decision target), **accepted** contributions and source refs. Ballots and other agents' pending contributions are never included. |
+| `get_context` | `GET /context` | `read` | Project title and description, the options in scope (all options for a project target), **accepted** contributions and source refs. Ballots and other agents' pending contributions are never included. |
 | `list_contributions` | `GET /contributions` | `read` | This request's own contributions and their review status. |
 | `add_contribution` | `POST /contributions` | `contribute` | `{target?, type, body, pros?, cons?, sources[]}`. `target` defaults to the request target and must be inside the scope. Result: `{id, reviewStatus: "pending"}`. |
 | `update_contribution` | `PATCH /contributions/{id}` | `contribute` | Only own contributions that are still `pending`. |
-| `propose_option` | `POST /options` | `propose_options` | `{title, description, sources[]}`. Creates an option with `status: "proposed"`. Valid only when the target is a decision. |
+| `propose_option` | `POST /options` | `propose_options` | `{title, description, sources[]}`. Creates an option with `status: "proposed"`. Valid only when the target is a project. |
 | `complete_request` | `POST /complete` | any | `{summary?}`. Marks the request `completed`, and the grant stops accepting writes. |
 
 **No operation** exists to record outcomes, cast ballots, delete content, change sharing or read
@@ -48,7 +48,7 @@ outside the scope (FR-044). Asking for any of these returns `403 NOT_PERMITTED_F
   "properties": {
     "target": {
       "oneOf": [
-        { "type": "object", "required": ["kind"], "properties": { "kind": { "const": "decision" } } },
+        { "type": "object", "required": ["kind"], "properties": { "kind": { "const": "project" } } },
         { "type": "object", "required": ["kind", "optionId"], "properties": { "kind": { "const": "option" }, "optionId": { "type": "string" } } },
         { "type": "object", "required": ["kind", "ideaId"], "properties": { "kind": { "const": "idea" }, "ideaId": { "type": "string" } } }
       ]

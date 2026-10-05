@@ -36,7 +36,8 @@ account email, stamped by the store.
 - `createdAt`, `owner`
 
 In password mode, readable `meta` values reveal nothing about the content beyond counts and
-timestamps.
+timestamps. The `by` column (participants' emails), `optionId` columns and `at` timestamps stay
+readable too (spec FR-017); the UI discloses this when a password is set.
 
 **Validation**: the host validates every row. A row that fails validation is skipped, and the UI
 shows a warning naming the tab and row (spec edge case: direct edits in Google Sheets). A row in

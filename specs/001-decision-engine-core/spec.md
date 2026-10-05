@@ -270,7 +270,8 @@ device, and confirm the relay's storage contains no readable option titles.
 ### Edge Cases
 
 - Pasted text is empty, not text, or very large (more than 500 lines): Deci explains, or shows a
-  preview with an adjustable cap.
+  preview capped at 500 options by default (the format's maximum); the user can lower the cap or
+  split the list.
 - The AI returns JSON wrapped in prose or markdown fences: Deci extracts the JSON block. If it
   finds several, it asks which one to use.
 - The AI returns options with duplicate titles: they are allowed but flagged in the preview.
@@ -343,11 +344,15 @@ device, and confirm the relay's storage contains no readable option titles.
 - **FR-015**: Owners MUST be able to share a project by link with an access level: view, or
   contribute (grade, comment, vote).
 - **FR-016**: Opening a link MUST require at most one Google sign-in and one access confirmation.
-  No Deci account exists.
+  No Deci account exists. This depends on Google's Picker behavior, which spike T032 verifies;
+  if the spike shows it cannot be met, this requirement is revisited with the product owner
+  before US2 work starts (research R21).
 - **FR-017**: Owners MAY protect a project with a password. Password-protected project content
   MUST be encrypted in the browser before it is stored in Google, so that neither Google nor
   anyone with Sheet access can read it without the password. The password MUST never be stored
-  or sent anywhere.
+  or sent anywhere. Metadata stays readable to anyone with Sheet access: participants' Google
+  account emails (`by`), option IDs, timestamps and row counts. The UI MUST say so when the owner
+  sets a password.
 - **FR-018**: Owners MUST be able to turn off link sharing (effective for everyone at their next
   access) and to invite people by email instead of by link. Only people invited by email can be
   removed individually. The UI MUST explain this when an owner tries to remove someone from a
@@ -368,7 +373,7 @@ device, and confirm the relay's storage contains no readable option titles.
   over each ballot's top N), with the documented tie-break chain from US3 #4.
 - **FR-024**: Each closed vote MUST record an immutable outcome: winner, full order with points,
   strategy id and version, ballots counted, tie-break used, seed (if any), who closed it and
-  when. Outcomes are append-only.
+  when. Outcomes are append-only, per FR-009.
 
 **Post-MVP — strategies (US4)**
 
@@ -412,8 +417,8 @@ device, and confirm the relay's storage contains no readable option titles.
 - **FR-071**: Local-mode sharing MUST go through an optional, self-hostable relay that cannot read
   stored content (end-to-end encrypted). Remote-agent traffic through the relay MUST be disclosed
   as visible to the relay operator in transit.
-- **FR-072**: Projects MUST be exportable and importable between Google and local modes in an open,
-  documented format.
+- **FR-072**: Projects MUST be importable between Google and local modes, using the export format
+  of FR-080.
 
 **All releases — data and quality**
 
@@ -461,8 +466,9 @@ device, and confirm the relay's storage contains no readable option titles.
 - **SC-005**: With 20 collaborators active on one project, the app stays within free Google API
   quotas and no input is lost.
 - **SC-006**: 100% of tallies reproduce identically from the same ballots (and seed).
-- **SC-007**: Without the password, a password-protected project's options, grades and comments
-  are unreadable in the stored Google Sheet.
+- **SC-007**: Without the password, a password-protected project's title, description, options,
+  grades, comments, rankings and outcomes are unreadable in the stored Google Sheet (metadata
+  listed in FR-017 excepted).
 - **SC-008**: Sorting or grouping 200 options in the stats view feels instant (under 1 second).
 - **SC-009**: The MVP runs with zero server cost to the project beyond static hosting.
 

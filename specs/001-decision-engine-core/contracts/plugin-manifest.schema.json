@@ -125,7 +125,7 @@
             "description": "Use the host OAuth broker for the provider declared in `oauth`."
           },
           {
-            "const": "decision:read"
+            "const": "project:read"
           },
           {
             "const": "ideas:write"
@@ -294,8 +294,8 @@
         "slot": {
           "enum": [
             "option.detail",
-            "decision.toolbar",
-            "decision.sidebar",
+            "project.toolbar",
+            "project.sidebar",
             "idea.detail"
           ]
         },

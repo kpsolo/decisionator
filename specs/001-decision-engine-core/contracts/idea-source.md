@@ -47,7 +47,7 @@ RPC method: `ideaSource.fetch`.
      pass it in.
    - `oauth`: the plugin calls `ctx.oauth.getToken(...)` itself. The host runs the consent flow.
    - `form`: render the form from the plugin's `settingsSchema`.
-2. Show a **preview** of the candidates, capped at 500 by default and adjustable. Nothing is
+2. Show a **preview** of the candidates, capped at 500, the format's maximum; the user can lower the cap. Nothing is
    written before the user confirms (US6 #2).
 3. On confirm, upsert ideas keyed by `(pluginId, locator, itemKey)`. Existing keys are never
    duplicated or overwritten. Locators reported as `unavailable` get their `SourceRef.status`
