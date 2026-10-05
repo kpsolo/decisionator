@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+__pycache__/
+
+# Build output
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Environment & secrets (never commit API keys / OAuth credentials)
+.env
+.env.*
+!.env.example
+credentials*.json
+token*.json
+*.pem
+*.key
+
+# Local agent state
+.claude/settings.local.json
+.claude/worktrees/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
