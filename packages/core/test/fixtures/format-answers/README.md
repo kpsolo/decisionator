@@ -14,8 +14,7 @@ instructions/<NN-name>.txt                generated instruction (template + inpu
 answers/<NN-name>/<assistant>.txt         the assistant's full reply, unedited (code fences and any extra prose included)
 ```
 
-Assistant file names: `claude.txt`, `grok.txt`, `muse.txt`, `dots.txt`, which is the launch
-compatibility list.
+Assistant file names: `claude.txt` and `gemini.txt`, the launch compatibility list.
 
 Regenerate the instructions after changing an input or the template:
 
@@ -54,6 +53,4 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 | 03 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 20 options, one-sentence descriptions |
 | 04 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 12 options, Ukrainian descriptions and categories |
 | 05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 9 options, 5 duplicate pairs merged |
-| 01–05 | grok | — | — | to collect |
-| 01–05 | muse | — | — | to collect |
-| 01–05 | dots | — | — | to collect |
+| 01–05 | gemini | — | — | to collect |

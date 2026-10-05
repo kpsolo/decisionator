@@ -188,7 +188,7 @@ comment and view stats.
   - over-length strings are truncated, with a warning;
   - error messages such as `options[2].title: missing`.
 - [ ] T036 [P] [US1] Create the SC-002 fixture set in `packages/core/test/fixtures/format-answers/`, collected manually:
-  - real answers from Claude, Grok, Muse and Dots, for 5 sample idea lists, each produced from the instruction in `contracts/format-instruction.md`;
+  - real answers from Claude and Gemini, for 5 sample idea lists, each produced from the instruction in `contracts/format-instruction.md`;
   - a replay test in `packages/core/test/format/fixtures.test.ts` asserting that ≥ 90% validate on the first paste.
 - [ ] T037 [P] [US1] Wire `runProjectStoreContractTests` to the Google Sheets store and the fake backend in `plugins/store-google-sheets/test/contract.test.ts`.
 - [ ] T038 [P] [US1] Write the E2E test `apps/web/e2e/us1-create.spec.ts` (fake Google), covering quickstart US1 steps 1–7: the SC-001 timing (< 3 min with a scripted AI answer) and an axe check on the new-project, project and stats screens.

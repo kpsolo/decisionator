@@ -58,6 +58,6 @@ Reply with the corrected JSON only, in one code block, same structure as before.
 ## Quality gate
 
 SC-002: at least 90% of answers validate on the first paste, measured on 5 sample lists × each
-launch assistant (Claude, Grok, Muse, Dots). The answers are stored as fixtures in
+launch assistant (Claude, Gemini). The answers are stored as fixtures in
 `packages/core/test/fixtures/format-answers/` and replayed in CI. Any change to the template
 must keep this pass rate.

@@ -16,7 +16,7 @@ detail.
 
   Put these in `apps/web/.env.local` as `VITE_GOOGLE_CLIENT_ID` and `VITE_GOOGLE_API_KEY`
   (research R28). The hosted build uses the project's own client.
-- Any AI assistant (Claude, Grok, Muse or Dots) for the format round trip.
+- An AI assistant (Claude or Gemini) for the format round trip.
 
 ## Setup
 

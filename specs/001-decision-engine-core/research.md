@@ -150,7 +150,7 @@ Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as foll
   - Extraction order: a fenced ```json block, then the first balanced `{…}` or `[…]`.
   - Validation uses the Zod schema, which is also exported as JSON Schema. Errors are reported
     per item and field, and a **correction instruction** quotes the errors back for the AI.
-- **Rationale**: Works with any assistant, including the launch list (Claude, Grok, Muse, Dots),
+- **Rationale**: Works with any assistant, including the launch list (Claude, Gemini),
   with no integration. The same format later serves connected agents (US5).
 - **Validation of SC-002**: a fixture set of real answers from each launch assistant for 5 sample
   lists, collected manually and replayed in CI.

@@ -444,8 +444,8 @@ device, and confirm the relay's storage contains no readable option titles.
 - **SC-001**: A first-time user goes from pasting a 10-item list to a saved project in under
   3 minutes, including the round trip to their own AI assistant.
 - **SC-002**: At least 90% of AI answers produced from the format instruction by mainstream
-  assistants validate on the first paste (measured with the launch agent list: Claude, Grok,
-  Muse, Dots).
+  assistants validate on the first paste (measured with the launch agent list: Claude and
+  Gemini).
 - **SC-003**: A collaborator goes from opening a share link to their first grade in under
   1 minute.
 - **SC-004**: Input from one participant appears for others within 30 seconds in 95% of cases
@@ -467,7 +467,7 @@ device, and confirm the relay's storage contains no readable option titles.
 - The project publishes one Google Cloud OAuth client for the hosted app, with only non-sensitive
   per-file scopes, so no Google app verification is needed. Self-hosters can use their own client.
 - "Any AI" in the MVP means a general-purpose chat assistant that can follow instructions and
-  return JSON. The launch compatibility list is Claude, Grok, Muse and Dots.
+  return JSON. The launch compatibility list is Claude and Gemini.
 - Typical projects have up to 200 options and up to 20 active collaborators.
 - Password protection is a privacy feature, not access control: anyone with the password and
   Sheet access can read the project, and a lost password cannot be recovered.
