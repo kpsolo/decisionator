@@ -220,6 +220,10 @@ export class ModuleHost {
     return entry.strategy;
   }
 
+  listStrategies(): { manifest: PluginManifest; strategy: StrategyPlugin }[] {
+    return Array.from(this.strategies.values());
+  }
+
   getIdeaSource(id: string): IdeaSourcePlugin {
     const entry = this.ideaSources.get(id);
     if (!entry) {

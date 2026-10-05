@@ -21,6 +21,7 @@ export interface TallyStrategyInput {
   ballots?: { by: string; ranking: string[] }[];
   grades?: { optionId: string; average: number; count: number }[];
   settings: unknown;
+  runInput?: unknown;
 }
 
 export interface TallyStrategyPlugin {
@@ -35,6 +36,9 @@ export interface RunTallyOptions {
   strategyId: string;
   strategyVersion: string;
   triggeredBy: string;
+  settings?: unknown;
+  runInput?: unknown;
+  usesRandomness?: boolean;
   seed?: string; // Optional CSPRNG 32 hex chars, generated if not provided
 }
 
@@ -67,6 +71,9 @@ export async function runTally({
   strategyId,
   strategyVersion,
   triggeredBy,
+  settings,
+  runInput,
+  usesRandomness,
   seed = generateRandomSeed(),
 }: RunTallyOptions): Promise<OutcomeRecord> {
   const currentRound = snapshot.project.voting?.round ?? 1;
@@ -90,6 +97,8 @@ export async function runTally({
     count: s.count,
   }));
 
+  const effectiveSettings = settings !== undefined ? settings : { topN };
+
   // 3. Assemble StrategyInput
   const strategyInput: TallyStrategyInput = {
     options: snapshot.options
@@ -97,7 +106,8 @@ export async function runTally({
       .map((o) => ({ id: o.id, title: o.title })),
     ballots: effectiveBallots.map((b) => ({ by: b.by, ranking: b.ranking })),
     grades: gradesList,
-    settings: { topN },
+    settings: effectiveSettings,
+    runInput,
   };
 
   // 4. Validate strategy check
@@ -113,6 +123,12 @@ export async function runTally({
 
   const winner = decision.chosen[0] || decision.order?.[0]?.optionId || "";
 
+  // If strategy declares usesRandomness or Borda used seeded-random, record seed
+  const recordSeed =
+    usesRandomness === true ||
+    decision.tieBreak === "seeded-random" ||
+    decision.seedUsed !== undefined;
+
   // 6. Build immutable OutcomeRecord
   const outcome: OutcomeRecord = {
     round: currentRound,
@@ -120,7 +136,7 @@ export async function runTally({
       id: strategyId,
       version: strategyVersion,
     },
-    settings: { topN },
+    settings: effectiveSettings as Record<string, unknown>,
     inputs: strategyInput as OutcomeRecord["inputs"],
     result: {
       winner,
@@ -129,7 +145,7 @@ export async function runTally({
       explanation: decision.explanation || "",
     },
     tieBreak: decision.tieBreak || "none",
-    seed: decision.tieBreak === "seeded-random" ? seed : undefined,
+    seed: recordSeed ? seed : undefined,
     triggeredBy,
     at: closedAt,
   };

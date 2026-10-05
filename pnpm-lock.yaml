@@ -44,6 +44,15 @@ importers:
       '@decisionator/strategy-borda':
         specifier: workspace:*
         version: link:../../plugins/strategy-borda
+      '@decisionator/strategy-owner-pick':
+        specifier: workspace:*
+        version: link:../../plugins/strategy-owner-pick
+      '@decisionator/strategy-random':
+        specifier: workspace:*
+        version: link:../../plugins/strategy-random
+      '@decisionator/strategy-weighted':
+        specifier: workspace:*
+        version: link:../../plugins/strategy-weighted
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -228,6 +237,54 @@ importers:
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.5)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(terser@5.51.2)(tsx@4.23.15)
 
   plugins/strategy-borda:
+    dependencies:
+      '@decisionator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@decisionator/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.5)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(terser@5.51.2)(tsx@4.23.15)
+
+  plugins/strategy-owner-pick:
+    dependencies:
+      '@decisionator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@decisionator/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.5)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(terser@5.51.2)(tsx@4.23.15)
+
+  plugins/strategy-random:
+    dependencies:
+      '@decisionator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@decisionator/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.5)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(terser@5.51.2)(tsx@4.23.15)
+
+  plugins/strategy-weighted:
     dependencies:
       '@decisionator/core':
         specifier: workspace:*

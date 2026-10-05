@@ -1,0 +1,28 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.strategy.weighted",
+  "name": "Random weighted by average grade strategy",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "strategy": {
+      "usesRandomness": true,
+      "minOptions": 2,
+      "requiresWeights": false,
+      "ballots": "none"
+    }
+  },
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "includeUngraded": {
+        "type": "boolean",
+        "default": false,
+        "description": "Give ungraded options a baseline weight equal to the lowest grade (1)"
+      }
+    }
+  }
+}

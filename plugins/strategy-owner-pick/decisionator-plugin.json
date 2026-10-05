@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.strategy.owner-pick",
+  "name": "Owner pick strategy",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "strategy": {
+      "usesRandomness": false,
+      "minOptions": 1,
+      "requiresWeights": false,
+      "ballots": "none",
+      "interactive": true
+    }
+  },
+  "runInputSchema": {
+    "type": "string",
+    "description": "Selected option ID"
+  }
+}

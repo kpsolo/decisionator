@@ -398,12 +398,12 @@ closes voting. The result shows the winner, the order and the points, and Verify
 **Goal**: owner pick, uniform random and random weighted by average grade, all verifiable.
 **Independent Test**: run a weighted draw; Verify says "Reproduced". Install a sample strategy.
 
-- [ ] T090 [P] [US4] Write contract tests in `plugins/strategy-owner-pick/test/contract.test.ts`, `plugins/strategy-random/test/contract.test.ts` and `plugins/strategy-weighted/test/contract.test.ts`. For weighted: ungraded options excluded unless included, and frequencies within tolerance over 10 000 seeds (FR-030, FR-031).
-- [ ] T091 [P] [US4] Implement `plugins/strategy-owner-pick/src/index.ts` (`interactive: true`, `runInputSchema` = an option ID, `usesRandomness: false`) (FR-030).
-- [ ] T092 [P] [US4] Implement `plugins/strategy-random/src/index.ts` (uniform, via `rng.int(n)`) (FR-030).
-- [ ] T093 [P] [US4] Implement `plugins/strategy-weighted/src/index.ts` (weight = average grade; owner setting `includeUngraded`, default false) (FR-030).
-- [ ] T094 [US4] Build the strategy chooser in `apps/web/src/features/decide/StrategyChooser.tsx`: list registered strategies, explain unmet preconditions in plain language (FR-032), and record outcomes through `tally.ts` (FR-030).
-- [ ] T095 [US4] Generalize `apps/web/src/features/voting/VerifyButton.tsx` to verify any strategy outcome (FR-031).
+- [x] T090 [P] [US4] Write contract tests in `plugins/strategy-owner-pick/test/contract.test.ts`, `plugins/strategy-random/test/contract.test.ts` and `plugins/strategy-weighted/test/contract.test.ts`. For weighted: ungraded options excluded unless included, and frequencies within tolerance over 10 000 seeds (FR-030, FR-031).
+- [x] T091 [P] [US4] Implement `plugins/strategy-owner-pick/src/index.ts` (`interactive: true`, `runInputSchema` = an option ID, `usesRandomness: false`) (FR-030).
+- [x] T092 [P] [US4] Implement `plugins/strategy-random/src/index.ts` (uniform, via `rng.int(n)`) (FR-030).
+- [x] T093 [P] [US4] Implement `plugins/strategy-weighted/src/index.ts` (weight = average grade; owner setting `includeUngraded`, default false) (FR-030).
+- [x] T094 [US4] Build the strategy chooser in `apps/web/src/features/decide/StrategyChooser.tsx`: list registered strategies, explain unmet preconditions in plain language (FR-032), and record outcomes through `tally.ts` (FR-030).
+- [x] T095 [US4] Generalize `apps/web/src/features/voting/VerifyButton.tsx` to verify any strategy outcome (FR-031).
 
 ---
 

@@ -5,6 +5,7 @@ import { bordaStrategy } from "@decisionator/strategy-borda";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { getGoogleConfig } from "../config/google.js";
+import { StrategyChooser } from "../features/decide/StrategyChooser.js";
 import { useRole } from "../features/project/useRole.js";
 import { PasswordSetup } from "../features/sharing/PasswordSetup.js";
 import { ShareDialog } from "../features/sharing/ShareDialog.js";
@@ -274,6 +275,21 @@ export function ProjectResultsPage() {
         liveResults={liveResults}
         isOpen={isOpen}
       />
+
+      {snapshot.role === "owner" && (
+        <StrategyChooser
+          snapshot={snapshot}
+          fileId={fileId}
+          currentUser={snapshot.project.title}
+          isOwner={true}
+          onOutcomeCreated={(newOutcome) => {
+            setSnapshot({
+              ...snapshot,
+              outcomes: [newOutcome, ...snapshot.outcomes],
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

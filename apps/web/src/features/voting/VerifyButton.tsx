@@ -1,8 +1,19 @@
 import type { OutcomeRecord } from "@decisionator/core";
 import { createRng } from "@decisionator/core";
+import type { StrategyPlugin } from "@decisionator/plugin-sdk";
 import { bordaStrategy } from "@decisionator/strategy-borda";
+import { ownerPickStrategy } from "@decisionator/strategy-owner-pick";
+import { randomStrategy } from "@decisionator/strategy-random";
+import { weightedStrategy } from "@decisionator/strategy-weighted";
 import type React from "react";
 import { useState } from "react";
+
+const STRATEGY_REGISTRY: Record<string, StrategyPlugin> = {
+  "org.decisionator.strategy.borda": bordaStrategy,
+  "org.decisionator.strategy.owner-pick": ownerPickStrategy,
+  "org.decisionator.strategy.random": randomStrategy,
+  "org.decisionator.strategy.weighted": weightedStrategy,
+};
 
 export interface VerifyButtonProps {
   outcome: OutcomeRecord;
@@ -12,8 +23,8 @@ export const VerifyButton: React.FC<VerifyButtonProps> = ({ outcome }) => {
   const [status, setStatus] = useState<"idle" | "reproduced" | "mismatch" | "unavailable">("idle");
 
   const handleVerify = () => {
-    // Check if the recorded strategy matches the installed Borda strategy
-    if (outcome.strategy.id !== "org.decisionator.strategy.borda") {
+    const plugin = STRATEGY_REGISTRY[outcome.strategy.id];
+    if (!plugin) {
       setStatus("unavailable");
       return;
     }
@@ -23,19 +34,26 @@ export const VerifyButton: React.FC<VerifyButtonProps> = ({ outcome }) => {
       const rng = createRng(recordedSeed);
 
       // Re-run the strategy decide with recorded inputs
-      // biome-ignore lint/suspicious/noExplicitAny: Borda extended result returns order and tieBreak
-      const reResult = bordaStrategy.decide(outcome.inputs as any, rng) as any;
+      // biome-ignore lint/suspicious/noExplicitAny: reResult may contain extended fields
+      const reResult = plugin.decide(outcome.inputs as any, rng) as any;
 
       const winnerMatched = reResult.chosen[0] === outcome.result.winner;
-      const orderMatched =
-        reResult.order.length === outcome.result.order.length &&
-        reResult.order.every(
-          (item: { optionId: string; points: number }, idx: number) =>
-            item.optionId === outcome.result.order[idx]?.optionId &&
-            item.points === outcome.result.order[idx]?.points
-        );
+      const expectedChosen = outcome.result.chosen || [outcome.result.winner];
+      const chosenMatched =
+        reResult.chosen.length === expectedChosen.length &&
+        reResult.chosen.every((id: string, idx: number) => id === expectedChosen[idx]);
 
-      if (winnerMatched && orderMatched) {
+      let orderMatched = true;
+      if (reResult.order && outcome.result.order) {
+        orderMatched =
+          reResult.order.length === outcome.result.order.length &&
+          reResult.order.every(
+            (item: { optionId: string }, idx: number) =>
+              item.optionId === outcome.result.order[idx]?.optionId
+          );
+      }
+
+      if (winnerMatched && chosenMatched && orderMatched) {
         setStatus("reproduced");
       } else {
         setStatus("mismatch");
