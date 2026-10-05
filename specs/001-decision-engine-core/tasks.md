@@ -435,9 +435,9 @@ on an option.
 **Independent Test**: install a sample plugin, approve permissions, change a setting, disable it.
 The app keeps working.
 
-- [ ] T104 [US6] **Planning checkpoint**: adapt research R4 to static hosting. GitHub Pages cannot set CSP headers, so use `<iframe sandbox="allow-scripts" srcdoc>` with a `<meta http-equiv="Content-Security-Policy">` built from granted `net:` permissions. Record this in research.md.
-- [ ] T105 [P] [US6] Write plugin runtime tests in `apps/web/test/plugin-host/runtime.test.ts`: RPC envelope, timeouts and teardown, `PERMISSION_DENIED`, incompatible `platform.*` refusal, and determinism stubs for strategies (FR-052).
-- [ ] T106 [US6] Build the sandbox host in `apps/web/src/host/sandbox/`: frame manager, `postMessage` RPC per `contracts/plugin-runtime.md`, the capability bridge (clipboard text, OAuth token via Identity Services, project snapshot) and UI slots (FR-050, FR-052).
+- [x] T104 [US6] **Planning checkpoint**: adapt research R4 to static hosting. GitHub Pages cannot set CSP headers, so use `<iframe sandbox="allow-scripts" srcdoc>` with a `<meta http-equiv="Content-Security-Policy">` built from granted `net:` permissions. Record this in research.md.
+- [x] T105 [P] [US6] Write plugin runtime tests in `apps/web/test/plugin-host/runtime.test.ts`: RPC envelope, timeouts and teardown, `PERMISSION_DENIED`, incompatible `platform.*` refusal, and determinism stubs for strategies (FR-052).
+- [x] T106 [US6] Build the sandbox host in `apps/web/src/host/sandbox/`: frame manager, `postMessage` RPC per `contracts/plugin-runtime.md`, the capability bridge (clipboard text, OAuth token via Identity Services, project snapshot) and UI slots (FR-050, FR-052).
 - [ ] T107 [US6] Build install and management in `apps/web/src/features/plugins/PluginsPage.tsx` (FR-050, FR-061):
   - install from file or URL (with an "unreviewed source" warning);
   - manifest validation (Ajv, `contracts/plugin-manifest.schema.json`);

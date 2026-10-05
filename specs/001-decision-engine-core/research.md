@@ -246,16 +246,21 @@ Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as foll
 ## R4. Plugin runtime, isolation and permissions
 
 - **Decision**: All third-party *and* built-in plugin code runs **in the UI, inside a sandboxed
-  iframe per plugin** served by the node from `/_plugin/<id>/<version>/frame` with HTTP headers
-  `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src <node-origin>;
-  connect-src <hosts declared in manifest>`. The frame has an opaque origin (no access to node
-  cookies/storage/API). The host talks to the plugin over a typed `postMessage` RPC
-  (see [contracts/plugin-runtime.md](./contracts/plugin-runtime.md)). Every call has a timeout
-  (default 5 s, strategies 2 s); a frame that errors or hangs is torn down and reported.
+  iframe per plugin**. In a node-hosted environment, it is served from `/_plugin/<id>/<version>/frame`
+  with HTTP response headers. For **static hosting (GitHub Pages)**, GitHub Pages cannot set custom
+  HTTP response headers. Therefore, the web app instantiates `<iframe sandbox="allow-scripts" srcdoc="...">`
+  with an inline `<meta http-equiv="Content-Security-Policy">` synthesized dynamically from granted
+  `net:` permissions:
+  `default-src 'none'; script-src 'unsafe-inline' blob:; connect-src <granted origins>; style-src 'unsafe-inline'`.
+  The frame has an opaque origin (no access to parent cookies/storage/API). The host talks to the
+  plugin over a typed `postMessage` RPC (see [contracts/plugin-runtime.md](./contracts/plugin-runtime.md)).
+  Every call has a timeout (default 5 s, strategies 2 s); a frame that errors or hangs is torn down and
+  reported (FR-052).
 - **Rationale**: The browser's sandbox + CSP gives *enforced* network allow-listing and failure
   isolation (constitution: permission model, failure isolation) with zero native dependencies.
-  The node process runs no third-party code at all, so the agentic API and stored data are never
-  exposed to plugins. Built-ins use the identical mechanism (Principle I).
+  The static hosting adaptation using `srcdoc` and `<meta http-equiv="Content-Security-Policy">`
+  maintains identical security properties on static zero-server hosting (SC-009). Built-ins use the
+  identical mechanism (Principle I).
 - **Alternatives**: Node permission model in child processes (`--allow-net` is experimental and
   2026 CVEs (CVE-2026-21636, CVE-2026-21711) show UDS bypasses — not a security boundary we can
   promise); `isolated-vm` / QuickJS-WASM in the node (heavy, native or slow, and still needs a

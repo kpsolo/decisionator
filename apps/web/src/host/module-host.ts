@@ -83,7 +83,7 @@ export function validateManifest(
     }
     if (!semver.satisfies(hostVersion, range)) {
       throw new Error(
-        `Module "${typedManifest.id}" requires ${key} version ${range}, but host provides ${hostVersion}`
+        `Built for Deci ${key} ${range}, this app provides ${hostVersion} (requires ${key} version ${range})`
       );
     }
   }
