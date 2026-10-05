@@ -183,7 +183,13 @@ importers:
       '@decisionator/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
     devDependencies:
+      fake-indexeddb:
+        specifier: ^6.2.5
+        version: 6.2.5
       typescript:
         specifier: ^5.7.3
         version: 5.9.3

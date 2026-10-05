@@ -140,12 +140,12 @@ story work starts until this phase is done.**
 
 ### Google plumbing and the access spike
 
-- [ ] T030 Implement Google auth in `plugins/store-google-sheets/src/auth.ts` (FR-008, FR-081):
+- [x] T030 Implement Google auth in `plugins/store-google-sheets/src/auth.ts` (FR-008, FR-081):
   - Identity Services token model requesting only `https://www.googleapis.com/auth/drive.file`;
   - token kept in memory only;
   - silent re-request on expiry, else a one-click prompt;
   - identity from Drive `about.get?fields=user(displayName,emailAddress)` (research R19).
-- [ ] T031 Implement the Google REST client in `plugins/store-google-sheets/src/google-api.ts` (FR-007):
+- [x] T031 Implement the Google REST client in `plugins/store-google-sheets/src/google-api.ts` (FR-007):
   - typed `fetch` wrappers for the Drive v3 and Sheets v4 calls listed in `contracts/sheet-store.md`;
   - map `429` and `403 rateLimitExceeded` to `RateLimitedError`;
   - map `404` / `403 insufficientPermissions` to `ProjectUnavailableError(reason)`.
@@ -153,11 +153,11 @@ story work starts until this phase is done.**
   - If not, test fallback 1 (open the Sheet URL in Google first, then the Picker).
   - Record the result and the chosen flow in `specs/001-decision-engine-core/research.md` § R21.
   - US2 T065 depends on this outcome. If neither flow meets FR-016 (one sign-in plus one confirmation), stop and revisit FR-016 with the product owner before Phase 4.
-- [ ] T033 [P] Implement the quota budget and back-off in `plugins/store-google-sheets/src/budget.ts`, with tests in `plugins/store-google-sheets/test/budget.test.ts` (FR-020):
+- [x] T033 [P] Implement the quota budget and back-off in `plugins/store-google-sheets/src/budget.ts`, with tests in `plugins/store-google-sheets/test/budget.test.ts` (FR-020):
   - ≤ 20 Sheets reads and ≤ 20 writes per minute per client;
   - truncated exponential back-off with jitter up to 1 s, capped at 64 s;
   - emits `{pausedUntil}` events.
-- [ ] T034 [P] Implement the write queue in `plugins/store-google-sheets/src/queue.ts`, with tests in `plugins/store-google-sheets/test/queue.test.ts` (FR-020):
+- [x] T034 [P] Implement the write queue in `plugins/store-google-sheets/src/queue.ts`, with tests in `plugins/store-google-sheets/test/queue.test.ts` (FR-020):
   - persisted in IndexedDB;
   - flushed at most every 2 s as one `values.append` per tab;
   - survives reloads;
