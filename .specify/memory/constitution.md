@@ -176,7 +176,7 @@ conflicts with it, the constitution wins.
   materially expanding guidance; PATCH for clarifications and wording.
 - **Compliance**: reviewers verify constitution compliance on every PR; plans document their
   Constitution Check. Unjustified complexity is grounds for requesting changes.
-- **Runtime guidance**: day-to-day agent guidance lives in `CLAUDE.md` (generated/updated by
-  `/speckit-plan`) and MUST stay consistent with this document.
+- **Runtime guidance**: day-to-day agent guidance lives in `CLAUDE.md` (kept up to date as
+  plans introduce tech stack and conventions) and MUST stay consistent with this document.
 
 **Version**: 1.0.0 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-05
