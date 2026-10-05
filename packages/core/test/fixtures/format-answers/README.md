@@ -8,11 +8,14 @@ validation and asserts that at least 90% validate on the first paste.
 ## Layout
 
 ```text
-inputs/<NN-name>.txt                      raw idea list, exactly as a user would paste it
-inputs/<NN-name>.hint.txt                 optional {{LOCALE_HINT}} line
-instructions/<NN-name>.txt                generated instruction (template + input + hint); paste this into the assistant
-answers/<NN-name>/<assistant>.txt         the assistant's full reply, unedited (code fences and any extra prose included)
+inputs/<NN-name>.txt                        raw idea list, exactly as a user would paste it (shared by all versions)
+inputs/<NN-name>.hint.txt                   optional {{LOCALE_HINT}} line
+v<X.Y>/instructions/<NN-name>.txt           instruction generated from template version X.Y; paste this into the assistant
+v<X.Y>/answers/<NN-name>/<assistant>.txt    the assistant's full reply to that instruction, unedited
 ```
+
+**Current template: v1.1.** `v1.0/` is kept as the baseline; the SC-002 gate counts only the
+current version's answers.
 
 Assistant file names: `claude.txt` and `gemini.txt`, the launch compatibility list.
 
@@ -25,8 +28,8 @@ node packages/core/test/fixtures/format-answers/build-instructions.mjs
 ## Collecting an answer
 
 1. Open a **new chat** in the assistant, with default settings and no custom instructions.
-2. Paste the whole `instructions/<NN-name>.txt` file as one message.
-3. Copy the **entire** reply, unedited, into `answers/<NN-name>/<assistant>.txt`.
+2. Paste the whole `v1.1/instructions/<NN-name>.txt` file as one message (as text, not as an attached file).
+3. Copy the **entire** reply, unedited, into `v1.1/answers/<NN-name>/<assistant>.txt`.
 4. Add a line to the table below.
 
 Never fix an answer by hand. A broken answer is exactly what the test should count.
@@ -46,11 +49,22 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 
 ## Results so far
 
-**10/10 answers validate (100%; SC-002 target ≥ 90%)**, counted after the extraction rules,
+**v1.1:** Claude 5/5 valid; Gemini 0/5 collected.
+
+**v1.0 (baseline): 10/10 answers validate (100%; SC-002 target ≥ 90%)**, counted after the extraction rules,
 including rule 5 for citation markers. Gemini never used a code fence, and 4 of its 5 answers
 carried `[cite: N]` markers.
 
 ## Collected answers
+
+### v1.1
+
+| List | Assistant | Model / app | Date | Notes |
+|------|-----------|-------------|------|-------|
+| 01–05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | v1.0 answers adjusted to the new rules: project titles from headings, side notes removed, no inferred details in title-only ideas, URLs in `links` |
+| 01–05 | gemini | — | — | to collect |
+
+### v1.0 (baseline)
 
 | List | Assistant | Model / app | Date | Notes |
 |------|-----------|-------------|------|-------|

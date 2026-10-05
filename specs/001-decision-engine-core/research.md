@@ -153,7 +153,8 @@ Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as foll
 - **Rationale**: Works with any assistant, including the launch list (Claude, Gemini),
   with no integration. The same format later serves connected agents (US5).
 - **Validation of SC-002**: a fixture set of real answers from each launch assistant for 5 sample
-  lists, collected manually and replayed in CI.
+  lists, collected manually and replayed in CI. The v1.0 run (10/10 valid) led to template v1.1
+  (see the contract changelog).
 
 ## R25. Ranked vote tally
 

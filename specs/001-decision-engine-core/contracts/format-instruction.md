@@ -1,4 +1,4 @@
-# Contract: Format Instruction — v1.0.0
+# Contract: Format Instruction — v1.1.0
 
 The text Deci shows when no AI is connected (spec FR-002). The user copies it to any AI
 assistant and pastes the answer back. The same template is sent automatically to connected
@@ -14,19 +14,23 @@ agents in US5. The template is versioned together with
 Turn the idea list below into JSON for Deci.
 
 Rules:
-- Reply with ONLY one JSON code block, no other text.
+- Reply with ONLY one JSON code block: no other text, no citations.
 - Use exactly this structure: {"format": "decisionator.options/v1", "project": {"title": "..."}, "options": [ ... ]}
-- One option per distinct idea. Keep the author's meaning; do not invent new ideas.
-- For each option: "title" (short, required), "description" (1–3 sentences),
-  "category" (one short group name; reuse the same names across options),
-  "tags" (up to 5), "pros" and "cons" (short phrases, optional),
-  "effort" (one of XS, S, M, L, XL, optional).
-- If an idea is unclear, keep its original text as the title and leave other fields out.
+- Project title: the list's own heading if it has one, otherwise a short summary of the list.
+- One option per distinct idea; merge duplicates. Skip lines that are not ideas
+  (headings, notes, to-dos, questions for people).
+- For titles and descriptions use only what the list says; do not invent ideas, features or facts.
+  If an idea has only a title, write at most one short sentence.
+- For each option: "title" (short, required; drop side notes such as "??" or "(check)"),
+  "description" (1–3 sentences), "category" (one short group name; reuse the same names),
+  "tags" (up to 5), "links" (any URLs from the list, as [{"url": "..."}]),
+  and optionally your own short estimates: "pros", "cons", "effort" (XS, S, M, L or XL).
+- Write all text in the same language as the idea list, unless told otherwise below.
 {{LOCALE_HINT}}
 
 Example of the expected shape:
 ```json
-{"format":"decisionator.options/v1","project":{"title":"Which app do we build next?"},"options":[{"title":"Receipt splitter","description":"Photograph a receipt and split items between people.","category":"Finance","tags":["mobile"],"effort":"S"}]}
+{"format":"decisionator.options/v1","project":{"title":"Weekend plans"},"options":[{"title":"Picnic in the park","description":"Bring food and games to the city park.","category":"Outdoors","tags":["food","friends"],"effort":"XS"}]}
 ```
 
 Idea list:
@@ -60,7 +64,15 @@ Reply with the corrected JSON only, in one code block, same structure as before.
 
 ## Quality gate
 
-SC-002: at least 90% of answers validate on the first paste, measured on 5 sample lists × each
-launch assistant (Claude, Gemini). The answers are stored as fixtures in
-`packages/core/test/fixtures/format-answers/` and replayed in CI. Any change to the template
-must keep this pass rate.
+SC-002: at least 90% of answers validate on the first paste. This is measured on 5 sample lists
+× each launch assistant (Claude, Gemini), for the **current** template version. Answers are
+stored per template version in `packages/core/test/fixtures/format-answers/v<major.minor>/` and
+replayed in CI. Older versions stay as a baseline. Any change to the template must re-collect
+answers and keep this pass rate.
+
+## Changelog
+
+| Version | Date | Change | Evidence |
+|---------|------|--------|----------|
+| 1.1.0 | 2026-10-05 | Same-language rule; skip non-ideas and merge duplicates (replaces "keep unclear text as title"); clean titles; no invented facts, one sentence for title-only ideas; URLs into `links`; project title from the list's heading; "no citations"; neutral example project title | v1.0 Gemini answers: Ukrainian output without a hint (02, 05), "ask Ben…" kept as an option (02), notes left in titles (02), invented features (03), copied example project title (01), `[cite: N]` markers (02–05) |
+| 1.0.0 | 2026-10-05 | Initial template | — |
