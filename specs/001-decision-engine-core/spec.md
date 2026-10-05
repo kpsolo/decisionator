@@ -24,6 +24,8 @@ collaborators."
   by group strategy modules; owner triggers the outcome (US5 #6–7, FR-027c–FR-027d).
 - Q: How are third-party plugins obtained in v1? → A: Local package file or URL only; no
   in-app catalog in v1 (FR-034).
+- Planning refinement (research R8): remote-agent tunnel traffic is visible to the relay
+  operator in transit; disclosed in UI (FR-027a).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -321,8 +323,11 @@ and confirm it disappears from the UI without affecting other features.
   non-network feature works offline. Sharing and remote agent access MUST go through an
   optional sync/relay service that anyone can self-host; a user who never shares never needs it.
 - **FR-027a**: Only decisions the owner explicitly shares (and agent requests the user issues)
-  MUST be sent to the sync/relay service; the service MUST NOT be able to read decision content
-  it relays (end-to-end protection by default; the mechanism is decided at planning).
+  MUST be sent to the sync/relay service; the service MUST NOT be able to read shared decision
+  content it stores or relays (end-to-end protection). Exception: when a user chooses the
+  "remote agent" channel, the scoped context that agent reads passes through the relay and
+  could be visible to the relay operator in transit; the UI MUST state this before the request
+  is created, and local agents or a self-hosted relay avoid it.
 - **FR-027b**: Participants MUST be identified to each other by a display name and a stable
   identity created on their device; no central account sign-up is required.
 - **FR-027c**: Collaborators with contribute access MUST be able to cast a ballot (vote or
