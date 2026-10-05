@@ -226,44 +226,44 @@ comment and view stats.
 - [x] T046 [US1] Implement the Google Sheets store in `plugins/store-google-sheets/src/store.ts` (FR-007, FR-009, FR-010, FR-011):
   - `signIn`, `listProjects` (Drive `files.list` filtered by `appProperties`), `createProject`, `openProject` (one `values.batchGet`), `append` (author stamped from `about.get`, via queue and budget), `updateOptions` (owner, `values.batchUpdate`), `updateMeta` and `export`;
   - T037 must pass.
-- [ ] T047 [US1] Build the paste step in `apps/web/src/features/paste-format/PasteStep.tsx` (FR-001):
+- [x] T047 [US1] Build the paste step in `apps/web/src/features/paste-format/PasteStep.tsx` (FR-001):
   - a paste box with a 200 KB limit;
   - messages for empty or non-text input and for more than 500 lines (preview cap);
   - **Format with my AI** and **Use as plain list** actions.
-- [ ] T048 [US1] Build the format round trip in `apps/web/src/features/paste-format/FormatStep.tsx` (FR-002, FR-004):
+- [x] T048 [US1] Build the format round trip in `apps/web/src/features/paste-format/FormatStep.tsx` (FR-002, FR-004):
   - copy-instruction button;
   - answer paste box;
   - live validation result;
   - per-item error list;
   - **Copy correction for AI** button;
   - a "choose block" prompt when several JSON blocks are found.
-- [ ] T049 [US1] Build the preview editor in `apps/web/src/features/preview/PreviewEditor.tsx`: edit, remove and add options; edit the project title and description; flag duplicate titles; confirm (FR-006).
-- [ ] T050 [US1] Implement draft autosave in `apps/web/src/features/paste-format/draft.ts`: persist `pastedText`, `aiAnswer` and `preview` to IndexedDB on change, and restore on return (FR-006).
-- [ ] T051 [US1] Implement sign-in and creation in `apps/web/src/features/project/createProject.ts` (FR-007, FR-008):
+- [x] T049 [US1] Build the preview editor in `apps/web/src/features/preview/PreviewEditor.tsx`: edit, remove and add options; edit the project title and description; flag duplicate titles; confirm (FR-006).
+- [x] T050 [US1] Implement draft autosave in `apps/web/src/features/paste-format/draft.ts`: persist `pastedText`, `aiAnswer` and `preview` to IndexedDB on change, and restore on return (FR-006).
+- [x] T051 [US1] Implement sign-in and creation in `apps/web/src/features/project/createProject.ts` (FR-007, FR-008):
   - request Google sign-in only on **Create project**;
   - call `createProject` and navigate to `#/p/<fileId>`;
   - if sign-in is declined, keep the draft and explain that saving and sharing need Google.
-- [ ] T052 [US1] Build the project page in `apps/web/src/routes/project.tsx` and `apps/web/src/features/grading/OptionDetail.tsx`: the option list (order, category, average, comment count) and option detail (description, pros/cons, effort, links) (FR-012).
-- [ ] T053 [US1] Build the grade control in `apps/web/src/features/grading/GradeInput.tsx`: 1–5, keyboard-operable radio group, changeable (latest wins), showing the author's name and time (FR-012, FR-014).
-- [ ] T054 [US1] Build comments in `apps/web/src/features/comments/CommentThread.tsx` (FR-012, FR-014):
+- [x] T052 [US1] Build the project page in `apps/web/src/routes/project.tsx` and `apps/web/src/features/grading/OptionDetail.tsx`: the option list (order, category, average, comment count) and option detail (description, pros/cons, effort, links) (FR-012).
+- [x] T053 [US1] Build the grade control in `apps/web/src/features/grading/GradeInput.tsx`: 1–5, keyboard-operable radio group, changeable (latest wins), showing the author's name and time (FR-012, FR-014).
+- [x] T054 [US1] Build comments in `apps/web/src/features/comments/CommentThread.tsx` (FR-012, FR-014):
   - markdown rendered with markdown-it and DOMPurify;
   - body "1–10 000 chars";
   - edit via a `replaces` row;
   - the owner can hide others' comments (hidden ones shown only in history).
-- [ ] T055 [P] [US1] Implement stats in `packages/core/src/stats/aggregate.ts`, with tests in `packages/core/test/stats.test.ts` (FR-013):
+- [x] T055 [P] [US1] Implement stats in `packages/core/src/stats/aggregate.ts`, with tests in `packages/core/test/stats.test.ts` (FR-013):
   - per option: average (1 decimal), count, distribution `[n1..n5]`, visible comments;
   - sort keys `average | count | comments | bordaPoints | title`;
   - group by `category` or tag (an option appears under each of its tags);
   - a perf test: 200 options sorted and grouped in < 1 s (SC-008).
-- [ ] T056 [US1] Build the stats view in `apps/web/src/features/stats/StatsView.tsx`: sort and group controls, distribution bars, and an accessible table fallback (FR-013).
-- [ ] T057 [US1] Build My projects in `apps/web/src/routes/home.tsx`: `listProjects()` with the last-opened time, an offline view from the `snapshots` store, and **New project** as the empty-state action (FR-010).
-- [ ] T058 [P] [US1] Build export in `apps/web/src/features/project/ExportButton.tsx`: download `decisionator.project/v1` JSON with no tokens or passwords (FR-080, FR-081).
-- [ ] T059 [US1] Build delete and forget in `apps/web/src/features/project/DeleteProject.tsx` and `deleteProject`/`forgetProject` in `plugins/store-google-sheets/src/store.ts` (FR-025, constitution V):
+- [x] T056 [US1] Build the stats view in `apps/web/src/features/stats/StatsView.tsx`: sort and group controls, distribution bars, and an accessible table fallback (FR-013).
+- [x] T057 [US1] Build My projects in `apps/web/src/routes/home.tsx`: `listProjects()` with the last-opened time, an offline view from the `snapshots` store, and **New project** as the empty-state action (FR-010).
+- [x] T058 [P] [US1] Build export in `apps/web/src/features/project/ExportButton.tsx`: download `decisionator.project/v1` JSON with no tokens or passwords (FR-080, FR-081).
+- [x] T059 [US1] Build delete and forget in `apps/web/src/features/project/DeleteProject.tsx` and `deleteProject`/`forgetProject` in `plugins/store-google-sheets/src/store.ts` (FR-025, constitution V):
   - owner only for delete; confirmation by typing the project name;
   - Drive `files.update {trashed: true}`;
   - clear the project's IndexedDB drafts, snapshot and queue; remove it from My projects;
   - non-owners get "Remove from my list" (`forgetProject`, local only).
-- [ ] T060 [US1] Build unavailable states in `apps/web/src/features/project/ProjectUnavailable.tsx`: deleted, trashed or access-lost Sheets show the detectable reason, and never create a silent copy (spec edge cases).
+- [x] T060 [US1] Build unavailable states in `apps/web/src/features/project/ProjectUnavailable.tsx`: deleted, trashed or access-lost Sheets show the detectable reason, and never create a silent copy (spec edge cases).
 
 **Checkpoint**: US1 works alone (personal idea board), and quickstart US1 passes.
 
