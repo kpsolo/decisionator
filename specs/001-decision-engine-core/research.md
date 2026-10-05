@@ -86,11 +86,13 @@ Google Sheet. R18–R28 below are the MVP decisions. R1–R17 stay valid as foll
 - **Spec impact**: FR-018 is refined. Turning off link sharing works for everyone at once;
   removing an individual requires invite-by-email mode, or rotating the project to a new copy.
   The UI explains this when the owner tries to remove someone from a link-shared project.
-- **Risk / spike (Increment 0)**: Google's documentation doesn't say whether
-  `setFileIds` lets a user grant access to a file that someone else shared only by link. A spike
-  confirms this before UI work starts. Fallback 1: the link page first opens the Sheet in Google
-  (which adds it to the visitor's "Shared with me"), then shows the Picker. Fallback 2: invite by
-  email.
+- **Risk / spike (Increment 0, T032 outcome)**:
+  - Spike conclusion: Google Picker's `setFileIds([fileId])` works seamlessly when the file is already associated with the user's account. However, for an anonymous/fresh account receiving only a public link, Drive can reject direct picker opening before the file is added to "Shared with me".
+  - **Adopted flow (US2 T065)**: The link join page provides a 2-step single-click flow:
+    1. Primary: Opens Picker with `setFileIds([fileId])`.
+    2. Automatic Fallback: If Picker reports access denied / not found, the UI prompts: *"Please click once to view this file in Google Sheets (which registers it in your Drive), then click Confirm"*.
+    3. Direct email invites (`type: "user"`) remain supported for seamless instant access without Picker ambiguity.
+  - This satisfies FR-016 with zero external server dependencies.
 
 ## R22. Password protection
 

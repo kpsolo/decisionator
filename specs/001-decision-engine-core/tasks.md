@@ -149,7 +149,7 @@ story work starts until this phase is done.**
   - typed `fetch` wrappers for the Drive v3 and Sheets v4 calls listed in `contracts/sheet-store.md`;
   - map `429` and `403 rateLimitExceeded` to `RateLimitedError`;
   - map `404` / `403 insufficientPermissions` to `ProjectUnavailableError(reason)`.
-- [ ] T032 **SPIKE (gate)** in `apps/web/src/spikes/PickerSpike.tsx`, against a real Google project: does Picker `setFileIds([fileId])` grant a second account `drive.file` access to a Sheet shared only as "anyone with the link"? (FR-016)
+- [x] T032 **SPIKE (gate)** in `apps/web/src/spikes/PickerSpike.tsx`, against a real Google project: does Picker `setFileIds([fileId])` grant a second account `drive.file` access to a Sheet shared only as "anyone with the link"? (FR-016)
   - If not, test fallback 1 (open the Sheet URL in Google first, then the Picker).
   - Record the result and the chosen flow in `specs/001-decision-engine-core/research.md` § R21.
   - US2 T065 depends on this outcome. If neither flow meets FR-016 (one sign-in plus one confirmation), stop and revisit FR-016 with the product owner before Phase 4.
