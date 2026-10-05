@@ -44,6 +44,12 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 | 04 | `04-mixed-ua-en-team-offsite.txt` + hint | Ukrainian and English mixed in one line, Cyrillic, emoji, with the locale hint "Write descriptions in Ukrainian." | 12; descriptions in Ukrainian |
 | 05 | `05-near-duplicates-brainstorm.txt` | 14 lines with 5 near-duplicate pairs (Product Hunt, X thread, Telegram, YouTube, templates) | 9 after merging duplicates |
 
+## Results so far
+
+**10/10 answers validate (100%; SC-002 target ≥ 90%)**, counted after the extraction rules,
+including rule 5 for citation markers. Gemini never used a code fence, and 4 of its 5 answers
+carried `[cite: N]` markers.
+
 ## Collected answers
 
 | List | Assistant | Model / app | Date | Notes |
@@ -54,4 +60,7 @@ are for judging quality (merging, dropping non-ideas, language), not part of the
 | 04 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 12 options, Ukrainian descriptions and categories |
 | 05 | claude | claude-opus-5-5, Claude Code session | 2026-10-05 | Valid; 9 options, 5 duplicate pairs merged |
 | 05 | gemini | Gemini (app; model not recorded) | 2026-10-05 | Valid; 9 options, duplicates merged. No code fence. Every description ends in a `[cite: 5]` marker (extraction rule 5 strips it). All text in Ukrainian although the list is English and there was no hint |
-| 01–04 | gemini | — | — | to collect |
+| 01 | gemini | Gemini (app; model not recorded) | 2026-10-05 | Valid; 50/50, titles and descriptions verbatim, 12 categories, no code fence. Copied the example's project title ("Which app do we build next?") |
+| 02 | gemini | Gemini (app) | 2026-10-05 | Valid; 17 options (kept "ask Ben…" as a title-only option, per the "unclear idea" rule), notes left in titles ("?? maybe later", "(done already? check)"), URL not moved to `links`, Ukrainian text, 16 `[cite: 2]` markers |
+| 03 | gemini | Gemini (app) | 2026-10-05 | Valid; 20/20, titles kept, but long descriptions that invent features (e.g. "ranked-choice voting", "tested Wi-Fi speeds"), 40 `[cite: 3]` markers |
+| 04 | gemini | Gemini (app) | 2026-10-05 | Valid; 12/12, Ukrainian as hinted, embellished descriptions, 22 `[cite: 4]` markers |
