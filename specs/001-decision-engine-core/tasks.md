@@ -194,7 +194,7 @@ comment and view stats.
 - [x] T036 [P] [US1] Write the SC-002 replay test over the fixture set in `packages/core/test/fixtures/format-answers/` (already collected: 5 sample lists × Claude and Gemini for template versions 1.0, 1.1 and 1.2; v1.2 is current):
   - a replay test in `packages/core/test/format/fixtures.test.ts` asserting that ≥ 90% of the **current template version's** answers validate on the first paste, and reporting older versions without gating on them.
 - [x] T037 [P] [US1] Wire `runProjectStoreContractTests` to the Google Sheets store and the fake backend in `plugins/store-google-sheets/test/contract.test.ts` (FR-009, FR-011).
-- [ ] T038 [P] [US1] Write the E2E test `apps/web/e2e/us1-create.spec.ts` (fake Google), covering quickstart US1 steps 1–8: the SC-001 timing (< 3 min with a scripted AI answer), the delete project flow (confirm by typing name, Sheet in Drive trash, removed from "My projects") (FR-025), and an axe check on the new-project, project, stats and delete-confirmation dialogs (FR-001, FR-002, FR-006, FR-007, FR-012, FR-013, FR-025).
+- [x] T038 [P] [US1] Write the E2E test `apps/web/e2e/us1-create.spec.ts` (fake Google), covering quickstart US1 steps 1–8: the SC-001 timing (< 3 min with a scripted AI answer), the delete project flow (confirm by typing name, Sheet in Drive trash, removed from "My projects") (FR-025), and an axe check on the new-project, project, stats and delete-confirmation dialogs (FR-001, FR-002, FR-006, FR-007, FR-012, FR-013, FR-025).
 
 ### Implementation for User Story 1
 
