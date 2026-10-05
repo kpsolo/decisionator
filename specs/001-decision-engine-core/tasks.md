@@ -181,7 +181,7 @@ comment and view stats.
 
 ### Tests for User Story 1 (write first, must fail)
 
-- [ ] T035 [P] [US1] Write format extraction and validation tests in `packages/core/test/format/extract.test.ts`, covering (FR-004):
+- [x] T035 [P] [US1] Write format extraction and validation tests in `packages/core/test/format/extract.test.ts`, covering (FR-004):
   - a fenced ```json block is preferred;
   - several fenced blocks lead to a "choose" result;
   - a balanced `{…}` fallback;
@@ -191,28 +191,28 @@ comment and view stats.
   - citation markers such as `[cite: 5]` and `[cite_start]` are stripped, with a warning (rule 5; fixture `05/gemini`);
   - a string in `tags`, `pros` or `cons` is wrapped into a one-item list, with a warning (rule 6; fixture `v1.1/01/gemini`);
   - error messages such as `options[2].title: missing`.
-- [ ] T036 [P] [US1] Write the SC-002 replay test over the fixture set in `packages/core/test/fixtures/format-answers/` (already collected: 5 sample lists × Claude and Gemini for template versions 1.0, 1.1 and 1.2; v1.2 is current):
+- [x] T036 [P] [US1] Write the SC-002 replay test over the fixture set in `packages/core/test/fixtures/format-answers/` (already collected: 5 sample lists × Claude and Gemini for template versions 1.0, 1.1 and 1.2; v1.2 is current):
   - a replay test in `packages/core/test/format/fixtures.test.ts` asserting that ≥ 90% of the **current template version's** answers validate on the first paste, and reporting older versions without gating on them.
-- [ ] T037 [P] [US1] Wire `runProjectStoreContractTests` to the Google Sheets store and the fake backend in `plugins/store-google-sheets/test/contract.test.ts` (FR-009, FR-011).
+- [x] T037 [P] [US1] Wire `runProjectStoreContractTests` to the Google Sheets store and the fake backend in `plugins/store-google-sheets/test/contract.test.ts` (FR-009, FR-011).
 - [ ] T038 [P] [US1] Write the E2E test `apps/web/e2e/us1-create.spec.ts` (fake Google), covering quickstart US1 steps 1–8: the SC-001 timing (< 3 min with a scripted AI answer), the delete project flow (confirm by typing name, Sheet in Drive trash, removed from "My projects") (FR-025), and an axe check on the new-project, project, stats and delete-confirmation dialogs (FR-001, FR-002, FR-006, FR-007, FR-012, FR-013, FR-025).
 
 ### Implementation for User Story 1
 
-- [ ] T039 [US1] Build the format instruction in `packages/core/src/format/instruction.ts` (FR-002):
+- [x] T039 [US1] Build the format instruction in `packages/core/src/format/instruction.ts` (FR-002):
   - `buildInstruction(pastedText, localeHint?)` produces the template from `contracts/format-instruction.md` verbatim, with the paste between `<<<IDEAS` and `IDEAS>>>`;
   - `detectLanguage(pastedText)` fills the hint per contract § Language hint (`franc-min` after stripping list markers; under 20 characters or no clear winner → UI language). The format step shows the chosen language and lets the user change it;
   - `buildCorrection(errors[])` produces the correction template.
-- [ ] T040 [US1] Implement extraction in `packages/core/src/format/extract.ts`, following extraction rules 1–4 of `contracts/format-instruction.md` (T035 cases pass) (FR-004).
-- [ ] T041 [US1] Implement validation in `packages/core/src/format/validate.ts` (FR-003, FR-004):
+- [x] T040 [US1] Implement extraction in `packages/core/src/format/extract.ts`, following extraction rules 1–4 of `contracts/format-instruction.md` (T035 cases pass) (FR-004).
+- [x] T041 [US1] Implement validation in `packages/core/src/format/validate.ts` (FR-003, FR-004):
   - validate against the `decisionator.options/v1` Zod schema, mirroring `contracts/options-format.schema.json`: options "minItems 1, maxItems 500", title "1–200";
   - return per-item, per-field errors and warnings;
   - normalize to `Option[]`.
-- [ ] T042 [P] [US1] Implement the plain-list parser in `plugins/source-paste/src/plain-list.ts`:
+- [x] T042 [P] [US1] Implement the plain-list parser in `plugins/source-paste/src/plain-list.ts`:
   - split lines;
   - strip `-`, `*`, `•`, `1.`, `1)` and `[ ]`;
   - trim and drop empty lines;
   - default preview cap of 500 items, the format's maximum; the user can lower it (spec FR-005, Edge Cases).
-- [ ] T043 [US1] Implement the paste idea source in `plugins/source-paste/src/index.ts`, following the `IdeaSource` contract (`input: "clipboard"`), and register it in the module host. It returns candidates from either validated AI JSON or the plain-list parser (FR-001, FR-005).
+- [x] T043 [US1] Implement the paste idea source in `plugins/source-paste/src/index.ts`, following the `IdeaSource` contract (`input: "clipboard"`), and register it in the module host. It returns candidates from either validated AI JSON or the plain-list parser (FR-001, FR-005).
 - [ ] T044 [US1] Implement Sheet creation in `plugins/store-google-sheets/src/layout.ts` (FR-007):
   - `spreadsheets.create` with tabs `meta`, `options`, `grades`, `comments`, `rankings`, `outcomes` and their header rows exactly as in `contracts/sheet-store.md`;
   - Drive `appProperties` `decisionator=project` and `formatVersion=1`;
