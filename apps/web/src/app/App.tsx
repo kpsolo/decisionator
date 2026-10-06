@@ -1,6 +1,7 @@
 import { QuotaBudget } from "@decisionator/store-google-sheets";
-import { Blocks, Plus, Scale, Settings } from "lucide-react";
+import { Blocks, Plus, Settings } from "lucide-react";
 import { Link, NavLink, useRoutes } from "react-router-dom";
+import { DeciIcon } from "../components/DeciLogo.js";
 import { ThemeProvider } from "../components/theme-provider.js";
 import { ThemeToggle } from "../components/theme-toggle.js";
 import { Button } from "../components/ui/button.js";
@@ -42,9 +43,7 @@ export function AppShell() {
             to="/"
             className="flex items-center gap-2.5 rounded-md text-foreground pointer-coarse:min-h-11 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-solid text-primary-foreground shadow-card">
-              <Scale className="h-4 w-4" aria-hidden />
-            </span>
+            <DeciIcon size={32} className="shadow-card" />
             <span className="text-base font-semibold tracking-tight">Deci</span>
           </Link>
           <nav aria-label="Main" className="flex items-center gap-1 sm:gap-1.5">

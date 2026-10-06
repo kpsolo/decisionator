@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="deci-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="55%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <linearGradient id="deci-sheen" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.08" />
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="16" fill="url(#deci-bg)" />
+  <rect width="64" height="64" rx="16" fill="url(#deci-sheen)" />
+
+  <!-- D Monogram with Integrated Chevron Counter -->
+  <path d="M15 11 C15 9.34 16.34 8 18 8 H32 C45.25 8 56 18.75 56 32 C56 45.25 45.25 56 32 56 H18 C16.34 56 15 54.66 15 53 V11 Z M22.5 17.5 H30 L43 32 L30 46.5 H22.5 L34.5 32 L22.5 17.5 Z" fill="#ffffff" fill-rule="evenodd" />
+
+  <!-- Decision Apex Node -->
+  <polygon points="43.5,32 48.5,28 53.5,32 48.5,36" fill="#38bdf8" />
+</svg>

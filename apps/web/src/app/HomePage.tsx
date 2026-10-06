@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Badge } from "../components/ui/badge.js";
 import { Button } from "../components/ui/button.js";
+import { DeciIcon } from "../components/DeciLogo.js";
 import {
   Card,
   CardContent,
@@ -237,9 +238,7 @@ export function HomePage() {
       ) : projects.length === 0 ? (
         <Card className="text-center py-12">
           <CardContent className="flex flex-col items-center justify-center space-y-3">
-            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-1">
-              ⚖️
-            </div>
+            <DeciIcon size={44} className="mb-1" />
             <p className="text-sm text-muted-foreground max-w-sm">
               No decision projects found yet.
             </p>

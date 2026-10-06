@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="deci-glyph-grad" x1="12" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="45%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+
+  <!-- D Monogram with Integrated Chevron Counter -->
+  <path d="M14 10 C14 8.34 15.34 7 17 7 H32 C45.8 7 57 18.2 57 32 C57 45.8 45.8 57 32 57 H17 C15.34 57 14 55.66 14 54 V10 Z M22 17 H29.5 L42.5 32 L29.5 47 H22 L34 32 L22 17 Z" fill="url(#deci-glyph-grad)" fill-rule="evenodd" />
+
+  <!-- Decision Apex Node -->
+  <polygon points="43.5,32 48.5,28 53.5,32 48.5,36" fill="#ffffff" />
+</svg>
