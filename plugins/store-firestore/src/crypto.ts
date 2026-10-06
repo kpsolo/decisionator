@@ -56,4 +56,4 @@ export async function verifyAndDerivePasswordKey(
   return key;
 }
 
-export { encrypt, decrypt };
+export { checkVerifier, encrypt, decrypt };

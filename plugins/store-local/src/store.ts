@@ -35,6 +35,22 @@ import {
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
 
+const ENCRYPTED_PREFIX = "enc:v1:";
+
+/**
+ * Text fields of protected projects are stored encrypted. An empty value (e.g. the body of a
+ * hide/unhide toggle comment) is stored as-is, and values written in plaintext by older versions
+ * are read back unchanged instead of making the whole project unreadable.
+ */
+async function openSealed(value: string, key: CryptoKey): Promise<string> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return decrypt(value, key);
+}
+
+async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
+  return body === "" ? "" : encrypt(body, key);
+}
+
 export interface AutomergeProjectDoc {
   [key: string]: unknown;
   meta: {
@@ -95,6 +111,10 @@ export class LocalProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.local";
   private dbPromise: Promise<IDBPDatabase>;
   private listeners = new Map<string, Set<(snapshot: ProjectSnapshot) => void>>();
+  /** Keys of protected projects unlocked in this session, by project id. Memory only. */
+  private keys = new Map<string, CryptoKey>();
+  /** Tail of the per-project mutation chain; serializes read-modify-write cycles. */
+  private locks = new Map<string, Promise<void>>();
 
   constructor(
     private currentUser = "local-user@device",
@@ -238,48 +258,27 @@ export class LocalProjectStore implements ProjectStore {
 
   async openProject(ref: ProjectRef, opts?: { password?: string }): Promise<ProjectSnapshot> {
     const doc = await this.loadDoc(ref.id);
-    let cryptoKey: CryptoKey | undefined;
-
-    if (doc.meta.protected) {
-      if (!opts?.password) {
-        throw new Error("Password required for protected project");
-      }
-      if (!doc.meta.salt || !doc.meta.verifier) {
-        throw new Error("Corrupted protected project meta");
-      }
-      const salt = base64ToBytes(doc.meta.salt);
-      cryptoKey = await deriveKey(opts.password, salt, doc.meta.iterations || 600_000);
-      const ok = await checkVerifier(doc.meta.verifier, cryptoKey);
-      if (!ok) {
-        throw new Error("Invalid password");
-      }
-    }
 
     let finalTitle = doc.meta.title;
     let finalDesc = doc.meta.description;
     let finalOptions: Option[] = doc.options;
+    let finalComments: Comment[] = doc.comments;
 
-    if (cryptoKey) {
-      finalTitle = finalTitle.startsWith("enc:v1:")
-        ? await decrypt(finalTitle, cryptoKey)
-        : finalTitle;
-      finalDesc = finalDesc?.startsWith("enc:v1:")
-        ? await decrypt(finalDesc, cryptoKey)
-        : finalDesc;
+    if (doc.meta.protected) {
+      const cryptoKey = await this.unlock(ref.id, doc, opts?.password);
+      finalTitle = await openSealed(finalTitle, cryptoKey);
+      finalDesc = await openSealed(finalDesc, cryptoKey);
       finalOptions = await Promise.all(
         doc.options.map(async (o) => ({
           ...o,
-          title: o.title.startsWith("enc:v1:") ? await decrypt(o.title, cryptoKey) : o.title,
-          description: o.description?.startsWith("enc:v1:")
-            ? await decrypt(o.description, cryptoKey)
-            : o.description,
-          pros: await Promise.all(
-            o.pros.map((p) => (p.startsWith("enc:v1:") ? decrypt(p, cryptoKey) : p))
-          ),
-          cons: await Promise.all(
-            o.cons.map((c) => (c.startsWith("enc:v1:") ? decrypt(c, cryptoKey) : c))
-          ),
+          title: await openSealed(o.title, cryptoKey),
+          description: await openSealed(o.description, cryptoKey),
+          pros: await Promise.all(o.pros.map((p) => openSealed(p, cryptoKey))),
+          cons: await Promise.all(o.cons.map((c) => openSealed(c, cryptoKey))),
         }))
+      );
+      finalComments = await Promise.all(
+        doc.comments.map(async (c) => ({ ...c, body: await openSealed(c.body, cryptoKey) }))
       );
     }
 
@@ -302,7 +301,7 @@ export class LocalProjectStore implements ProjectStore {
       },
       options: finalOptions,
       grades: doc.grades,
-      comments: doc.comments,
+      comments: finalComments,
       rankings: doc.rankings,
       outcomes: doc.outcomes,
       contributions: doc.contributions,
@@ -335,156 +334,192 @@ export class LocalProjectStore implements ProjectStore {
   }
 
   async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
-    let doc = await this.loadDoc(ref.id);
-    const role =
-      doc.meta.owner === this.currentUser
-        ? "owner"
-        : (doc.collaborators.find((c) => c.email === this.currentUser)?.role ?? "view");
+    await this.mutate(ref.id, async (doc) => {
+      const role =
+        doc.meta.owner === this.currentUser
+          ? "owner"
+          : (doc.collaborators.find((c) => c.email === this.currentUser)?.role ?? "view");
 
-    if (role === "view") {
-      throw new Error("PERMISSION_DENIED: View role cannot append");
-    }
-    // Validates the whole call before anything is written.
-    const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
-    const by = delegated?.by ?? this.currentUser;
-    // Automerge rejects `undefined` values, so the key is omitted when there is no name.
-    const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
-
-    const now = new Date().toISOString();
-
-    doc = A.change(doc, (d) => {
-      for (const entry of entries) {
-        if (entry.kind === "grade") {
-          // Latest wins per (by, optionId)
-          const idx = d.grades.findIndex((g) => g.by === by && g.optionId === entry.optionId);
-          const newGrade: Grade = {
-            id: `g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            optionId: entry.optionId,
-            value: entry.value,
-            by,
-            ...byName,
-            at: now,
-          };
-          if (idx !== -1) {
-            d.grades[idx] = newGrade;
-          } else {
-            d.grades.push(newGrade);
-          }
-        } else if (entry.kind === "comment") {
-          const newComment: Comment = {
-            id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            optionId: entry.optionId,
-            body: entry.body,
-            by,
-            ...byName,
-            at: now,
-            ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
-            ...(entry.replaces !== undefined ? { replaces: entry.replaces } : {}),
-          };
-          d.comments.push(newComment);
-        } else if (entry.kind === "ranking") {
-          // Latest wins per (by, round)
-          const round = entry.round ?? d.meta.voting.round;
-          const idx = d.rankings.findIndex((r) => r.by === by && r.round === round);
-          const newRanking: Ranking = {
-            id: `r_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            ranking: entry.ranking,
-            round,
-            by,
-            ...byName,
-            at: now,
-          };
-          if (idx !== -1) {
-            d.rankings[idx] = newRanking;
-          } else {
-            d.rankings.push(newRanking);
-          }
-        } else if (entry.kind === "outcome") {
-          d.outcomes.push(entry.outcome);
-        } else if (entry.kind === "contribution") {
-          d.contributions.push(entry.contribution);
-        }
+      if (role === "view") {
+        throw new Error("PERMISSION_DENIED: View role cannot append");
       }
+      // Validates the whole call before anything is written.
+      const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+      const by = delegated?.by ?? this.currentUser;
+      // Automerge rejects `undefined` values, so the key is omitted when there is no name.
+      const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
+
+      // Protected projects keep comment bodies encrypted, so writes need the session key.
+      // `A.change` is synchronous, so bodies are sealed up front.
+      const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
+      const bodies = await Promise.all(
+        entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
+      );
+
+      const now = new Date().toISOString();
+
+      return A.change(doc, (d) => {
+        for (const [i, entry] of entries.entries()) {
+          if (entry.kind === "grade") {
+            // Latest wins per (by, optionId)
+            const idx = d.grades.findIndex((g) => g.by === by && g.optionId === entry.optionId);
+            const newGrade: Grade = {
+              id: `g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              optionId: entry.optionId,
+              value: entry.value,
+              by,
+              ...byName,
+              at: now,
+            };
+            if (idx !== -1) {
+              d.grades[idx] = newGrade;
+            } else {
+              d.grades.push(newGrade);
+            }
+          } else if (entry.kind === "comment") {
+            const newComment: Comment = {
+              id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              optionId: entry.optionId,
+              body: bodies[i] ?? entry.body,
+              by,
+              ...byName,
+              at: now,
+              ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
+              ...(entry.replaces !== undefined ? { replaces: entry.replaces } : {}),
+            };
+            d.comments.push(newComment);
+          } else if (entry.kind === "ranking") {
+            // Latest wins per (by, round)
+            const round = entry.round ?? d.meta.voting.round;
+            const idx = d.rankings.findIndex((r) => r.by === by && r.round === round);
+            const newRanking: Ranking = {
+              id: `r_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              ranking: entry.ranking,
+              round,
+              by,
+              ...byName,
+              at: now,
+            };
+            if (idx !== -1) {
+              d.rankings[idx] = newRanking;
+            } else {
+              d.rankings.push(newRanking);
+            }
+          } else if (entry.kind === "outcome") {
+            d.outcomes.push(entry.outcome);
+          } else if (entry.kind === "contribution") {
+            d.contributions.push(entry.contribution);
+          }
+        }
+      });
     });
 
-    await this.saveDoc(ref.id, doc);
     await this.notify(ref);
     return { queued: 0, sent: entries.length };
   }
 
   async updateOptions(ref: ProjectRef, ops: OptionOp[]): Promise<void> {
-    let doc = await this.loadDoc(ref.id);
-    if (doc.meta.owner !== this.currentUser) {
-      throw new Error("PERMISSION_DENIED: Only owner can update options");
-    }
+    await this.mutate(ref.id, async (doc) => {
+      if (doc.meta.owner !== this.currentUser) {
+        throw new Error("PERMISSION_DENIED: Only owner can update options");
+      }
 
-    doc = A.change(doc, (d) => {
-      for (const op of ops) {
-        if (op.op === "add") {
-          d.options.push(op.option);
-        } else if (op.op === "update") {
-          const idx = d.options.findIndex((o) => o.id === op.option.id);
-          const current = d.options[idx];
-          if (idx !== -1 && current) {
-            d.options[idx] = { ...current, ...op.option } as Option;
-          }
-        } else if (op.op === "remove") {
-          const idx = d.options.findIndex((o) => o.id === op.id);
-          if (idx !== -1) {
-            d.options.splice(idx, 1);
+      // Protected projects keep option text encrypted, so edits need the session key.
+      // `A.change` is synchronous, so options are sealed up front.
+      const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
+      const seal = async <T extends Partial<Option>>(o: T): Promise<T> => {
+        if (!key) return o;
+        const sealed = { ...o };
+        if (typeof o.title === "string") sealed.title = await encrypt(o.title, key);
+        if (typeof o.description === "string") {
+          sealed.description = await encrypt(o.description, key);
+        }
+        if (o.pros) sealed.pros = await Promise.all(o.pros.map((p) => encrypt(p, key)));
+        if (o.cons) sealed.cons = await Promise.all(o.cons.map((c) => encrypt(c, key)));
+        return sealed;
+      };
+      const sealedOps = await Promise.all(
+        ops.map(async (op): Promise<OptionOp> => {
+          if (op.op === "add") return { ...op, option: await seal(op.option) };
+          if (op.op === "update") return { ...op, option: await seal(op.option) };
+          return op;
+        })
+      );
+
+      return A.change(doc, (d) => {
+        for (const op of sealedOps) {
+          if (op.op === "add") {
+            d.options.push(op.option);
+          } else if (op.op === "update") {
+            const current = d.options.find((o) => o.id === op.option.id);
+            if (current) {
+              // Assigned field by field: spreading `current` would re-insert its Automerge
+              // objects (tags, links …), which Automerge rejects, and it rejects `undefined`.
+              const target = current as unknown as Record<string, unknown>;
+              for (const [field, value] of Object.entries(op.option)) {
+                if (value !== undefined) target[field] = value;
+              }
+            }
+          } else if (op.op === "remove") {
+            const idx = d.options.findIndex((o) => o.id === op.id);
+            if (idx !== -1) {
+              d.options.splice(idx, 1);
+            }
           }
         }
-      }
+      });
     });
-
-    await this.saveDoc(ref.id, doc);
     await this.notify(ref);
   }
 
   async updateMeta(ref: ProjectRef, patch: MetaPatch): Promise<void> {
-    let doc = await this.loadDoc(ref.id);
-    if (doc.meta.owner !== this.currentUser) {
-      throw new Error("PERMISSION_DENIED: Only owner can update metadata");
-    }
-
-    doc = A.change(doc, (d) => {
-      if (patch.title !== undefined) d.meta.title = patch.title;
-      if (patch.description !== undefined) d.meta.description = patch.description;
-      if (patch.voting) {
-        d.meta.voting = { ...d.meta.voting, ...patch.voting };
+    await this.mutate(ref.id, async (doc) => {
+      if (doc.meta.owner !== this.currentUser) {
+        throw new Error("PERMISSION_DENIED: Only owner can update metadata");
       }
-    });
 
-    await this.saveDoc(ref.id, doc);
+      const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
+      const seal = (value: string | undefined) =>
+        value !== undefined && key ? encrypt(value, key) : value;
+      const title = await seal(patch.title);
+      const description = await seal(patch.description);
+
+      return A.change(doc, (d) => {
+        if (title !== undefined) d.meta.title = title;
+        if (description !== undefined) d.meta.description = description;
+        if (patch.voting) {
+          d.meta.voting = { ...d.meta.voting, ...patch.voting };
+        }
+      });
+    });
     await this.notify(ref);
   }
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
-    let doc = await this.loadDoc(ref.id);
-    if (doc.meta.owner !== this.currentUser) {
-      throw new Error("PERMISSION_DENIED: Only owner can manage sharing");
-    }
+    await this.mutate(ref.id, async (doc) => {
+      if (doc.meta.owner !== this.currentUser) {
+        throw new Error("PERMISSION_DENIED: Only owner can manage sharing");
+      }
 
-    doc = A.change(doc, (d) => {
-      if (req.inviteUsers) {
-        for (const inv of req.inviteUsers) {
-          const existing = d.collaborators.find((c) => c.email === inv.email);
-          if (existing) {
-            existing.role = inv.role;
-          } else {
-            d.collaborators.push({ email: inv.email, role: inv.role });
+      return A.change(doc, (d) => {
+        if (req.inviteUsers) {
+          for (const inv of req.inviteUsers) {
+            const existing = d.collaborators.find((c) => c.email === inv.email);
+            if (existing) {
+              existing.role = inv.role;
+            } else {
+              d.collaborators.push({ email: inv.email, role: inv.role });
+            }
           }
         }
-      }
-      if (req.removeUsers) {
-        for (const rem of req.removeUsers) {
-          const idx = d.collaborators.findIndex((c) => c.email === rem);
-          if (idx !== -1) d.collaborators.splice(idx, 1);
+        if (req.removeUsers) {
+          for (const rem of req.removeUsers) {
+            const idx = d.collaborators.findIndex((c) => c.email === rem);
+            if (idx !== -1) d.collaborators.splice(idx, 1);
+          }
         }
-      }
+      });
     });
-
-    await this.saveDoc(ref.id, doc);
     return this.getShareState(ref);
   }
 
@@ -506,18 +541,83 @@ export class LocalProjectStore implements ProjectStore {
   }
 
   async deleteProject(ref: ProjectRef): Promise<void> {
-    const doc = await this.loadDoc(ref.id);
-    if (doc.meta.owner !== this.currentUser) {
-      throw new Error("PERMISSION_DENIED: Only owner can delete project");
-    }
+    await this.withLock(ref.id, async () => {
+      const doc = await this.loadDoc(ref.id);
+      if (doc.meta.owner !== this.currentUser) {
+        throw new Error("PERMISSION_DENIED: Only owner can delete project");
+      }
 
-    const db = await this.dbPromise;
-    await db.put("trashed", { id: ref.id, trashedAt: new Date().toISOString() });
-    await db.delete("docs", ref.id);
+      const db = await this.dbPromise;
+      await db.put("trashed", { id: ref.id, trashedAt: new Date().toISOString() });
+      await db.delete("docs", ref.id);
+    });
+    this.keys.delete(ref.id);
   }
 
   async forgetProject(ref: ProjectRef): Promise<void> {
-    const db = await this.dbPromise;
-    await db.delete("docs", ref.id);
+    await this.withLock(ref.id, async () => {
+      const db = await this.dbPromise;
+      await db.delete("docs", ref.id);
+    });
+    this.keys.delete(ref.id);
+  }
+
+  /**
+   * Returns the key for a protected project: derived from `password` (and remembered for the
+   * session) when given, otherwise the key remembered from an earlier unlock.
+   */
+  private async unlock(
+    projectId: string,
+    doc: A.Doc<AutomergeProjectDoc>,
+    password?: string
+  ): Promise<CryptoKey> {
+    if (!doc.meta.salt || !doc.meta.verifier) {
+      throw new Error("Corrupted protected project meta");
+    }
+    if (!password) {
+      const cached = this.keys.get(projectId);
+      if (cached && (await checkVerifier(doc.meta.verifier, cached))) return cached;
+      this.keys.delete(projectId);
+      throw new Error("Password required");
+    }
+    const salt = base64ToBytes(doc.meta.salt);
+    const key = await deriveKey(password, salt, doc.meta.iterations || 600_000);
+    if (!(await checkVerifier(doc.meta.verifier, key))) {
+      throw new Error("Incorrect password");
+    }
+    this.keys.set(projectId, key);
+    return key;
+  }
+
+  private requireKey(projectId: string): CryptoKey {
+    const key = this.keys.get(projectId);
+    if (!key) throw new Error("Password required");
+    return key;
+  }
+
+  /** Runs `fn` after every earlier mutation of the same project has settled. */
+  private withLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(projectId) ?? Promise.resolve();
+    const run = previous.then(fn);
+    const tail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    this.locks.set(projectId, tail);
+    void tail.then(() => {
+      if (this.locks.get(projectId) === tail) this.locks.delete(projectId);
+    });
+    return run;
+  }
+
+  /** Serialized load-change-save cycle of one live project document. */
+  private mutate(
+    projectId: string,
+    fn: (doc: A.Doc<AutomergeProjectDoc>) => Promise<A.Doc<AutomergeProjectDoc>>
+  ): Promise<void> {
+    return this.withLock(projectId, async () => {
+      const doc = await fn(await this.loadDoc(projectId));
+      await this.saveDoc(projectId, doc);
+    });
   }
 }

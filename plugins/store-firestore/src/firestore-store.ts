@@ -28,7 +28,30 @@ import {
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import type { FirestoreEntryDoc, FirestoreOptionDoc, FirestoreProjectDoc } from "./collections.js";
-import { decrypt, encrypt, setupPasswordProtection, verifyAndDerivePasswordKey } from "./crypto.js";
+import {
+  checkVerifier,
+  decrypt,
+  encrypt,
+  setupPasswordProtection,
+  verifyAndDerivePasswordKey,
+} from "./crypto.js";
+
+const ENCRYPTED_PREFIX = "enc:v1:";
+
+/**
+ * Text fields of protected projects are stored encrypted. An empty value (e.g. the body of a
+ * hide/unhide toggle comment) is stored as-is, and values written in plaintext by older versions
+ * are read back unchanged instead of making the whole project unreadable. Ciphertext that does
+ * not decrypt is an error, never returned as text.
+ */
+async function openSealed(value: string, key: CryptoKey): Promise<string> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return decrypt(value, key);
+}
+
+async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
+  return body === "" ? "" : encrypt(body, key);
+}
 
 export interface FirebaseConfig {
   apiKey?: string;
@@ -45,6 +68,8 @@ export class FirestoreProjectStore implements ProjectStore {
   private projects = new Map<string, FirestoreProjectDoc>();
   private options = new Map<string, Map<string, FirestoreOptionDoc>>();
   private entries = new Map<string, FirestoreEntryDoc[]>();
+  /** Keys of protected projects unlocked in this session, by project id. Memory only. */
+  private keys = new Map<string, CryptoKey>();
 
   constructor(
     private currentUser = "firebase-user@example.com",
@@ -166,29 +191,18 @@ export class FirestoreProjectStore implements ProjectStore {
     const entryList = this.entries.get(ref.id) || [];
 
     if (doc.protected) {
-      if (!opts?.password) {
-        throw new Error("Password required");
-      }
-      if (!doc.salt || !doc.iterations || !doc.verifier) {
-        throw new Error("Invalid encryption parameters");
-      }
-      const key = await verifyAndDerivePasswordKey(
-        opts.password,
-        doc.salt,
-        doc.iterations,
-        doc.verifier
-      );
+      const key = await this.unlock(ref.id, doc, opts?.password);
 
       // Decrypt project
-      const decryptedTitle = await decrypt(doc.title, key);
-      const decryptedDesc = await decrypt(doc.description, key);
+      const decryptedTitle = await openSealed(doc.title, key);
+      const decryptedDesc = await openSealed(doc.description, key);
 
       const decryptedOptions: Option[] = [];
       for (const opt of optsMap.values()) {
         decryptedOptions.push({
           ...opt,
-          title: await decrypt(opt.title, key),
-          description: await decrypt(opt.description, key),
+          title: await openSealed(opt.title, key),
+          description: await openSealed(opt.description, key),
         });
       }
 
@@ -197,15 +211,8 @@ export class FirestoreProjectStore implements ProjectStore {
         doc.voting.round
       );
 
-      // Decrypt comments if encrypted
       const decryptedComments = await Promise.all(
-        comments.map(async (c) => {
-          try {
-            return { ...c, body: await decrypt(c.body, key) };
-          } catch {
-            return c;
-          }
-        })
+        comments.map(async (c) => ({ ...c, body: await openSealed(c.body, key) }))
       );
 
       return {
@@ -288,11 +295,18 @@ export class FirestoreProjectStore implements ProjectStore {
     const by = delegated?.by ?? this.currentUser;
     const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
+    // Protected projects keep comment bodies encrypted, so writes need the session key.
+    // Bodies are sealed before anything is written, so a failure leaves no partial append.
+    const key = doc.protected ? this.requireKey(ref.id) : undefined;
+    const bodies = await Promise.all(
+      entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
+    );
+
     const now = new Date().toISOString();
     const entryList = this.entries.get(ref.id) || [];
     let sentCount = 0;
 
-    for (const e of entries) {
+    for (const [i, e] of entries.entries()) {
       const entryId = `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       if (e.kind === "grade") {
         entryList.push({
@@ -310,7 +324,7 @@ export class FirestoreProjectStore implements ProjectStore {
           id: entryId,
           kind: "comment",
           optionId: e.optionId,
-          body: e.body,
+          body: bodies[i] ?? e.body,
           by,
           ...byName,
           at: now,
@@ -364,10 +378,30 @@ export class FirestoreProjectStore implements ProjectStore {
     const role = this.resolveRole(doc, this.currentUser);
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update options");
 
+    // Protected projects keep option text encrypted, so edits need the session key.
+    const key = doc.protected ? this.requireKey(ref.id) : undefined;
+    const seal = async <T extends Partial<Option>>(o: T): Promise<T> => {
+      if (!key) return o;
+      const sealed = { ...o };
+      if (typeof o.title === "string") sealed.title = await encrypt(o.title, key);
+      if (typeof o.description === "string") {
+        sealed.description = await encrypt(o.description, key);
+      }
+      return sealed;
+    };
+    // Sealed before anything is written, so a failure leaves no partial update.
+    const sealedOps = await Promise.all(
+      ops.map(async (op): Promise<OptionOp> => {
+        if (op.op === "add") return { ...op, option: await seal(op.option) };
+        if (op.op === "update") return { ...op, option: await seal(op.option) };
+        return op;
+      })
+    );
+
     const now = new Date().toISOString();
     const optsMap = this.options.get(ref.id) || new Map();
 
-    for (const op of ops) {
+    for (const op of sealedOps) {
       if (op.op === "add") {
         optsMap.set(op.option.id, {
           ...op.option,
@@ -398,8 +432,14 @@ export class FirestoreProjectStore implements ProjectStore {
     const role = this.resolveRole(doc, this.currentUser);
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update meta");
 
-    if (patch.title !== undefined) doc.title = patch.title;
-    if (patch.description !== undefined) doc.description = patch.description;
+    const key = doc.protected ? this.requireKey(ref.id) : undefined;
+    const seal = (value: string | undefined) =>
+      value !== undefined && key ? encrypt(value, key) : value;
+    const title = await seal(patch.title);
+    const description = await seal(patch.description);
+
+    if (title !== undefined) doc.title = title;
+    if (description !== undefined) doc.description = description;
     if (patch.voting) doc.voting = { ...doc.voting, ...patch.voting };
 
     doc.updatedAt = new Date().toISOString();
@@ -458,12 +498,43 @@ export class FirestoreProjectStore implements ProjectStore {
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can delete project");
 
     doc.trashed = true;
+    this.keys.delete(ref.id);
   }
 
   async forgetProject(ref: ProjectRef): Promise<void> {
     this.projects.delete(ref.id);
     this.options.delete(ref.id);
     this.entries.delete(ref.id);
+    this.keys.delete(ref.id);
+  }
+
+  /**
+   * Returns the key for a protected project: derived from `password` (and remembered for the
+   * session) when given, otherwise the key remembered from an earlier unlock.
+   */
+  private async unlock(
+    projectId: string,
+    doc: FirestoreProjectDoc,
+    password?: string
+  ): Promise<CryptoKey> {
+    if (!doc.salt || !doc.iterations || !doc.verifier) {
+      throw new Error("Invalid encryption parameters");
+    }
+    if (!password) {
+      const cached = this.keys.get(projectId);
+      if (cached && (await checkVerifier(doc.verifier, cached))) return cached;
+      this.keys.delete(projectId);
+      throw new Error("Password required");
+    }
+    const key = await verifyAndDerivePasswordKey(password, doc.salt, doc.iterations, doc.verifier);
+    this.keys.set(projectId, key);
+    return key;
+  }
+
+  private requireKey(projectId: string): CryptoKey {
+    const key = this.keys.get(projectId);
+    if (!key) throw new Error("Password required");
+    return key;
   }
 
   private resolveRole(doc: FirestoreProjectDoc, user: string): ParticipantRole {
