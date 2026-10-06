@@ -1,10 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { chromium } from '@playwright/test';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium } from "@playwright/test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicDir = path.resolve(__dirname, '../public');
+const publicDir = path.resolve(__dirname, "../public");
 
 if (!fs.existsSync(publicDir)) {
   fs.mkdirSync(publicDir, { recursive: true });
@@ -53,10 +53,10 @@ const glyphSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fi
 </svg>`;
 
 // Write SVGs
-fs.writeFileSync(path.join(publicDir, 'favicon.svg'), badgeSvg);
-fs.writeFileSync(path.join(publicDir, 'logo.svg'), badgeSvg);
-fs.writeFileSync(path.join(publicDir, 'logo-glyph.svg'), glyphSvg);
-console.log('SVGs written successfully');
+fs.writeFileSync(path.join(publicDir, "favicon.svg"), badgeSvg);
+fs.writeFileSync(path.join(publicDir, "logo.svg"), badgeSvg);
+fs.writeFileSync(path.join(publicDir, "logo-glyph.svg"), glyphSvg);
+console.log("SVGs written successfully");
 
 // Rasterize PNGs with Playwright
 (async () => {
@@ -64,11 +64,11 @@ console.log('SVGs written successfully');
   const page = await browser.newPage();
 
   const sizes = [
-    { name: 'favicon-32x32.png', size: 32 },
-    { name: 'favicon.png', size: 32 },
-    { name: 'apple-touch-icon.png', size: 180 },
-    { name: 'icon-192.png', size: 192 },
-    { name: 'icon-512.png', size: 512 },
+    { name: "favicon-32x32.png", size: 32 },
+    { name: "favicon.png", size: 32 },
+    { name: "apple-touch-icon.png", size: 180 },
+    { name: "icon-192.png", size: 192 },
+    { name: "icon-512.png", size: 512 },
   ];
 
   for (const { name, size } of sizes) {
@@ -95,5 +95,5 @@ ${badgeSvg}
   }
 
   await browser.close();
-  console.log('All icons generated successfully!');
+  console.log("All icons generated successfully!");
 })();

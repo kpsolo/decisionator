@@ -21,12 +21,7 @@ export interface DeciLogoProps extends React.SVGProps<SVGSVGElement> {
  * - An integrated convergence chevron (>) representing choices merging into action.
  * - A radiant cyan apex node representing the decisive consensus choice.
  */
-export function DeciIcon({
-  variant = "badge",
-  size,
-  className,
-  ...props
-}: DeciLogoProps) {
+export function DeciIcon({ variant = "badge", size, className, ...props }: DeciLogoProps) {
   const defaultSize = variant === "badge" ? 32 : 24;
   const dimension = size ?? defaultSize;
 
@@ -44,12 +39,26 @@ export function DeciIcon({
         {...props}
       >
         <defs>
-          <linearGradient id="deci-badge-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <linearGradient
+            id="deci-badge-bg"
+            x1="0"
+            y1="0"
+            x2="64"
+            y2="64"
+            gradientUnits="userSpaceOnUse"
+          >
             <stop offset="0%" stopColor="#2563eb" />
             <stop offset="55%" stopColor="#4f46e5" />
             <stop offset="100%" stopColor="#7c3aed" />
           </linearGradient>
-          <linearGradient id="deci-badge-sheen" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+          <linearGradient
+            id="deci-badge-sheen"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="64"
+            gradientUnits="userSpaceOnUse"
+          >
             <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
             <stop offset="100%" stopColor="#000000" stopOpacity="0.08" />
           </linearGradient>
@@ -109,7 +118,14 @@ export function DeciIcon({
       {...props}
     >
       <defs>
-        <linearGradient id="deci-glyph-grad" x1="12" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+        <linearGradient
+          id="deci-glyph-grad"
+          x1="12"
+          y1="8"
+          x2="56"
+          y2="56"
+          gradientUnits="userSpaceOnUse"
+        >
           <stop offset="0%" stopColor="#38bdf8" />
           <stop offset="45%" stopColor="#2563eb" />
           <stop offset="100%" stopColor="#7c3aed" />
