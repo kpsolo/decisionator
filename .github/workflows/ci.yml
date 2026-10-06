@@ -16,12 +16,12 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .nvmrc
 
       - name: Install pnpm
         run: npm install -g pnpm@10.34.6
@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload Playwright Report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ matrix.os }}
           path: apps/web/playwright-report/
