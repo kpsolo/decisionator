@@ -48,7 +48,7 @@ jobs:
         env:
           VITE_GOOGLE_CLIENT_ID: mock-client-id.apps.googleusercontent.com
           VITE_GOOGLE_API_KEY: mock-api-key
-        run: pnpm test:e2e -- --project=chromium
+        run: pnpm --filter @decisionator/web exec playwright test --project=chromium --reporter=list
 
       - name: Upload Playwright Report
         if: failure()
