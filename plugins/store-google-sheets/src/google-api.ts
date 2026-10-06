@@ -15,6 +15,14 @@ export class ProjectUnavailableError extends Error {
   }
 }
 
+/** HTTP 400, e.g. a range that names a tab the spreadsheet does not have. */
+export class BadRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BadRequestError";
+  }
+}
+
 export interface GoogleDriveFile {
   id: string;
   name: string;
@@ -78,6 +86,13 @@ export class GoogleApiClient {
 
       if (res.status === 404) {
         throw new ProjectUnavailableError("File not found or deleted");
+      }
+
+      if (res.status === 400) {
+        const errJson = await res.json().catch(() => null);
+        throw new BadRequestError(
+          `Google API request failed [400]: ${errJson?.error?.message || res.statusText}`
+        );
       }
 
       throw new Error(`Google API request failed [${res.status}]: ${res.statusText}`);
@@ -170,6 +185,25 @@ export class GoogleApiClient {
         sheets: sheetTitles.map((t) => ({ properties: { title: t } })),
       }),
     });
+  }
+
+  async getSheetTitles(spreadsheetId: string): Promise<string[]> {
+    const res = await this.request<GoogleSpreadsheet>(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties.title`
+    );
+    return (res.sheets ?? []).flatMap((s) => (s.properties?.title ? [s.properties.title] : []));
+  }
+
+  async addSheets(spreadsheetId: string, titles: string[]): Promise<void> {
+    await this.request(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          requests: titles.map((title) => ({ addSheet: { properties: { title } } })),
+        }),
+      }
+    );
   }
 
   async batchGetValues(

@@ -8,7 +8,7 @@ Normative layout of a project stored as a Google Sheet. It implements
 | Item | Value |
 |------|-------|
 | OAuth | Google Identity Services token model, scope `drive.file` only, token in memory |
-| APIs | Drive v3 (`files.create`, `files.get`, `files.list`, `permissions.*`, `about.get`), Sheets v4 (`spreadsheets.create`, `values.batchGet`, `values.append`, `values.batchUpdate`), Picker (`setFileIds`) |
+| APIs | Drive v3 (`files.create`, `files.get`, `files.list`, `permissions.*`, `about.get`), Sheets v4 (`spreadsheets.create`, `values.batchGet`, `values.append`, `values.batchUpdate`; `spreadsheets.get` and `spreadsheets.batchUpdate` only for the v1 to v2 migration), Picker (`setFileIds`) |
 | File tag | Drive `appProperties`: `decisionator=project`, `formatVersion=1` |
 | Share link | `https://kpsolo.github.io/decisionator/#/p/<fileId>` (base URL configurable, R28) |
 
@@ -38,16 +38,23 @@ account email, stamped by the store.
 
 ### Format v1 to v2 Migration (US5)
 When opening a project with `formatVersion = 1`:
+0. A `values.batchGet` that names a missing tab fails as a whole, so when the full read is rejected
+   the store lists the tabs (`spreadsheets.get?fields=sheets.properties.title`) and, if only
+   `contributions` is missing, reads the other tabs.
 1. If the `contributions` tab does not exist, the store appends `contributions` to the spreadsheet tabs via `spreadsheets.batchUpdate` with the header row `["id", "at", "by", "targetKind", "targetId", "payload"]`.
-2. The store updates `meta.formatVersion` to `2`.
+2. The store updates `meta.formatVersion` to `2`, writing that row in place (never `meta!A:B`
+   from the top, which would overwrite the header).
 3. If the user lacks write permission to update tabs (e.g. view-only collaborator), the store treats `contributions` as an empty list without failing.
 
 In password mode, readable `meta` values reveal nothing about the content beyond counts and
 timestamps. The `by` column (participants' emails), `optionId` columns and `at` timestamps stay
 readable too (spec FR-017); the UI discloses this when a password is set.
 
-**Validation**: the host validates every row. A row that fails validation is skipped, and the UI
-shows a warning naming the tab and row (spec edge case: direct edits in Google Sheets). A row in
+**Validation**: the store validates every row. A row that fails validation (bad JSON, schema,
+or a payload that does not decrypt) is skipped and reported in `ProjectSnapshot.warnings` as
+`"<tab> row <n>: <reason>"`, with the 1-based sheet row; the UI shows these warnings (spec edge
+case: direct edits in Google Sheets). An invalid `voting` meta value falls back to the defaults
+and is reported as `meta row <n>`. A row in
 a contributor tab whose `by` does not match a known participant is still shown, but flagged.
 
 ## Sync and quota budget (research R23)
@@ -84,6 +91,7 @@ used to import into local mode in US7.
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.2.0 | 2026-10-06 | Skipped rows reported in `ProjectSnapshot.warnings` (project-store contract v1.3.0); v1 to v2 migration lists tabs and adds `contributions` with `spreadsheets.batchUpdate` (`addSheet`) and writes the `formatVersion` row in place; `enablePassword` encrypts every content tab, `contributions` included |
 | 2.1.0 | 2026-10-06 | `grades`, `comments` and `rankings` payloads may carry `byName`, the display name of a delegated author (project-store contract v1.2.0). The column layout is unchanged; readers ignore a missing or malformed `byName` |
 | 2.0.0 | 2026-10-05 | Add `contributions` tab and automatic migration from v1 for agent and research contributions (US5) |
 | 1.1.0 | 2026-10-05 | Add delete project operation (`files.update {trashed: true}`) per FR-025; disclose readable metadata fields (`by`, `optionId`, `at`) in password mode per FR-017 and SC-007 |

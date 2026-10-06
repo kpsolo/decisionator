@@ -42,6 +42,11 @@ export interface ProjectSnapshot {
   outcomes: OutcomeRecord[];
   contributions?: Contribution[];
   role: ParticipantRole;
+  /**
+   * Stored records the store skipped because they failed validation (contract v1.3.0), e.g.
+   * `"grades row 7: invalid JSON payload (...)"`. Absent when nothing was skipped.
+   */
+  warnings?: string[];
 }
 
 export type Entry =

@@ -1,11 +1,10 @@
 import {
-  type Comment,
-  type Contribution,
   type Grade,
   type Option,
-  type OutcomeRecord,
   type Project,
   type Ranking,
+  type VotingState,
+  VotingStateSchema,
   checkVerifier,
   decrypt,
   deriveKey,
@@ -33,9 +32,17 @@ import {
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import type { GoogleAuthService } from "./auth.js";
-import { GoogleApiClient } from "./google-api.js";
+import { BadRequestError, GoogleApiClient } from "./google-api.js";
 import { WriteQueue } from "./queue.js";
-import { byNameField } from "./rows.js";
+import {
+  type RowDecodeResult,
+  decodeCommentRow,
+  decodeContributionRow,
+  decodeGradeRow,
+  decodeOptionRow,
+  decodeOutcomeRow,
+  decodeRankingRow,
+} from "./rows.js";
 
 function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
@@ -62,6 +69,49 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
+const DEFAULT_VOTING: VotingState = { state: "open", round: 1, topN: 3, liveResults: true };
+
+/** Meta key/value rows, plus the 1-based sheet row of each key so it can be written in place. */
+function readMetaRows(rows: string[][]): {
+  values: Map<string, string>;
+  rowOf: Map<string, number>;
+  rowCount: number;
+} {
+  const values = new Map<string, string>();
+  const rowOf = new Map<string, number>();
+  rows.forEach((row, i) => {
+    if (i === 0 || !row[0]) return;
+    rowOf.set(row[0], i + 1);
+    if (row[1]) values.set(row[0], row[1]);
+  });
+  return { values, rowOf, rowCount: rows.length };
+}
+
+function parseVoting(raw: string | undefined): { state: VotingState; warning?: string } {
+  if (!raw) return { state: DEFAULT_VOTING };
+  try {
+    const parsed = VotingStateSchema.safeParse(JSON.parse(raw));
+    if (parsed.success) return { state: parsed.data };
+    return {
+      state: DEFAULT_VOTING,
+      warning: `invalid voting value (${parsed.error.issues.map((i) => i.message).join(", ")})`,
+    };
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { state: DEFAULT_VOTING, warning: `invalid voting JSON (${reason})` };
+  }
+}
+
+/** Tabs whose payload column is encrypted in password mode: [tab, columns, payload column]. */
+const PAYLOAD_TABS: [string, string, number][] = [
+  ["options", "A:F", 5],
+  ["grades", "A:E", 4],
+  ["comments", "A:E", 4],
+  ["rankings", "A:D", 3],
+  ["outcomes", "A:D", 3],
+  ["contributions", "A:F", 5],
+];
+
 export class GoogleSheetsProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.google-sheets";
   private client: GoogleApiClient;
@@ -72,6 +122,8 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   private protection = new Map<string, boolean>();
   /** Last known role per spreadsheet, used when the permission lookup is rate limited. */
   private roles = new Map<string, ParticipantRole>();
+  /** Last known voting round per spreadsheet, used when meta cannot be read during `append`. */
+  private rounds = new Map<string, number>();
 
   constructor(
     private auth: GoogleAuthService,
@@ -135,16 +187,14 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     }
 
     // Write meta rows
+    const voting = input.voting ?? DEFAULT_VOTING;
     const metaRows: string[][] = [
       ["key", "value"],
       ["formatVersion", "2"],
       ["createdAt", new Date().toISOString()],
       ["owner", identity.participantId],
       ["protected", opts?.password ? "true" : "false"],
-      [
-        "voting",
-        JSON.stringify(input.voting ?? { state: "open", round: 1, topN: 3, liveResults: true }),
-      ],
+      ["voting", JSON.stringify(voting)],
     ];
 
     if (opts?.password && cryptoKey) {
@@ -196,6 +246,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
 
     this.protection.set(spreadsheetId, Boolean(opts?.password));
     this.roles.set(spreadsheetId, "owner");
+    this.rounds.set(spreadsheetId, voting.round);
     return { store: "google-sheets", id: spreadsheetId };
   }
 
@@ -208,23 +259,27 @@ export class GoogleSheetsProjectStore implements ProjectStore {
 
     const role = await this.resolveRole(ref.id, identity.participantId);
 
-    const data = await this.client.batchGetValues(ref.id, [
-      "meta!A:B",
-      "options!A:F",
-      "grades!A:E",
-      "comments!A:E",
-      "rankings!A:D",
-      "outcomes!A:D",
-      "contributions!A:F",
-    ]);
-
-    const metaMap = new Map<string, string>();
-    const metaRange = data.valueRanges.find((r) => r.range.startsWith("meta"));
-    if (metaRange?.values) {
-      for (const row of metaRange.values.slice(1)) {
-        if (row[0] && row[1]) metaMap.set(row[0], row[1]);
-      }
+    const ranges = ["meta!A:B", ...PAYLOAD_TABS.map(([tab, columns]) => `${tab}!${columns}`)];
+    let data: Awaited<ReturnType<GoogleApiClient["batchGetValues"]>>;
+    let hasContributionsTab = true;
+    try {
+      data = await this.client.batchGetValues(ref.id, ranges);
+    } catch (err) {
+      // A format v1 project has no contributions tab, and a read naming it fails as a whole.
+      if (!(err instanceof BadRequestError)) throw err;
+      if ((await this.client.getSheetTitles(ref.id)).includes("contributions")) throw err;
+      hasContributionsTab = false;
+      data = await this.client.batchGetValues(
+        ref.id,
+        ranges.filter((r) => !r.startsWith("contributions"))
+      );
     }
+
+    const warnings: string[] = [];
+    const tabRows = (tab: string) =>
+      data.valueRanges.find((r) => r.range.startsWith(tab))?.values ?? [];
+    const meta = readMetaRows(tabRows("meta"));
+    const metaMap = meta.values;
 
     const isProtected = metaMap.get("protected") === "true";
     this.protection.set(ref.id, isProtected);
@@ -263,10 +318,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       }
     }
 
-    const rawVoting = metaMap.get("voting");
-    const votingParsed = rawVoting
-      ? JSON.parse(rawVoting)
-      : { state: "open", round: 1, topN: 3, liveResults: true };
+    const voting = parseVoting(metaMap.get("voting"));
+    if (voting.warning) {
+      warnings.push(`meta row ${meta.rowOf.get("voting")}: ${voting.warning}`);
+    }
+    this.rounds.set(ref.id, voting.state.round);
 
     const formatVersion = (metaMap.get("formatVersion") === "2" ? 2 : 1) as 1 | 2;
 
@@ -274,152 +330,77 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       title,
       description,
       protected: isProtected,
-      voting: votingParsed,
+      voting: voting.state,
       formatVersion,
     };
 
-    // Format v1 to v2 migration
+    // Format v1 to v2 migration. Viewers cannot migrate and see no contributions.
     if (formatVersion === 1 && (role === "owner" || role === "contribute")) {
-      const contribsRange = data.valueRanges.find((r) => r.range.startsWith("contributions"));
-      if (!contribsRange?.values) {
-        try {
-          await this.client.batchUpdateValues(ref.id, [
-            {
-              range: "contributions!A:F",
-              values: [["id", "at", "by", "targetKind", "targetId", "payload"]],
-            },
-            {
-              range: "meta!A:B",
-              values: [["formatVersion", "2"]],
-            },
-          ]);
-          project.formatVersion = 2;
-        } catch {
-          // If update fails (e.g. view role or network), keep going
-        }
+      // Address the formatVersion row itself: a write to `meta!A:B` starts at the header.
+      const versionRow = meta.rowOf.get("formatVersion") ?? meta.rowCount + 1;
+      const updates = [
+        { range: `meta!A${versionRow}:B${versionRow}`, values: [["formatVersion", "2"]] },
+      ];
+      if (tabRows("contributions").length === 0) {
+        updates.push({
+          range: "contributions!A1:F1",
+          values: [["id", "at", "by", "targetKind", "targetId", "payload"]],
+        });
+      }
+      try {
+        if (!hasContributionsTab) await this.client.addSheets(ref.id, ["contributions"]);
+        await this.client.batchUpdateValues(ref.id, updates);
+        project.formatVersion = 2;
+      } catch {
+        // If update fails (e.g. a revoked write permission or network), keep going
       }
     }
 
-    // Parse options
-    const options: Option[] = [];
-    const optionsRange = data.valueRanges.find((r) => r.range.startsWith("options"));
-    if (optionsRange?.values) {
-      for (const row of optionsRange.values.slice(1)) {
-        const payloadStr = row[5];
-        if (!payloadStr) continue;
-        const decryptedPayload =
-          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
-        const opt = JSON.parse(decryptedPayload) as Option;
-        options.push(opt);
+    // Every row is validated on its own: a row that fails (e.g. after a direct edit in Google
+    // Sheets) is skipped and reported instead of making the whole project unavailable.
+    const key = cryptoKey;
+    const hook = key ? (payload: string) => decrypt(payload, key) : undefined;
+    const decodeTab = async <T>(
+      tab: string,
+      decode: (row: string[], rowIndex: number) => Promise<RowDecodeResult<T>>
+    ): Promise<T[]> => {
+      const entities: T[] = [];
+      for (const [i, row] of tabRows(tab).slice(1).entries()) {
+        if (row.every((cell) => !cell)) continue;
+        // Sheet row numbers are 1-based and row 1 is the header.
+        const res = await decode(row, i + 2);
+        if (res.entity) entities.push(res.entity);
+        else if (res.warning) warnings.push(res.warning);
       }
-    }
+      return entities;
+    };
 
-    // Parse grades (latest wins per by, optionId)
+    const options = await decodeTab("options", (row, n) => decodeOptionRow(row, n, hook));
+
+    // Latest wins per (by, optionId)
     const gradesMap = new Map<string, Grade>();
-    const gradesRange = data.valueRanges.find((r) => r.range.startsWith("grades"));
-    if (gradesRange?.values) {
-      for (const row of gradesRange.values.slice(1)) {
-        const [id, at, by, optionId, payloadStr] = row;
-        if (!payloadStr) continue;
-        const decPayload =
-          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
-        const parsed = JSON.parse(decPayload);
-        const grade: Grade = {
-          id: id || "grade",
-          at: at || "",
-          by: by || "",
-          optionId: optionId || "",
-          value: parsed.value,
-          ...byNameField(parsed),
-        };
-        gradesMap.set(JSON.stringify([by, optionId]), grade);
-      }
+    for (const grade of await decodeTab("grades", (row, n) =>
+      decodeGradeRow(row, n, undefined, hook)
+    )) {
+      gradesMap.set(JSON.stringify([grade.by, grade.optionId]), grade);
     }
 
-    // Parse comments
-    const comments: Comment[] = [];
-    const commentsRange = data.valueRanges.find((r) => r.range.startsWith("comments"));
-    if (commentsRange?.values) {
-      for (const row of commentsRange.values.slice(1)) {
-        const [id, at, by, optionId, payloadStr] = row;
-        if (!payloadStr) continue;
-        const decPayload =
-          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
-        const parsed = JSON.parse(decPayload);
-        comments.push({
-          id: id || "comment",
-          at: at || "",
-          by: by || "",
-          optionId: optionId || "",
-          body: parsed.body,
-          replaces: parsed.replaces,
-          hidden: parsed.hidden,
-          ...byNameField(parsed),
-        });
-      }
-    }
+    const comments = await decodeTab("comments", (row, n) =>
+      decodeCommentRow(row, n, undefined, hook)
+    );
 
-    // Parse rankings (latest wins per by, round)
+    // Latest wins per (by, round)
     const rankingsMap = new Map<string, Ranking>();
-    const rankingsRange = data.valueRanges.find((r) => r.range.startsWith("rankings"));
-    if (rankingsRange?.values) {
-      for (const row of rankingsRange.values.slice(1)) {
-        const [id, at, by, payloadStr] = row;
-        if (!payloadStr) continue;
-        const decPayload =
-          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
-        const parsed = JSON.parse(decPayload);
-        const round = parsed.round || 1;
-        rankingsMap.set(JSON.stringify([by, round]), {
-          id: id || "ranking",
-          at: at || "",
-          by: by || "",
-          round,
-          ranking: parsed.ranking,
-          ...byNameField(parsed),
-        });
-      }
+    for (const ranking of await decodeTab("rankings", (row, n) =>
+      decodeRankingRow(row, n, undefined, hook)
+    )) {
+      rankingsMap.set(JSON.stringify([ranking.by, ranking.round]), ranking);
     }
 
-    // Parse outcomes
-    const outcomes: OutcomeRecord[] = [];
-    const outcomesRange = data.valueRanges.find((r) => r.range.startsWith("outcomes"));
-    if (outcomesRange?.values) {
-      for (const row of outcomesRange.values.slice(1)) {
-        const [, , , payloadStr] = row;
-        if (!payloadStr) continue;
-        const decPayload =
-          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
-        outcomes.push(JSON.parse(decPayload) as OutcomeRecord);
-      }
-    }
-
-    // Parse contributions
-    const contributions: Contribution[] = [];
-    const contribsRange = data.valueRanges.find((r) => r.range.startsWith("contributions"));
-    if (contribsRange?.values) {
-      for (const row of contribsRange.values.slice(1)) {
-        const [id, at, by, targetKind, targetId, payloadStr] = row;
-        if (!payloadStr) continue;
-        const decPayload =
-          isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
-        const parsed = JSON.parse(decPayload);
-        contributions.push({
-          id: id || "contrib",
-          at: at || "",
-          by: by || "",
-          targetKind: (targetKind as "project" | "option" | "idea") || "project",
-          targetId: targetId || "",
-          type: parsed.type,
-          body: parsed.body,
-          pros: parsed.pros,
-          cons: parsed.cons,
-          sources: parsed.sources,
-          author: parsed.author || { kind: "human" },
-          reviewStatus: parsed.reviewStatus || "pending",
-        });
-      }
-    }
+    const outcomes = await decodeTab("outcomes", (row, n) => decodeOutcomeRow(row, n, hook));
+    const contributions = await decodeTab("contributions", (row, n) =>
+      decodeContributionRow(row, n, hook)
+    );
 
     return {
       project,
@@ -430,6 +411,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       outcomes,
       contributions,
       role,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
@@ -470,6 +452,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
     const by = delegated?.by ?? identity.participantId;
     const byName = delegated?.byName;
+
+    // A ranking without a round counts for the round the project is voting in now.
+    const needsRound = entries.some((e) => e.kind === "ranking" && e.round === undefined);
+    const currentRound = needsRound ? await this.currentRound(ref.id) : 1;
 
     // Protected projects keep every payload encrypted; never write plaintext into them.
     const isProtected = await this.isProtected(ref.id);
@@ -516,7 +502,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
             entryId,
             now,
             by,
-            await seal({ ranking: entry.ranking, round: entry.round ?? 1, byName }),
+            await seal({ ranking: entry.ranking, round: entry.round ?? currentRound, byName }),
           ],
         });
       } else if (entry.kind === "outcome") {
@@ -629,11 +615,13 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     if (patch.description !== undefined) {
       set("description", key ? await encrypt(patch.description, key) : patch.description);
     }
-    if (patch.voting) {
-      set("voting", JSON.stringify({ ...snap.project.voting, ...patch.voting }));
+    const voting = patch.voting ? { ...snap.project.voting, ...patch.voting } : undefined;
+    if (voting) {
+      set("voting", JSON.stringify(voting));
     }
 
     await this.client.batchUpdateValues(ref.id, [{ range: "meta!A:B", values: rows }]);
+    if (voting) this.rounds.set(ref.id, voting.round);
   }
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
@@ -747,6 +735,9 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     if (snap.role !== "owner") {
       throw new Error("PERMISSION_DENIED: Only owner may enable password protection");
     }
+    if (snap.project.protected) {
+      throw new Error("Project is already password protected");
+    }
     if (password.length < 12) {
       throw new Error("Password must be at least 12 characters long");
     }
@@ -764,119 +755,49 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     // 2. Read all existing data to encrypt
     const data = await this.client.batchGetValues(ref.id, [
       "meta!A:B",
-      "options!A:F",
-      "grades!A:E",
-      "comments!A:E",
-      "rankings!A:D",
-      "outcomes!A:D",
+      ...PAYLOAD_TABS.map(([tab, columns]) => `${tab}!${columns}`),
     ]);
+    const tabRows = (tab: string) =>
+      data.valueRanges.find((r) => r.range.startsWith(tab))?.values ?? [];
 
-    const metaMap = new Map<string, string>();
-    const metaRange = data.valueRanges.find((r) => r.range.startsWith("meta"));
-    if (metaRange?.values) {
-      for (const row of metaRange.values.slice(1)) {
-        if (row[0] && row[1]) metaMap.set(row[0], row[1]);
+    // 3. Set the protection keys in place: rows keep their positions, so no stale row is left
+    // behind and keys this code does not know about survive.
+    const metaRows = tabRows("meta").map((r) => [...r]);
+    if (metaRows.length === 0) metaRows.push(["key", "value"]);
+    const setMeta = (name: string, value: string) => {
+      const row = metaRows.find((r, i) => i > 0 && r[0] === name);
+      if (row) {
+        row[1] = value;
+      } else {
+        metaRows.push([name, value]);
       }
+    };
+    setMeta("protected", "true");
+    setMeta("kdf", "pbkdf2-sha256");
+    setMeta("kdfIterations", "600000");
+    setMeta("salt", saltBase64);
+    setMeta("verifier", verifier);
+    setMeta("title", await encrypt(snap.project.title, cryptoKey));
+    if (snap.project.description) {
+      setMeta("description", await encrypt(snap.project.description, cryptoKey));
     }
 
-    const title = metaMap.get("title") || snap.project.title;
-    const desc = metaMap.get("description") || snap.project.description || "";
-
-    const encryptedTitle = await encrypt(title, cryptoKey);
-    const encryptedDesc = desc ? await encrypt(desc, cryptoKey) : "";
-
-    const updatedMetaRows: string[][] = [
-      ["key", "value"],
-      ["formatVersion", metaMap.get("formatVersion") || "1"],
-      ["createdAt", metaMap.get("createdAt") || new Date().toISOString()],
-      ["owner", metaMap.get("owner") || ""],
-      ["protected", "true"],
-      ["voting", metaMap.get("voting") || JSON.stringify(snap.project.voting)],
-      ["kdf", "pbkdf2-sha256"],
-      ["kdfIterations", "600000"],
-      ["salt", saltBase64],
-      ["verifier", verifier],
-      ["title", encryptedTitle],
-    ];
-    if (encryptedDesc) {
-      updatedMetaRows.push(["description", encryptedDesc]);
-    }
-
-    // Encrypt options payloads
-    const optionsRows: string[][] = [["id", "order", "status", "at", "by", "payload"]];
-    const optionsRange = data.valueRanges.find((r) => r.range.startsWith("options"));
-    if (optionsRange?.values) {
-      for (const row of optionsRange.values.slice(1)) {
-        const [id, order, status, at, by, payloadStr] = row;
-        if (!payloadStr) continue;
-        const encPayload = await encrypt(payloadStr, cryptoKey);
-        optionsRows.push([
-          id || "",
-          order || "0",
-          status || "active",
-          at || "",
-          by || "",
-          encPayload,
-        ]);
+    // 4. Encrypt the payload column of every row of every content tab, in place.
+    const updates = [{ range: "meta!A:B", values: metaRows }];
+    for (const [tab, columns, payloadColumn] of PAYLOAD_TABS) {
+      const rows: string[][] = [];
+      for (const row of tabRows(tab)) {
+        const copy = [...row];
+        const payload = copy[payloadColumn];
+        // Row 1 is the header; rows without a payload have nothing to protect.
+        if (rows.length > 0 && payload) {
+          copy[payloadColumn] = await encrypt(payload, cryptoKey);
+        }
+        rows.push(copy);
       }
+      if (rows.length > 0) updates.push({ range: `${tab}!${columns}`, values: rows });
     }
-
-    // Encrypt grades payloads
-    const gradesRows: string[][] = [["id", "at", "by", "optionId", "payload"]];
-    const gradesRange = data.valueRanges.find((r) => r.range.startsWith("grades"));
-    if (gradesRange?.values) {
-      for (const row of gradesRange.values.slice(1)) {
-        const [id, at, by, optionId, payloadStr] = row;
-        if (!payloadStr) continue;
-        const encPayload = await encrypt(payloadStr, cryptoKey);
-        gradesRows.push([id || "", at || "", by || "", optionId || "", encPayload]);
-      }
-    }
-
-    // Encrypt comments payloads
-    const commentsRows: string[][] = [["id", "at", "by", "optionId", "payload"]];
-    const commentsRange = data.valueRanges.find((r) => r.range.startsWith("comments"));
-    if (commentsRange?.values) {
-      for (const row of commentsRange.values.slice(1)) {
-        const [id, at, by, optionId, payloadStr] = row;
-        if (!payloadStr) continue;
-        const encPayload = await encrypt(payloadStr, cryptoKey);
-        commentsRows.push([id || "", at || "", by || "", optionId || "", encPayload]);
-      }
-    }
-
-    // Encrypt rankings payloads
-    const rankingsRows: string[][] = [["id", "at", "by", "payload"]];
-    const rankingsRange = data.valueRanges.find((r) => r.range.startsWith("rankings"));
-    if (rankingsRange?.values) {
-      for (const row of rankingsRange.values.slice(1)) {
-        const [id, at, by, payloadStr] = row;
-        if (!payloadStr) continue;
-        const encPayload = await encrypt(payloadStr, cryptoKey);
-        rankingsRows.push([id || "", at || "", by || "", encPayload]);
-      }
-    }
-
-    // Encrypt outcomes payloads
-    const outcomesRows: string[][] = [["id", "at", "by", "payload"]];
-    const outcomesRange = data.valueRanges.find((r) => r.range.startsWith("outcomes"));
-    if (outcomesRange?.values) {
-      for (const row of outcomesRange.values.slice(1)) {
-        const [id, at, by, payloadStr] = row;
-        if (!payloadStr) continue;
-        const encPayload = await encrypt(payloadStr, cryptoKey);
-        outcomesRows.push([id || "", at || "", by || "", encPayload]);
-      }
-    }
-
-    await this.client.batchUpdateValues(ref.id, [
-      { range: "meta!A:B", values: updatedMetaRows },
-      { range: "options!A:F", values: optionsRows },
-      { range: "grades!A:E", values: gradesRows },
-      { range: "comments!A:E", values: commentsRows },
-      { range: "rankings!A:D", values: rankingsRows },
-      { range: "outcomes!A:D", values: outcomesRows },
-    ]);
+    await this.client.batchUpdateValues(ref.id, updates);
     // The owner just chose the password, so later writes in this session encrypt with it.
     this.protection.set(ref.id, true);
     this.keys.set(ref.id, cryptoKey);
@@ -902,10 +823,28 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   private async isProtected(spreadsheetId: string): Promise<boolean> {
     const known = this.protection.get(spreadsheetId);
     if (known !== undefined) return known;
+    return (await this.readMeta(spreadsheetId)).get("protected") === "true";
+  }
+
+  /**
+   * The voting round from a fresh meta read, so rounds the owner started on another device count.
+   * When meta cannot be read (rate limited, offline) the round seen last in this session is used.
+   */
+  private async currentRound(spreadsheetId: string): Promise<number> {
+    try {
+      return parseVoting((await this.readMeta(spreadsheetId)).get("voting")).state.round;
+    } catch (err) {
+      const known = this.rounds.get(spreadsheetId);
+      if (known === undefined) throw err;
+      return known;
+    }
+  }
+
+  private async readMeta(spreadsheetId: string): Promise<Map<string, string>> {
     const data = await this.client.batchGetValues(spreadsheetId, ["meta!A:B"]);
-    const row = data.valueRanges[0]?.values?.find((r) => r[0] === "protected");
-    const isProtected = row?.[1] === "true";
-    this.protection.set(spreadsheetId, isProtected);
-    return isProtected;
+    const meta = readMetaRows(data.valueRanges[0]?.values ?? []).values;
+    this.protection.set(spreadsheetId, meta.get("protected") === "true");
+    this.rounds.set(spreadsheetId, parseVoting(meta.get("voting")).state.round);
+    return meta;
   }
 }

@@ -35,6 +35,7 @@ import { useLiveShare } from "../features/live/LiveShareContext.js";
 import { DeleteProject } from "../features/project/DeleteProject.js";
 import { downloadProjectExport } from "../features/project/ExportButton.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
+import { SkippedRowsNotice } from "../features/project/SkippedRowsNotice.js";
 import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
 import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
@@ -322,6 +323,8 @@ export function ProjectViewPage() {
           </DropdownMenu>
         </div>
       </header>
+
+      <SkippedRowsNotice warnings={snapshot.warnings} />
 
       <DeleteProject
         hideTrigger

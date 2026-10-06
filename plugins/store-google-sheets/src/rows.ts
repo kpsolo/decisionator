@@ -1,6 +1,8 @@
 import {
   type Comment,
   CommentSchema,
+  type Contribution,
+  ContributionSchema,
   type Grade,
   GradeSchema,
   type Option,
@@ -57,13 +59,15 @@ export async function decodeOptionRow(
 
   try {
     const parsed = JSON.parse(jsonStr);
+    // The payload is authoritative; the columns only fill fields it lacks. The `by` column holds
+    // the owner who last rewrote the tab, not necessarily the option's author.
     const parseRes = OptionSchema.safeParse({
       ...parsed,
-      id: id || parsed.id,
-      order: orderStr ? Number.parseInt(orderStr, 10) : parsed.order,
-      status: status || parsed.status,
-      at: at || parsed.at,
-      by: by || parsed.by,
+      id: parsed.id ?? id,
+      order: parsed.order ?? (orderStr ? Number.parseInt(orderStr, 10) : undefined),
+      status: parsed.status ?? (status || undefined),
+      at: parsed.at ?? (at || undefined),
+      by: parsed.by ?? (by || undefined),
     });
 
     if (!parseRes.success) {
@@ -339,4 +343,58 @@ export async function encodeOutcomeRow(
     payloadStr = await payloadHook(payloadStr);
   }
   return [id, at, by, payloadStr];
+}
+
+/**
+ * Contribution Row Codec
+ * Tab: contributions (id, at, by, targetKind, targetId, payload)
+ */
+export async function decodeContributionRow(
+  row: string[],
+  rowIndex: number,
+  payloadHook?: PayloadHook
+): Promise<RowDecodeResult<Contribution>> {
+  const [id, at, by, targetKind, targetId, rawPayload] = row;
+  if (!rawPayload) {
+    return { warning: `contributions row ${rowIndex}: empty payload column` };
+  }
+
+  let jsonStr = rawPayload;
+  if (payloadHook) {
+    try {
+      jsonStr = await payloadHook(rawPayload);
+    } catch (err: unknown) {
+      return {
+        warning: `contributions row ${rowIndex}: failed to decrypt payload (${errorMessage(err)})`,
+      };
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const parseRes = ContributionSchema.safeParse({
+      id: id || "contrib",
+      at: at || "",
+      by: by || "",
+      targetKind: targetKind || "project",
+      targetId: targetId || "",
+      type: parsed.type,
+      body: parsed.body,
+      pros: parsed.pros,
+      cons: parsed.cons,
+      sources: parsed.sources,
+      author: parsed.author || { kind: "human" },
+      reviewStatus: parsed.reviewStatus || "pending",
+    });
+    if (!parseRes.success) {
+      return {
+        warning: `contributions row ${rowIndex}: validation failed (${parseRes.error.issues.map((i) => i.message).join(", ")})`,
+      };
+    }
+    return { entity: parseRes.data };
+  } catch (err: unknown) {
+    return {
+      warning: `contributions row ${rowIndex}: invalid JSON payload (${errorMessage(err)})`,
+    };
+  }
 }

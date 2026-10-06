@@ -1,4 +1,4 @@
-# Contract: Project Store — v1.2.1
+# Contract: Project Store — v1.3.0
 
 The extension point that keeps project storage pluggable (spec FR-011, Principle I).
 - MVP implementation: `store-google-sheets` ([sheet-store.md](./sheet-store.md)).
@@ -51,6 +51,12 @@ a delegated author. Entries of signed-in authors have no `byName`.
 `ProjectSnapshot` is the full, validated, decrypted state as described in
 [data-model.md](../data-model.md). The host computes stats and tallies from snapshots. Stores
 only persist.
+
+A stored record that fails validation (e.g. after a direct edit of the backing file) is left out
+of the snapshot instead of failing `openProject`. Since v1.3.0 the store reports each one in the
+optional `ProjectSnapshot.warnings: string[]`, naming where it is stored and why it was skipped
+(Google Sheets: `"<tab> row <n>: <reason>"`). The field is absent when nothing was skipped, and the
+UI shows it to the user.
 
 ## Rules
 
@@ -118,6 +124,7 @@ covers:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.3.0 (unreleased) | 2026-10-06 | Add optional `ProjectSnapshot.warnings`: records skipped because they failed validation, so the UI can name them |
 | 1.2.1 (unreleased) | 2026-10-06 | `share` is owner-only: non-owners get `PERMISSION_DENIED` (rule 7). `removeUsers` must revoke the named collaborators; Google refuses it with `NOT_SUPPORTED` while link sharing stays on. Contract kit covers both |
 | 1.2.0 (unreleased) | 2026-10-06 | Add delegated append: `append(ref, entries, { onBehalfOf })` lets the owner record grades, comments and rankings for another participant (live-session guests, moved projects); new optional `byName` on grades, comments and rankings; latest-wins keyed on the stamped author (rule 6) |
 | 1.1.0 (unreleased) | 2026-10-05 | Add `deleteProject` (owner only, moves Sheet to Drive trash) and `forgetProject` (participant, clears local data and listing) per constitution Principle V and FR-025 |
