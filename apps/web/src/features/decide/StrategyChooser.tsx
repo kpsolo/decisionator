@@ -1,14 +1,24 @@
 import { runTally } from "@decisionator/core";
 import type { Option, OutcomeRecord, Project } from "@decisionator/core";
-import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { GoogleAuthService, GoogleSheetsProjectStore } from "@decisionator/store-google-sheets";
+import type { ProjectRef, ProjectSnapshot, ProjectStore } from "@decisionator/plugin-sdk";
 import { bordaStrategy } from "@decisionator/strategy-borda";
 import { ownerPickStrategy } from "@decisionator/strategy-owner-pick";
 import { randomStrategy } from "@decisionator/strategy-random";
 import { weightedStrategy } from "@decisionator/strategy-weighted";
+import { CheckCircle2, Play, Sparkles } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
-import { getGoogleConfig } from "../../config/google.js";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
+import { NativeSelect } from "../../components/ui/native-select.js";
 
 export interface StrategyDescriptor {
   id: string;
@@ -59,7 +69,9 @@ export const BUILTIN_STRATEGIES: StrategyDescriptor[] = [
 
 export interface StrategyChooserProps {
   snapshot: ProjectSnapshot;
-  fileId: string;
+  /** Store and project the outcome is recorded in (whatever backend holds the project). */
+  store: ProjectStore;
+  projectRef: ProjectRef;
   currentUser: string;
   isOwner: boolean;
   onOutcomeCreated?: (outcome: OutcomeRecord) => void;
@@ -67,7 +79,8 @@ export interface StrategyChooserProps {
 
 export const StrategyChooser: React.FC<StrategyChooserProps> = ({
   snapshot,
-  fileId,
+  store,
+  projectRef,
   currentUser,
   isOwner,
   onOutcomeCreated,
@@ -136,11 +149,7 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
       });
 
       // Append outcome to project store
-      const cfg = getGoogleConfig();
-      const auth = new GoogleAuthService({ clientId: cfg.clientId });
-      const store = new GoogleSheetsProjectStore(auth);
-
-      await store.append({ store: "google-sheets", id: fileId }, [
+      await store.append(projectRef, [
         {
           kind: "outcome",
           outcome,
@@ -162,201 +171,164 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
 
   if (!isOwner) {
     return (
-      <div className="card">
-        <h3>Decision Strategies</h3>
-        <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+      <Card className="max-w-xl mx-auto border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold">Decision Strategies</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
           Only the project owner can execute decision strategies or close voting.
-        </p>
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div>
-        <h3 style={{ margin: "0 0 6px 0" }}>Choose Decision Strategy</h3>
-        <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
+    <Card className="max-w-xl mx-auto border-border bg-card shadow-xs">
+      <CardHeader>
+        <div className="flex items-center gap-2 text-primary font-medium text-xs tracking-wider uppercase mb-1">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          <span>Pluggable Strategies</span>
+        </div>
+        <CardTitle className="text-lg font-bold">Choose Decision Strategy</CardTitle>
+        <CardDescription className="text-xs text-muted-foreground">
           Decide between candidates using owner pick, uniform random, grade-weighted draw, or ranked
           voting.
-        </p>
-      </div>
+        </CardDescription>
+      </CardHeader>
 
-      {/* Strategy selector radio group */}
-      <fieldset
-        style={{
-          border: "none",
-          padding: 0,
-          margin: 0,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
-        <legend style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>
-          Available Strategies
-        </legend>
-        {BUILTIN_STRATEGIES.map((desc) => {
-          const preCheck = checkPreconditions(desc);
-          const isSelected = selectedStrategyId === desc.id;
+      <CardContent className="space-y-4">
+        {/* Strategy selector radio group */}
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-2 text-sm font-semibold text-foreground">
+            Available Strategies
+          </legend>
+          {BUILTIN_STRATEGIES.map((desc) => {
+            const preCheck = checkPreconditions(desc);
+            const isSelected = selectedStrategyId === desc.id;
 
-          return (
-            <label
-              key={desc.id}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                padding: "10px 12px",
-                borderRadius: 6,
-                border: isSelected
-                  ? "2px solid var(--primary, #3b82f6)"
-                  : "1px solid var(--border)",
-                backgroundColor: isSelected ? "var(--bg-accent, #eff6ff)" : "transparent",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="radio"
-                  name="decisionStrategy"
-                  value={desc.id}
-                  checked={isSelected}
-                  onChange={() => {
-                    setSelectedStrategyId(desc.id);
-                    setErrorMsg(null);
-                  }}
-                />
-                <span style={{ fontWeight: 600, fontSize: 14 }}>{desc.name}</span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>v{desc.version}</span>
-                {desc.usesRandomness && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      backgroundColor: "var(--badge-bg, #e2e8f0)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
+            return (
+              <label
+                key={desc.id}
+                className={`flex flex-col p-3 rounded-lg border transition-colors cursor-pointer select-none ${
+                  isSelected
+                    ? "border-primary bg-primary/5 shadow-2xs"
+                    : "border-border bg-card/60 hover:bg-accent/40"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="radio"
+                    name="decisionStrategy"
+                    value={desc.id}
+                    checked={isSelected}
+                    onChange={() => {
+                      setSelectedStrategyId(desc.id);
+                      setErrorMsg(null);
                     }}
-                  >
-                    🎲 Seeded RNG
-                  </span>
-                )}
-              </div>
-              <p style={{ margin: "4px 0 0 24px", fontSize: 13, color: "var(--text-muted)" }}>
-                {desc.description}
-              </p>
-              {!preCheck.ok && (
-                <div
-                  style={{
-                    margin: "4px 0 0 24px",
-                    fontSize: 12,
-                    color: "var(--color-danger, #ef4444)",
-                    fontWeight: 500,
-                  }}
-                >
-                  ⚠️ Precondition unmet: {preCheck.reason}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <div className="flex items-center gap-2 flex-wrap flex-1">
+                    <span className="font-semibold text-sm text-foreground">{desc.name}</span>
+                    <Badge variant="outline" className="text-[10px] py-0">
+                      v{desc.version}
+                    </Badge>
+                    {desc.usesRandomness && (
+                      <Badge variant="secondary" className="text-[10px] py-0">
+                        🎲 Seeded RNG
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                <p className="text-xs text-muted-foreground ml-7 mt-1 leading-relaxed">
+                  {desc.description}
+                </p>
+
+                {!preCheck.ok && (
+                  <p className="text-xs text-destructive ml-7 mt-1 font-medium">
+                    ⚠️ Precondition unmet: {preCheck.reason}
+                  </p>
+                )}
+              </label>
+            );
+          })}
+        </fieldset>
+
+        {/* Custom parameters for interactive or configurable strategies */}
+        {selectedDescriptor?.interactive && (
+          <div className="rounded-lg border border-border bg-muted/20 p-3.5 space-y-2">
+            <label
+              htmlFor="owner-pick-select"
+              className="block text-xs font-semibold text-foreground"
+            >
+              Select Option to Pick:
             </label>
-          );
-        })}
-      </fieldset>
+            <NativeSelect
+              id="owner-pick-select"
+              value={selectedOptionId}
+              onChange={(e) => setSelectedOptionId(e.target.value)}
+              wrapperClassName="w-full"
+            >
+              {activeOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        )}
 
-      {/* Custom parameters for interactive or configurable strategies */}
-      {selectedDescriptor?.interactive && (
-        <div style={{ padding: 12, backgroundColor: "var(--bg-subtle, #f8fafc)", borderRadius: 6 }}>
-          <label
-            htmlFor="owner-pick-select"
-            style={{ display: "block", fontWeight: 600, fontSize: 13, marginBottom: 6 }}
+        {selectedDescriptor?.id === "org.decisionator.strategy.weighted" && (
+          <div className="rounded-lg border border-border bg-muted/20 p-3.5">
+            <label className="flex items-center gap-2 text-xs cursor-pointer select-none font-medium text-foreground">
+              <input
+                type="checkbox"
+                checked={includeUngraded}
+                onChange={(e) => setIncludeUngraded(e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span>Include ungraded options (give them minimum baseline weight of 1.0)</span>
+            </label>
+          </div>
+        )}
+
+        {errorMsg && (
+          <output
+            aria-live="polite"
+            className="block rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive font-medium"
           >
-            Select Option to Pick:
-          </label>
-          <select
-            id="owner-pick-select"
-            value={selectedOptionId}
-            onChange={(e) => setSelectedOptionId(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "6px 8px",
-              borderRadius: 4,
-              border: "1px solid var(--border)",
-            }}
+            {errorMsg}
+          </output>
+        )}
+
+        {successMsg && (
+          <output
+            aria-live="polite"
+            className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success font-medium"
           >
-            {activeOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+            <span>{successMsg}</span>
+          </output>
+        )}
+      </CardContent>
 
-      {selectedDescriptor?.id === "org.decisionator.strategy.weighted" && (
-        <div style={{ padding: 12, backgroundColor: "var(--bg-subtle, #f8fafc)", borderRadius: 6 }}>
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={includeUngraded}
-              onChange={(e) => setIncludeUngraded(e.target.checked)}
-            />
-            <span>Include ungraded options (give them minimum baseline weight of 1.0)</span>
-          </label>
-        </div>
-      )}
-
-      {errorMsg && (
-        <output
-          aria-live="polite"
-          style={{
-            padding: 8,
-            borderRadius: 4,
-            backgroundColor: "#fee2e2",
-            color: "#b91c1c",
-            fontSize: 13,
-            display: "block",
-          }}
-        >
-          {errorMsg}
-        </output>
-      )}
-
-      {successMsg && (
-        <output
-          aria-live="polite"
-          style={{
-            padding: 8,
-            borderRadius: 4,
-            backgroundColor: "#dcfce7",
-            color: "#15803d",
-            fontSize: 13,
-            display: "block",
-          }}
-        >
-          {successMsg}
-        </output>
-      )}
-
-      <div>
-        <button
+      <CardFooter className="border-t border-border pt-4 flex justify-end">
+        <Button
           type="button"
+          variant="default"
           onClick={handleRunStrategy}
           disabled={
             running || (selectedDescriptor ? !checkPreconditions(selectedDescriptor).ok : true)
           }
-          className="btn btn-primary"
-          style={{ padding: "8px 16px" }}
+          leftIcon={<Play className="h-4 w-4" aria-hidden />}
         >
           {running
             ? "Executing Decision..."
             : `Decide with ${selectedDescriptor?.name || "Strategy"}`}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </CardFooter>
+    </Card>
   );
 };
+
+export default StrategyChooser;

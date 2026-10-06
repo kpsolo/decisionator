@@ -1,16 +1,16 @@
-import {
-  type Option,
-  buildInstruction,
-  extractOptionsJson,
-  validateOptionsPayload,
-} from "@decisionator/core";
+import { type Option, buildInstruction } from "@decisionator/core";
+import { AlertCircle, Bot, Sparkles, Zap } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import { Card, CardContent, CardDescription, CardHeader } from "../../components/ui/card.js";
+import { Input } from "../../components/ui/input.js";
+import { type ProjectMeta, parseOptionsJson } from "../paste-format/options-json.js";
 
 export interface ConnectAgentProps {
   pastedText: string;
   localeHint?: string;
-  onFormatted: (options: Option[], rawAnswer: string) => void;
+  onFormatted: (options: Option[], rawAnswer: string, project?: ProjectMeta) => void;
 }
 
 export const ConnectAgent: React.FC<ConnectAgentProps> = ({
@@ -65,43 +65,19 @@ export const ConnectAgent: React.FC<ConnectAgentProps> = ({
         throw new Error(errJson.message || `Agent returned status ${res.status}`);
       }
 
-      const data = (await res.json()) as { answer?: string; result?: string };
-      const rawText = data.answer || data.result || JSON.stringify(data);
+      const data = (await res.json()) as { answer?: unknown; result?: unknown };
+      // Agents may return the answer as text (often fenced) or as an already-parsed object.
+      const answer = data.answer ?? data.result ?? data;
+      const rawText = typeof answer === "string" ? answer : JSON.stringify(answer);
 
       setStatusMsg("Validating agent response...");
-      const extraction = extractOptionsJson(rawText);
-      const targetJson =
-        extraction.kind === "single"
-          ? extraction.json
-          : extraction.kind === "choose"
-            ? extraction.candidates[0]
-            : null;
-
-      if (!targetJson) {
-        throw new Error("Agent response did not contain valid options JSON format.");
+      const parsed = parseOptionsJson(rawText);
+      if (parsed.kind === "invalid") {
+        throw new Error(`Agent response is not a valid options list: ${parsed.errors.join(", ")}`);
       }
-
-      const valReport = validateOptionsPayload(targetJson);
-      if (!valReport.ok) {
-        throw new Error(`Validation failed: ${valReport.errors.join(", ")}`);
-      }
-
-      const normalized: Option[] = valReport.options.map((opt, idx) => ({
-        id: opt.id || `opt_${Date.now()}_${idx}`,
-        order: idx + 1,
-        status: "active",
-        title: opt.title,
-        description: opt.description,
-        category: opt.category,
-        tags: opt.tags,
-        pros: opt.pros,
-        cons: opt.cons,
-        effort: opt.effort,
-        links: opt.links,
-      }));
 
       setStatusMsg("Formatting complete!");
-      onFormatted(normalized, rawText);
+      onFormatted(parsed.options, rawText, parsed.project);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -110,90 +86,73 @@ export const ConnectAgent: React.FC<ConnectAgentProps> = ({
   };
 
   return (
-    <div
-      className="card"
-      style={{
-        border: "1px solid var(--accent, #6366f1)",
-        background: "rgba(99, 102, 241, 0.04)",
-        padding: 16,
-        marginBottom: 16,
-        borderRadius: 8,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h4 style={{ margin: 0, color: "var(--accent, #6366f1)" }}>
-          ⚡ Fast Path: Connected Agent (FR-041)
-        </h4>
-        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Skip copy-paste</span>
-      </div>
-
-      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "8px 0 12px 0" }}>
-        Connect directly to your local or remote agent node (MCP/REST at <code>127.0.0.1:4178</code>
-        ) to format options automatically in one click.
-      </p>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-        <input
-          type="text"
-          value={agentUrl}
-          onChange={(e) => setAgentUrl(e.target.value)}
-          placeholder="http://127.0.0.1:4178"
-          style={{
-            flex: "1 1 200px",
-            padding: "6px 10px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            fontSize: 13,
-          }}
-          disabled={loading}
-        />
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="Bearer token (optional if open)"
-          style={{
-            flex: "1 1 180px",
-            padding: "6px 10px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            fontSize: 13,
-          }}
-          disabled={loading}
-        />
-        <button
-          type="button"
-          onClick={handleAutoFormat}
-          disabled={loading}
-          className="btn btn-primary"
-          style={{ fontSize: 13 }}
-        >
-          {loading ? "Formatting..." : "Auto-format with Agent"}
-        </button>
-      </div>
-
-      {statusMsg && !error && (
-        <div style={{ fontSize: 12, color: "var(--accent, #6366f1)" }}>{statusMsg}</div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: 8,
-            borderRadius: 4,
-            background: "rgba(239, 68, 68, 0.1)",
-            color: "var(--error, #ef4444)",
-            fontSize: 12,
-          }}
-        >
-          {error}
+    <Card className="border-agent-border/60 bg-agent/5 mb-4">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold leading-none tracking-tight text-foreground flex items-center gap-2">
+            <Zap className="h-4 w-4 text-agent" aria-hidden="true" />
+            Fast Path: Connected Agent (FR-041)
+          </h4>
+          <span className="text-xs text-muted-foreground">Skip copy-paste</span>
         </div>
-      )}
-    </div>
+        <CardDescription className="text-xs">
+          Connect directly to your local or remote agent node (MCP/REST at{" "}
+          <code className="text-foreground font-mono">127.0.0.1:4178</code>) to format options
+          automatically in one click.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input
+            type="text"
+            value={agentUrl}
+            onChange={(e) => setAgentUrl(e.target.value)}
+            placeholder="http://127.0.0.1:4178"
+            aria-label="Agent node URL"
+            disabled={loading}
+            className="flex-1 text-xs"
+          />
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Bearer token (optional if open)"
+            aria-label="Bearer token"
+            disabled={loading}
+            className="sm:w-56 text-xs"
+          />
+          <Button
+            type="button"
+            variant="agent"
+            size="sm"
+            onClick={handleAutoFormat}
+            disabled={loading}
+            isLoading={loading}
+            leftIcon={<Sparkles className="h-3.5 w-3.5" />}
+            className="shrink-0"
+          >
+            {loading ? "Formatting..." : "Auto-format with Agent"}
+          </Button>
+        </div>
+
+        {statusMsg && !error && (
+          <div className="flex items-center gap-1.5 text-xs text-agent font-medium">
+            <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{statusMsg}</span>
+          </div>
+        )}
+
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };

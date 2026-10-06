@@ -1,9 +1,20 @@
 import { ProjectExportV1Schema } from "@decisionator/core";
 import type { ProjectSummary } from "@decisionator/plugin-sdk";
 import type { FileProjectStore } from "@decisionator/store-file";
+import { ArrowRight, Clock, FileJson, FolderOpen, Sparkles } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Badge } from "../components/ui/badge.js";
+import { Button } from "../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card.js";
+import { Skeleton } from "../components/ui/skeleton.js";
 import { getStorageManager } from "../storage/storage-manager.js";
 import { getDatabase } from "../sync/db.js";
 
@@ -141,44 +152,53 @@ export function HomePage() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="flex flex-col gap-6">
       {error && (
         <div
           role="alert"
-          style={{
-            padding: "10px 14px",
-            borderRadius: 6,
-            background: "rgba(220, 38, 38, 0.1)",
-            color: "var(--color-danger, #ef4444)",
-          }}
+          className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive font-medium shadow-xs"
         >
           {error}
         </div>
       )}
 
-      <div className="card">
-        <h2>My Decision Projects</h2>
-        <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-          Modular Decision Engine for Teams. Runs locally in your browser, saves to your active
-          storage, and works 100% offline with local files.
-        </p>
-        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link to="/new" className="btn btn-primary">
-            + New Decision Project
-          </Link>
-          <button type="button" onClick={handleOpenFilePicker} className="btn btn-outline">
-            📁 Open from File...
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileInputChange}
-            accept=".json,.decisionator.json"
-            style={{ display: "none" }}
-          />
-        </div>
-      </div>
+      {/* Hero Welcome Card */}
+      <Card className="border-border bg-card shadow-xs">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-primary font-medium text-xs tracking-wider uppercase mb-1">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Modular Decision Engine</span>
+          </div>
+          <h2 className="text-2xl font-bold leading-none tracking-tight">My Decision Projects</h2>
+          <CardDescription className="text-sm text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+            Modular Decision Engine for Teams. Runs locally in your browser, saves to your active
+            storage, and works 100% offline with local files.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="default" asChild>
+              <Link to="/new">+ New Decision Project</Link>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleOpenFilePicker}
+              leftIcon={<FolderOpen className="h-4 w-4" />}
+            >
+              Open from File...
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileInputChange}
+              accept=".json,.decisionator.json"
+              className="hidden"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
+      {/* Drag & Drop Zone */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -186,95 +206,110 @@ export function HomePage() {
         }}
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
-        style={{
-          border: `2px dashed ${dragActive ? "var(--color-primary, #3b82f6)" : "var(--border)"}`,
-          borderRadius: 8,
-          padding: "20px 16px",
-          textAlign: "center",
-          background: dragActive ? "rgba(59, 130, 246, 0.05)" : "transparent",
-          transition: "all 0.2s ease",
-          color: "var(--text-muted)",
-          fontSize: 13,
-        }}
+        className={`flex items-center justify-center gap-3 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+          dragActive
+            ? "border-primary bg-primary/5 text-primary"
+            : "border-border/80 hover:border-border bg-card/50 text-muted-foreground"
+        }`}
       >
-        💡 Tip: Drag and drop any <code>.decisionator.json</code> file here to open it immediately.
+        <FileJson className="h-5 w-5 opacity-70" />
+        <span className="text-sm font-medium">
+          Tip: Drag and drop any{" "}
+          <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-foreground">
+            .decisionator.json
+          </code>{" "}
+          file here to open it immediately.
+        </span>
       </div>
 
+      {/* Projects List */}
       {loading ? (
-        <div className="card" style={{ textAlign: "center", padding: 24 }}>
-          Loading your projects...
-        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-16 w-full rounded-md" />
+            <Skeleton className="h-16 w-full rounded-md" />
+            <Skeleton className="h-16 w-full rounded-md" />
+          </CardContent>
+        </Card>
       ) : projects.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 32 }}>
-          <p style={{ color: "var(--text-muted)", marginBottom: 16 }}>
-            No decision projects found yet.
-          </p>
-          <Link to="/new" className="btn btn-outline">
-            Create your first decision project
-          </Link>
-        </div>
+        <Card className="text-center py-12">
+          <CardContent className="flex flex-col items-center justify-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-1">
+              ⚖️
+            </div>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              No decision projects found yet.
+            </p>
+            <Button variant="outline" asChild className="mt-2">
+              <Link to="/new">Create your first decision project</Link>
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Recent Projects ({projects.length})</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">
+                Recent Projects ({projects.length})
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
             {projects.map((p) => {
               const storePrefix = p.ref.store || "file";
               const openUrl = `/p/${storePrefix}/${p.ref.id}`;
+              const badgeVariant =
+                storePrefix === "file"
+                  ? "success"
+                  : storePrefix === "firestore"
+                    ? "warning"
+                    : "default";
+
               return (
                 <div
                   key={`${storePrefix}:${p.ref.id}`}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "10px 12px",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    background: "var(--bg)",
-                  }}
+                  className="group flex items-center justify-between p-3.5 rounded-lg border border-border bg-card/60 hover:bg-accent/40 hover:border-border transition-all shadow-2xs"
                 >
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <strong>{p.title}</strong>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          background:
-                            storePrefix === "file"
-                              ? "rgba(16, 185, 129, 0.15)"
-                              : storePrefix === "firestore"
-                                ? "rgba(245, 158, 11, 0.15)"
-                                : "rgba(59, 130, 246, 0.15)",
-                          color:
-                            storePrefix === "file"
-                              ? "#10b981"
-                              : storePrefix === "firestore"
-                                ? "#f59e0b"
-                                : "#3b82f6",
-                          textTransform: "uppercase",
-                          fontWeight: 600,
-                        }}
+                  <div className="space-y-1 pr-4 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-foreground truncate text-sm">
+                        {p.title}
+                      </span>
+                      <Badge
+                        variant={badgeVariant}
+                        className="uppercase text-[10px] tracking-wider font-semibold"
                       >
                         {storePrefix}
-                      </span>
+                      </Badge>
                     </div>
                     {p.updatedAt && (
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                        Updated: {new Date(p.updatedAt).toLocaleString()}
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>Updated: {new Date(p.updatedAt).toLocaleString()}</span>
                       </div>
                     )}
                   </div>
-                  <Link to={openUrl} className="btn btn-outline" style={{ fontSize: 12 }}>
-                    Open &rarr;
-                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className="shrink-0 group-hover:bg-accent group-hover:text-accent-foreground"
+                  >
+                    <Link to={openUrl} className="flex items-center gap-1">
+                      <span>Open</span>
+                      <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </Link>
+                  </Button>
                 </div>
               );
             })}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 }
+export default HomePage;

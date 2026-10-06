@@ -1,5 +1,16 @@
+import { AlertTriangle, Lock, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
+import { Input } from "../../components/ui/input.js";
 
 export interface PasswordSetupProps {
   onEnablePassword: (password: string) => Promise<void>;
@@ -35,138 +46,100 @@ export const PasswordSetup: React.FC<PasswordSetupProps> = ({ onEnablePassword, 
   };
 
   return (
-    <div
-      className="card"
-      style={{
-        maxWidth: 480,
-        margin: "24px auto",
-        padding: 24,
-        background: "var(--card-bg, #18181b)",
-      }}
-    >
-      <h3 style={{ marginBottom: 8 }}>Set Project Password</h3>
-      <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
-        Add end-to-end client-side encryption (AES-256-GCM + PBKDF2) to protect this decision
-        project.
-      </p>
-
-      {/* Warnings & Security disclosures (FR-017) */}
-      <div
-        style={{
-          padding: "10px 14px",
-          background: "rgba(234, 179, 8, 0.1)",
-          border: "1px solid rgba(234, 179, 8, 0.3)",
-          borderRadius: 6,
-          marginBottom: 16,
-          fontSize: 12,
-          color: "var(--color-warning, #eab308)",
-          lineHeight: 1.5,
-        }}
-      >
-        <strong>Important Security Notice:</strong>
-        <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
-          <li>
-            <strong>Lost passwords cannot be recovered.</strong> If you lose the password, your data
-            is permanently unreadable.
-          </li>
-          <li>
-            <strong>Metadata remains visible in Google Sheets:</strong> collaborator emails, option
-            IDs, timestamps, and row counts remain readable in the Sheet grid. Option titles,
-            descriptions, and comments are fully encrypted (<code>enc:v1:…</code>).
-          </li>
-          <li>The Google Sheet title will be renamed to "Deci project (protected)".</li>
-        </ul>
-      </div>
-
-      {error && (
-        <div
-          role="alert"
-          style={{
-            padding: "8px 12px",
-            background: "rgba(220, 38, 38, 0.1)",
-            color: "var(--color-danger, #ef4444)",
-            borderRadius: 6,
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
-          {error}
+    <Card className="mx-auto my-6 max-w-md">
+      <CardHeader>
+        <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-primary">
+          <ShieldCheck className="h-4 w-4" aria-hidden />
+          <span>Client-Side Encryption</span>
         </div>
-      )}
+        <CardTitle className="text-xl font-bold">Set Project Password</CardTitle>
+        <CardDescription className="text-xs leading-relaxed">
+          Add end-to-end client-side encryption (AES-256-GCM + PBKDF2) to protect this decision
+          project.
+        </CardDescription>
+      </CardHeader>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div>
-          <label
-            htmlFor="new-pwd-input"
-            style={{ display: "block", fontSize: 12, marginBottom: 4, fontWeight: 500 }}
-          >
-            Password (at least 12 characters):
-          </label>
-          <input
-            id="new-pwd-input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-            placeholder="Enter passphrase (min 12 chars)..."
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              background: "var(--bg)",
-              color: "var(--text)",
-              fontSize: 14,
-            }}
-          />
-        </div>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-4">
+          {/* Warnings & Security disclosures (FR-017) */}
+          <div className="space-y-1 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs leading-relaxed text-foreground">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
+              <strong>Important Security Notice:</strong>
+            </div>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>
+                <strong>Lost passwords cannot be recovered.</strong> If you lose the password, your
+                data is permanently unreadable.
+              </li>
+              <li>
+                <strong>Metadata remains visible in Google Sheets:</strong> collaborator emails,
+                option IDs, timestamps, and row counts remain readable in the Sheet grid. Option
+                titles, descriptions, and comments are fully encrypted (<code>enc:v1:…</code>).
+              </li>
+              <li>The Google Sheet title will be renamed to "Deci project (protected)".</li>
+            </ul>
+          </div>
 
-        <div>
-          <label
-            htmlFor="confirm-pwd-input"
-            style={{ display: "block", fontSize: 12, marginBottom: 4, fontWeight: 500 }}
-          >
-            Confirm Password:
-          </label>
-          <input
-            id="confirm-pwd-input"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            disabled={loading}
-            placeholder="Confirm passphrase..."
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              background: "var(--bg)",
-              color: "var(--text)",
-              fontSize: 14,
-            }}
-          />
-        </div>
+          {error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive"
+            >
+              {error}
+            </div>
+          )}
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={loading}
-            className="btn btn-outline"
-            style={{ fontSize: 13 }}
-          >
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label htmlFor="new-pwd-input" className="text-xs font-semibold text-foreground">
+                Password (at least 12 characters):
+              </label>
+              <Input
+                id="new-pwd-input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                placeholder="Enter passphrase (min 12 chars)..."
+                className="bg-background text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="confirm-pwd-input" className="text-xs font-semibold text-foreground">
+                Confirm Password:
+              </label>
+              <Input
+                id="confirm-pwd-input"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={loading}
+                placeholder="Confirm passphrase..."
+                className="bg-background text-sm"
+              />
+            </div>
+          </div>
+        </CardContent>
+
+        <CardFooter className="flex items-center justify-end gap-2 border-t border-border pt-4">
+          <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={loading}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            size="sm"
             disabled={loading || password.length < 12 || password !== confirmPassword}
-            className="btn btn-primary"
-            style={{ fontSize: 13 }}
+            isLoading={loading}
+            leftIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
           >
             {loading ? "Encrypting Project..." : "Enable Password Protection"}
-          </button>
-        </div>
+          </Button>
+        </CardFooter>
       </form>
-    </div>
+    </Card>
   );
 };
+
+export default PasswordSetup;

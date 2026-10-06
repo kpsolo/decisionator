@@ -16,8 +16,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { ArrowDown, ArrowUp, CheckCircle2, GripVertical, Send } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 
 export interface RankBallotProps {
   options: Option[];
@@ -56,33 +60,25 @@ const SortableOptionItem: React.FC<SortableOptionItemProps> = ({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    padding: "10px 14px",
-    background: "var(--card-bg, #18181b)",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`mb-2 flex items-center justify-between rounded-lg border p-3 transition-colors ${
+        isDragging
+          ? "border-primary bg-primary/10 shadow-md z-10"
+          : "border-border bg-card/60 hover:bg-card shadow-2xs"
+      }`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
         <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 24,
-            height: 24,
-            borderRadius: "50%",
-            background: rank <= 3 ? "rgba(234, 179, 8, 0.2)" : "var(--bg)",
-            color: rank <= 3 ? "#92400e" : "var(--text-muted)",
-            fontSize: 12,
-            fontWeight: 700,
-            border: "1px solid var(--border)",
-          }}
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
+            rank <= 3
+              ? "border-warning/40 bg-warning/20 text-foreground"
+              : "border-border bg-background text-muted-foreground"
+          }`}
         >
           #{rank}
         </span>
@@ -91,22 +87,17 @@ const SortableOptionItem: React.FC<SortableOptionItemProps> = ({
           {...attributes}
           {...listeners}
           disabled={disabled}
-          style={{
-            cursor: disabled ? "default" : "grab",
-            background: "none",
-            border: "none",
-            padding: 4,
-            color: "var(--text-muted)",
-            fontSize: 14,
-          }}
+          className={`rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:hover:text-muted-foreground ${
+            disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+          }`}
           aria-label="Drag to reorder"
         >
-          ⠿
+          <GripVertical className="h-4 w-4" aria-hidden />
         </button>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>{option.title}</div>
+        <div className="min-w-0">
+          <div className="font-semibold text-sm text-foreground truncate">{option.title}</div>
           {option.description && (
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+            <div className="mt-0.5 text-xs text-muted-foreground truncate max-w-sm sm:max-w-md">
               {option.description}
             </div>
           )}
@@ -114,27 +105,29 @@ const SortableOptionItem: React.FC<SortableOptionItemProps> = ({
       </div>
 
       {/* Accessible Keyboard Controls */}
-      <div style={{ display: "flex", gap: 4 }}>
-        <button
+      <div className="flex items-center gap-1 shrink-0 ml-2">
+        <Button
           type="button"
+          variant="outline"
+          size="icon"
           onClick={onMoveUp}
           disabled={disabled || !canMoveUp}
-          className="btn btn-outline"
-          style={{ padding: "2px 6px", fontSize: 11 }}
           aria-label={`Move ${option.title} up`}
+          className="h-7 w-7"
         >
-          ▲
-        </button>
-        <button
+          <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+        </Button>
+        <Button
           type="button"
+          variant="outline"
+          size="icon"
           onClick={onMoveDown}
           disabled={disabled || !canMoveDown}
-          className="btn btn-outline"
-          style={{ padding: "2px 6px", fontSize: 11 }}
           aria-label={`Move ${option.title} down`}
+          className="h-7 w-7"
         >
-          ▼
-        </button>
+          <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+        </Button>
       </div>
     </div>
   );
@@ -201,68 +194,83 @@ export const RankBallot: React.FC<RankBallotProps> = ({
   const optionMap = new Map(options.map((o) => [o.id, o]));
 
   return (
-    <div className="card" style={{ maxWidth: 640, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16 }}>
-        <h3 style={{ margin: "0 0 6px 0" }}>Rank Your Top {topN} Options</h3>
-        <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
-          Drag or use the arrows to arrange your preferred options. The top {topN} options earn
-          Borda ranking points (1st = {topN} pts, {topN}th = 1 pt).
-        </p>
-      </div>
-
-      {disabled && disabledReason && (
-        <div
-          style={{
-            padding: "8px 12px",
-            background: "rgba(234, 179, 8, 0.1)",
-            color: "var(--color-warning, #eab308)",
-            borderRadius: 6,
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
-          {disabledReason}
-        </div>
-      )}
-
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-          <div style={{ marginBottom: 20 }}>
-            {orderedIds.map((id, index) => {
-              const opt = optionMap.get(id);
-              if (!opt) return null;
-              return (
-                <SortableOptionItem
-                  key={opt.id}
-                  option={opt}
-                  rank={index + 1}
-                  disabled={disabled}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < orderedIds.length - 1}
-                  onMoveUp={() => handleMove(index, -1)}
-                  onMoveDown={() => handleMove(index, 1)}
-                />
-              );
-            })}
+    <Card className="max-w-xl mx-auto border-border bg-card shadow-xs">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-lg font-bold">Rank Your Top {topN} Options</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Drag or use the arrows to arrange your preferred options. The top {topN} options earn
+              Borda ranking points (1st = {topN} pts, {topN}th = 1 pt).
+            </p>
           </div>
-        </SortableContext>
-      </DndContext>
+          <Badge variant="secondary" className="text-xs shrink-0">
+            Top {topN} of {orderedIds.length}
+          </Badge>
+        </div>
+      </CardHeader>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>
-        {submitted && (
-          <span style={{ color: "var(--color-success, #22c55e)", fontSize: 13, fontWeight: 500 }}>
-            Ballot submitted successfully!
-          </span>
+      <CardContent className="space-y-4">
+        {disabled && disabledReason && (
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-foreground font-medium">
+            {disabledReason}
+          </div>
         )}
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={disabled || loading}
-          className="btn btn-primary"
-        >
-          {loading ? "Submitting..." : initialRanking ? "Update Ballot" : "Submit Ballot"}
-        </button>
-      </div>
-    </div>
+
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+            <div>
+              {orderedIds.map((id, index) => {
+                const opt = optionMap.get(id);
+                if (!opt) return null;
+                return (
+                  <div key={opt.id}>
+                    <SortableOptionItem
+                      option={opt}
+                      rank={index + 1}
+                      disabled={disabled}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < orderedIds.length - 1}
+                      onMoveUp={() => handleMove(index, -1)}
+                      onMoveDown={() => handleMove(index, 1)}
+                    />
+                    {index === topN - 1 && index < orderedIds.length - 1 && (
+                      <div
+                        aria-hidden
+                        className="mt-3 mb-4 flex items-center justify-center border-b-2 border-dashed border-border/80"
+                      >
+                        <span className="translate-y-1/2 bg-card px-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Top {topN} cutoff
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
+
+        <div className="border-t border-border pt-4 flex items-center justify-end gap-3">
+          {submitted && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-success">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+              Ballot submitted successfully!
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="default"
+            onClick={handleSubmit}
+            disabled={disabled || loading}
+            leftIcon={<Send className="h-4 w-4" aria-hidden />}
+          >
+            {loading ? "Submitting..." : initialRanking ? "Update Ballot" : "Submit Ballot"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
+
+export default RankBallot;

@@ -240,7 +240,11 @@ test.describe("US2: Share and Collaborate (T062)", () => {
     const firstGradeDuration = (Date.now() - collabStartTime) / 1000;
     expect(firstGradeDuration).toBeLessThan(60);
 
-    // Add comment to opt_1
+    // Add comment to opt_1 (comments are collapsed under each option row)
+    await collabPage
+      .getByRole("button", { name: /^(Comment|\d+ comments?)$/ })
+      .first()
+      .click();
     const commentBox = collabPage.getByPlaceholder("Add a comment (Markdown supported)...").first();
     await commentBox.fill("Looks great for Q4 team kickoff!");
     await collabPage.getByRole("button", { name: "Post Comment" }).first().click();
@@ -249,6 +253,10 @@ test.describe("US2: Share and Collaborate (T062)", () => {
 
     // --- STEP 4: Owner views project and sees collaborator update (SC-004 within 30s) ---
     await ownerPage.goto(`./#/p/${fileId}`);
+    await ownerPage
+      .getByRole("button", { name: /^1 comment$/ })
+      .first()
+      .click({ timeout: 30000 });
     await expect(ownerPage.getByText("Looks great for Q4 team kickoff!")).toBeVisible({
       timeout: 30000,
     });

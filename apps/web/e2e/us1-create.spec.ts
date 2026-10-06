@@ -176,12 +176,13 @@ test.describe("US1: Create, Format, Grade, and Delete Project (T038)", () => {
     await expect(page.getByText("Options & Grading")).toBeVisible();
 
     // Check Stats tab
-    await page.getByRole("button", { name: "Statistics & Distributions" }).click();
+    await page.getByRole("tab", { name: "Statistics & Distributions" }).click();
     await expect(page.getByText("Project Statistics & Distributions")).toBeVisible();
     await checkA11y(page, "Project Stats View");
 
     // 8. Delete project flow (confirm by typing title)
-    await page.getByRole("button", { name: "Delete Project..." }).click();
+    await page.getByRole("button", { name: "More project actions" }).click();
+    await page.getByRole("menuitem", { name: "Delete Project..." }).click();
     await expect(page.getByText("Delete Decision Project")).toBeVisible();
     await checkA11y(page, "Delete Project Dialog");
 

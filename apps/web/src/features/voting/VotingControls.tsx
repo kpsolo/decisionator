@@ -1,6 +1,10 @@
 import type { Project } from "@decisionator/core";
+import { Lock, Play } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import { Card, CardContent } from "../../components/ui/card.js";
 
 export interface VotingControlsProps {
   voting?: Project["voting"];
@@ -30,10 +34,8 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
     try {
       setLoading(true);
       if (isOpen) {
-        // Close voting and run tally
         await onCloseAndTally();
       } else {
-        // Reopen next round
         await onUpdateVoting({
           state: "open",
           round: (currentVoting.round ?? 1) + 1,
@@ -60,109 +62,89 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
   };
 
   return (
-    <div className="card" style={{ maxWidth: 640, margin: "0 auto 20px auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        <div>
-          <h4 style={{ margin: "0 0 4px 0" }}>
-            Voting Controls — Round {currentVoting.round ?? 1}
-          </h4>
-          <span
-            style={{
-              display: "inline-block",
-              padding: "2px 8px",
-              borderRadius: 12,
-              fontSize: 12,
-              fontWeight: 600,
-              background: isOpen ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)",
-              color: isOpen ? "#166534" : "#991b1b",
-            }}
-          >
-            ● {isOpen ? "Voting is OPEN" : "Voting is CLOSED"}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleToggleState}
-          disabled={loading}
-          className={`btn ${isOpen ? "btn-danger" : "btn-primary"}`}
-          style={{ fontSize: 13 }}
-        >
-          {loading
-            ? "Updating..."
-            : isOpen
-              ? "Close Voting & Tally Results"
-              : `Open Round ${(currentVoting.round ?? 1) + 1}`}
-        </button>
-      </div>
-
-      {isOpen && (
-        <div
-          style={{
-            borderTop: "1px solid var(--border)",
-            paddingTop: 12,
-            display: "flex",
-            gap: 16,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label htmlFor="top-n-select" style={{ fontSize: 13, color: "var(--text-muted)" }}>
-              Top N:
-            </label>
-            <select
-              id="top-n-select"
-              value={topN}
-              onChange={(e) => setTopN(Number(e.target.value))}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 4,
-                border: "1px solid var(--border)",
-                background: "var(--bg)",
-                color: "var(--text)",
-                fontSize: 13,
-              }}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+    <Card className="max-w-xl mx-auto mb-5 border-border bg-card shadow-xs">
+      <CardContent className="pt-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <h4 className="font-semibold text-sm text-foreground">
+              {`Voting Controls — Round ${currentVoting.round ?? 1}`}
+            </h4>
+            <div className="flex items-center gap-2">
+              <Badge variant={isOpen ? "success" : "destructive"} className="text-xs font-semibold">
+                {isOpen ? "● Voting is OPEN" : "● Voting is CLOSED"}
+              </Badge>
+            </div>
           </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={liveResults}
-              onChange={(e) => setLiveResults(e.target.checked)}
-            />
-            Show live rankings during voting
-          </label>
-
-          {(topN !== currentVoting.topN || liveResults !== currentVoting.liveResults) && (
-            <button
-              type="button"
-              onClick={handleSaveSettings}
-              disabled={loading}
-              className="btn btn-outline"
-              style={{ fontSize: 12, padding: "2px 8px", marginLeft: "auto" }}
-            >
-              Apply Settings
-            </button>
-          )}
+          <Button
+            type="button"
+            variant={isOpen ? "destructive" : "default"}
+            size="sm"
+            onClick={handleToggleState}
+            isLoading={loading}
+            leftIcon={
+              isOpen ? (
+                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Play className="h-3.5 w-3.5" aria-hidden="true" />
+              )
+            }
+          >
+            {loading
+              ? "Updating..."
+              : isOpen
+                ? "Close Voting & Tally Results"
+                : `Open Round ${(currentVoting.round ?? 1) + 1}`}
+          </Button>
         </div>
-      )}
-    </div>
+
+        {isOpen && (
+          <div className="border-t border-border pt-3.5 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <label htmlFor="top-n-select" className="font-medium text-foreground">
+                Top N:
+              </label>
+              <select
+                id="top-n-select"
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer font-medium text-foreground select-none">
+              <input
+                type="checkbox"
+                checked={liveResults}
+                onChange={(e) => setLiveResults(e.target.checked)}
+                className="rounded border-input text-primary focus:ring-ring h-4 w-4"
+              />
+              <span>Show live rankings during voting</span>
+            </label>
+
+            {(topN !== currentVoting.topN || liveResults !== currentVoting.liveResults) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSaveSettings}
+                isLoading={loading}
+                className="ml-auto h-7 text-xs"
+              >
+                Apply Settings
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };
+
+export default VotingControls;

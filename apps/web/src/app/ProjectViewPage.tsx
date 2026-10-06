@@ -1,41 +1,54 @@
-import type { Option } from "@decisionator/core";
 import { computeOptionStats } from "@decisionator/core";
 import type { ProjectRef, ProjectSnapshot } from "@decisionator/plugin-sdk";
-import React, { useEffect, useMemo, useState } from "react";
+import {
+  BarChart3,
+  Bot,
+  Download,
+  Eye,
+  Layers,
+  MoreHorizontal,
+  Radio,
+  Share2,
+  SlidersHorizontal,
+  Trash2,
+  Vote,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Badge } from "../components/ui/badge.js";
+import { Button } from "../components/ui/button.js";
+import { Card, CardContent, CardHeader } from "../components/ui/card.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu.js";
+import { Skeleton } from "../components/ui/skeleton.js";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs.js";
 import { AgentBrief } from "../features/agents/AgentBrief.js";
 import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
-import { GradeInput } from "../features/grading/GradeInput.js";
-import { OptionDetail } from "../features/grading/OptionDetail.js";
+import { OptionRow } from "../features/grading/OptionRow.js";
 import { DeleteProject } from "../features/project/DeleteProject.js";
-import { ExportButton } from "../features/project/ExportButton.js";
+import { downloadProjectExport } from "../features/project/ExportButton.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
+import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
 import { InPageShareModal } from "../features/sharing/InPageShareModal.js";
 import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
 import { StatsView } from "../features/stats/StatsView.js";
-import { useStorage } from "../storage/StorageContext.js";
 
 export function ProjectViewPage() {
-  const { fileId, storeId, id } = useParams();
   const navigate = useNavigate();
-  const { storageManager } = useStorage();
-
-  const effectiveId = id || fileId || "";
-  const effectiveStoreId =
-    storeId ||
-    (effectiveId.startsWith("file_")
-      ? "file"
-      : effectiveId.startsWith("fs_")
-        ? "firestore"
-        : "google-sheets");
-
-  const projectRef = useMemo<ProjectRef>(
-    () => ({ store: effectiveStoreId, id: effectiveId }),
-    [effectiveStoreId, effectiveId]
-  );
-  const store = storageManager.resolveStore(projectRef);
+  const {
+    projectId: effectiveId,
+    storeId: effectiveStoreId,
+    projectRef,
+    store,
+    baseUrl: baseProjectUrl,
+  } = useProjectStore();
 
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
   const [currentUser, setCurrentUser] = useState<string>("");
@@ -44,8 +57,9 @@ export function ProjectViewPage() {
     reason: "deleted" | "trashed" | "permission_denied" | "not_found";
     details?: string;
   } | null>(null);
-  const [activeTab, setActiveTab] = useState<"options" | "stats" | "agents">("options");
+  const [activeTab, setActiveTab] = useState<string>("options");
   const [showInPageShare, setShowInPageShare] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | undefined>();
@@ -86,7 +100,6 @@ export function ProjectViewPage() {
 
     load();
 
-    // Subscribe to watch updates
     const unsub = store.watch(projectRef, (newSnap) => {
       if (isMounted) setSnapshot(newSnap);
     });
@@ -99,8 +112,19 @@ export function ProjectViewPage() {
 
   if (loading) {
     return (
-      <div className="card" style={{ textAlign: "center", padding: "40px 16px" }}>
-        <h3>Loading project...</h3>
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-96 mt-2" />
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -143,7 +167,6 @@ export function ProjectViewPage() {
     if (!effectiveId) return;
     const gradeVal = val as 1 | 2 | 3 | 4 | 5;
 
-    // Optimistic update
     const newGrades = [
       ...snapshot.grades.filter((g) => !(g.by === currentUser && g.optionId === optionId)),
       {
@@ -217,130 +240,94 @@ export function ProjectViewPage() {
     setSnapshot({ ...snapshot, contributions: newContribs });
   };
 
-  const baseProjectUrl = `/p/${effectiveStoreId}/${effectiveId}`;
+  const storeLabel =
+    effectiveStoreId === "file"
+      ? "Local file"
+      : effectiveStoreId === "firestore"
+        ? "Firestore"
+        : "Google Sheets";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Header card */}
-      <div className="card">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-            gap: 12,
-          }}
-        >
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <h2 style={{ margin: "0 0 6px 0" }}>{snapshot.project.title}</h2>
-              <span
-                style={{
-                  fontSize: 10,
-                  padding: "2px 6px",
-                  borderRadius: 4,
-                  background:
-                    effectiveStoreId === "file"
-                      ? "rgba(16, 185, 129, 0.15)"
-                      : effectiveStoreId === "firestore"
-                        ? "rgba(245, 158, 11, 0.15)"
-                        : "rgba(59, 130, 246, 0.15)",
-                  color:
-                    effectiveStoreId === "file"
-                      ? "#065f46"
-                      : effectiveStoreId === "firestore"
-                        ? "#92400e"
-                        : "#1e40af",
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                }}
+    <div className="space-y-6">
+      {/* Workspace header: title first, one primary action, the rest in a menu */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1.5">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
+            {snapshot.project.title}
+          </h2>
+          {snapshot.project.description && (
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {snapshot.project.description}
+            </p>
+          )}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>{storeLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span>{`Role: ${snapshot.role}`}</span>
+            <span aria-hidden="true">·</span>
+            <span className="[overflow-wrap:anywhere]">{currentUser}</span>
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <Button size="sm" asChild leftIcon={<Vote className="h-3.5 w-3.5" />}>
+            <Link to={`${baseProjectUrl}/vote`}>Vote</Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            leftIcon={<BarChart3 className="h-3.5 w-3.5" />}
+          >
+            <Link to={`${baseProjectUrl}/results`}>Results</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild leftIcon={<Share2 className="h-3.5 w-3.5" />}>
+            <Link to={`${baseProjectUrl}/share`}>Share</Link>
+          </Button>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                aria-label="More project actions"
               >
-                {effectiveStoreId}
-              </span>
-            </div>
-            {snapshot.project.description && (
-              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14 }}>
-                {snapshot.project.description}
-              </p>
-            )}
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-              Role: <strong>{snapshot.role}</strong> • {currentUser}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <ExportButton snapshot={snapshot} />
-            <DeleteProject
-              fileId={effectiveId}
-              projectTitle={snapshot.project.title}
-              isOwner={isOwner}
-              onDeleted={() => navigate("/")}
-            />
-          </div>
+                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={() => setShowInPageShare(true)}>
+                <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                In-Page Live Share
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
+                <Download className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                Export Project (JSON)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => setShowDelete(true)}
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                {isOwner ? "Delete Project..." : "Remove from my list"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+      </header>
 
-        {/* Tab switch */}
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginTop: 16,
-            borderTop: "1px solid var(--border)",
-            paddingTop: 12,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setActiveTab("options")}
-            className={`btn ${activeTab === "options" ? "btn-primary" : "btn-outline"}`}
-            style={{ fontSize: 13 }}
-          >
-            Options & Grading ({snapshot.options.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("stats")}
-            className={`btn ${activeTab === "stats" ? "btn-primary" : "btn-outline"}`}
-            style={{ fontSize: 13 }}
-          >
-            Statistics & Distributions
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("agents")}
-            className={`btn ${activeTab === "agents" ? "btn-primary" : "btn-outline"}`}
-            style={{ fontSize: 13 }}
-          >
-            Ask Agent & Review ({snapshot.contributions?.length || 0})
-          </button>
-          <Link to={`${baseProjectUrl}/vote`} className="btn btn-outline" style={{ fontSize: 13 }}>
-            Vote
-          </Link>
-          <Link
-            to={`${baseProjectUrl}/results`}
-            className="btn btn-outline"
-            style={{ fontSize: 13 }}
-          >
-            Results
-          </Link>
-          <Link to={`${baseProjectUrl}/share`} className="btn btn-outline" style={{ fontSize: 13 }}>
-            Share
-          </Link>
-          <button
-            type="button"
-            onClick={() => setShowInPageShare(true)}
-            className="btn btn-outline"
-            style={{
-              fontSize: 13,
-              borderColor: "var(--color-primary, #3b82f6)",
-              color: "var(--color-primary, #3b82f6)",
-            }}
-          >
-            📡 In-Page Live Share
-          </button>
-        </div>
-      </div>
+      <DeleteProject
+        hideTrigger
+        store={store}
+        projectRef={projectRef}
+        open={showDelete}
+        onOpenChange={setShowDelete}
+        fileId={effectiveId}
+        projectTitle={snapshot.project.title}
+        isOwner={isOwner}
+        onDeleted={() => navigate("/")}
+      />
 
       {showInPageShare && (
         <InPageShareModal
@@ -351,14 +338,83 @@ export function ProjectViewPage() {
         />
       )}
 
-      {/* Main Content */}
-      {activeTab === "stats" ? (
-        <StatsView
-          stats={Array.from(statsMap.values())}
-          showBordaSort={snapshot.outcomes.length > 0}
-        />
-      ) : activeTab === "agents" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Tabs Navigation & Views */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="options" className="text-xs sm:text-sm">
+            <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{`Options & Grading (${snapshot.options.length})`}</span>
+          </TabsTrigger>
+          <TabsTrigger value="stats" className="text-xs sm:text-sm">
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Statistics & Distributions</span>
+          </TabsTrigger>
+          <TabsTrigger value="agents" className="text-xs sm:text-sm">
+            <Bot className="h-3.5 w-3.5 text-agent" aria-hidden="true" />
+            <span>{`Ask Agent & Review (${snapshot.contributions?.length || 0})`}</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="options" className="space-y-3 mt-0">
+          {!roleCapabilities.canGrade && roleCapabilities.disabledReason && (
+            <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-muted-foreground">
+              <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{roleCapabilities.disabledReason}</span>
+            </p>
+          )}
+
+          <Card className="overflow-hidden p-0">
+            <ul className="divide-y divide-border" aria-label="Options">
+              {snapshot.options.map((opt, index) => {
+                const stat = statsMap.get(opt.id);
+                const myGrade = snapshot.grades.find(
+                  (g) => g.by === currentUser && g.optionId === opt.id
+                );
+
+                return (
+                  <OptionRow
+                    key={opt.id}
+                    option={opt}
+                    index={index}
+                    averageGrade={stat?.average}
+                    gradeCount={stat?.count}
+                    commentCount={stat?.commentsCount}
+                    myGrade={myGrade?.value}
+                    canGrade={roleCapabilities.canGrade}
+                    onGrade={(val) => handleGradeChange(opt.id, val)}
+                    comments={
+                      <CommentThread
+                        compact
+                        comments={snapshot.comments}
+                        optionId={opt.id}
+                        currentUserId={currentUser}
+                        isOwner={isOwner}
+                        disabled={!roleCapabilities.canComment}
+                        disabledReason={roleCapabilities.disabledReason}
+                        onAddComment={(body) => handleAddComment(body, opt.id)}
+                        onEditComment={(commentId, body) =>
+                          handleEditComment(commentId, body, opt.id)
+                        }
+                        onToggleHide={(commentId, hidden) =>
+                          handleToggleHide(commentId, hidden, opt.id)
+                        }
+                      />
+                    }
+                  />
+                );
+              })}
+            </ul>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stats" className="mt-0">
+          <StatsView
+            stats={Array.from(statsMap.values())}
+            showBordaSort={snapshot.outcomes.length > 0}
+          />
+        </TabsContent>
+
+        <TabsContent value="agents" className="space-y-4 mt-0">
           <AgentBrief
             projectTitle={snapshot.project.title}
             target={{ kind: "project" }}
@@ -371,64 +427,10 @@ export function ProjectViewPage() {
             onReviewAction={handleReviewAction}
             isOwnerOrEditor={roleCapabilities.canComment}
           />
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {snapshot.options.map((opt) => {
-            const stat = statsMap.get(opt.id);
-            const myGrade = snapshot.grades.find(
-              (g) => g.by === currentUser && g.optionId === opt.id
-            );
-
-            return (
-              <div key={opt.id} className="card">
-                <OptionDetail
-                  option={opt}
-                  averageGrade={stat?.average}
-                  gradeCount={stat?.count}
-                  commentCount={stat?.commentsCount}
-                />
-                <div
-                  style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 12 }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <strong style={{ fontSize: 13 }}>My Rating:</strong>
-                    <GradeInput
-                      value={myGrade?.value}
-                      optionId={opt.id}
-                      authorName={currentUser}
-                      updatedAt={myGrade?.at}
-                      disabled={!roleCapabilities.canGrade}
-                      onChange={(val) => handleGradeChange(opt.id, val)}
-                    />
-                  </div>
-
-                  <CommentThread
-                    comments={snapshot.comments}
-                    optionId={opt.id}
-                    currentUserId={currentUser}
-                    isOwner={isOwner}
-                    disabled={!roleCapabilities.canComment}
-                    disabledReason={roleCapabilities.disabledReason}
-                    onAddComment={(body) => handleAddComment(body, opt.id)}
-                    onEditComment={(commentId, body) => handleEditComment(commentId, body, opt.id)}
-                    onToggleHide={(commentId, hidden) =>
-                      handleToggleHide(commentId, hidden, opt.id)
-                    }
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
+export default ProjectViewPage;

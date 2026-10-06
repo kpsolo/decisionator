@@ -1,7 +1,25 @@
 import { type ProjectExportV1, ProjectExportV1Schema } from "@decisionator/core";
 import type { ProjectSnapshot, ProjectStore } from "@decisionator/plugin-sdk";
+import { AlertCircle, ArrowRightLeft, CheckCircle2, Download, FileUp } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../../components/ui/dialog.js";
 
 export interface MoveProjectProps {
   currentStore: ProjectStore;
@@ -162,160 +180,144 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
     }
   };
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      // Every close path (Done, X, Esc, outside click) clears the last result, as before.
+      setError(null);
+      setSuccess(null);
+    }
+  };
+
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn btn-outline"
-        style={{ fontSize: 13 }}
-      >
-        Move / Export Project
-      </button>
-
-      {open && (
-        <dialog
-          open
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            border: "none",
-            width: "100%",
-            height: "100%",
-          }}
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          leftIcon={<ArrowRightLeft className="h-4 w-4" aria-hidden />}
         >
+          Move / Export Project
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowRightLeft className="h-5 w-5 text-primary" aria-hidden />
+            Move / Migrate Project (FR-072)
+          </DialogTitle>
+          <DialogDescription>
+            Migrate decisions seamlessly between Google Sheets and Local-First mode using standard{" "}
+            <code className="text-foreground font-mono text-xs">decisionator.project/v1</code>{" "}
+            bundles.
+          </DialogDescription>
+        </DialogHeader>
+
+        {error && (
           <div
-            style={{
-              background: "#fff",
-              padding: 24,
-              borderRadius: 8,
-              maxWidth: 520,
-              width: "90%",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-            }}
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
           >
-            <h3 style={{ marginTop: 0 }}>Move / Migrate Project (FR-072)</h3>
-            <p style={{ fontSize: 14, color: "#666" }}>
-              Migrate decisions seamlessly between Google Sheets and Local-First mode using standard{" "}
-              <code>decisionator.project/v1</code> bundles.
-            </p>
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>{error}</span>
+          </div>
+        )}
 
-            {error && (
-              <div
-                role="alert"
-                style={{
-                  padding: 10,
-                  background: "#ffebee",
-                  color: "#c62828",
-                  borderRadius: 4,
-                  marginBottom: 12,
-                  fontSize: 13,
-                }}
-              >
-                {error}
-              </div>
-            )}
+        {success && (
+          <output className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-foreground">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+            <span>{success}</span>
+          </output>
+        )}
 
-            {success && (
-              <output
-                style={{
-                  display: "block",
-                  padding: 10,
-                  background: "#e8f5e9",
-                  color: "#2e7d32",
-                  borderRadius: 4,
-                  marginBottom: 12,
-                  fontSize: 13,
-                }}
-              >
-                {success}
-              </output>
-            )}
+        <div className="space-y-3 py-1">
+          {currentSnapshot && (
+            <Card>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm font-semibold">Option A: Direct Transfer</CardTitle>
+                <CardDescription className="text-xs">
+                  Copy project state directly to {targetStore.id}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleDirectTransfer}
+                  disabled={moving}
+                  isLoading={moving}
+                >
+                  {moving ? "Transferring..." : `Transfer to ${targetStore.id}`}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {currentSnapshot && (
-                <div style={{ padding: 12, border: "1px solid #e0e0e0", borderRadius: 6 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Option A: Direct Transfer</div>
-                  <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>
-                    Copy project state directly to {targetStore.id}.
-                  </div>
-                  <button
+          {currentSnapshot && (
+            <Card>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm font-semibold">Option B: Export to File</CardTitle>
+                <CardDescription className="text-xs">
+                  Download <code className="font-mono text-xs">decisionator.project/v1</code> JSON
+                  file for backup or import elsewhere.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportToFile}
+                  leftIcon={<Download className="h-4 w-4" aria-hidden />}
+                >
+                  Download JSON Bundle
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-semibold">Option C: Import from File</CardTitle>
+              <CardDescription className="text-xs">
+                Import a <code className="font-mono text-xs">decisionator.project/v1</code> JSON
+                bundle into {targetStore.id}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 space-y-3">
+              <input
+                type="file"
+                accept=".json,application/json"
+                aria-label="Project JSON bundle file"
+                onChange={handleFileUpload}
+                className="text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border file:border-input file:text-xs file:font-medium file:bg-background hover:file:bg-accent cursor-pointer"
+              />
+              {fileInputJson && (
+                <div>
+                  <Button
                     type="button"
-                    onClick={handleDirectTransfer}
-                    disabled={moving}
-                    className="btn btn-primary"
-                    style={{ fontSize: 13 }}
-                  >
-                    {moving ? "Transferring..." : `Transfer to ${targetStore.id}`}
-                  </button>
-                </div>
-              )}
-
-              {currentSnapshot && (
-                <div style={{ padding: 12, border: "1px solid #e0e0e0", borderRadius: 6 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Option B: Export to File</div>
-                  <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>
-                    Download <code>decisionator.project/v1</code> JSON file for backup or import
-                    elsewhere.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleExportToFile}
-                    className="btn btn-outline"
-                    style={{ fontSize: 13 }}
-                  >
-                    Download JSON Bundle
-                  </button>
-                </div>
-              )}
-
-              <div style={{ padding: 12, border: "1px solid #e0e0e0", borderRadius: 6 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>Option C: Import from File</div>
-                <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>
-                  Import a <code>decisionator.project/v1</code> JSON bundle into {targetStore.id}.
-                </div>
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={handleFileUpload}
-                  style={{ fontSize: 13, marginBottom: 8 }}
-                />
-                {fileInputJson && (
-                  <button
-                    type="button"
+                    size="sm"
                     onClick={() => handleImportJson(fileInputJson)}
                     disabled={moving}
-                    className="btn btn-primary"
-                    style={{ fontSize: 13 }}
+                    isLoading={moving}
+                    leftIcon={<FileUp className="h-4 w-4" aria-hidden />}
                   >
                     {moving ? "Importing..." : "Execute Import"}
-                  </button>
-                )}
-              </div>
-            </div>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-            <div style={{ marginTop: 20, textAlign: "right" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setError(null);
-                  setSuccess(null);
-                }}
-                className="btn btn-outline"
-                style={{ fontSize: 13 }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </dialog>
-      )}
-    </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

@@ -1,7 +1,17 @@
 import Form from "@rjsf/core";
 import type { RJSFSchema, UiSchema } from "@rjsf/utils";
 import validator from "@rjsf/validator-ajv8";
+import { CheckCircle2, Settings } from "lucide-react";
 import React, { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog.js";
 import type { InstalledPlugin } from "./plugin-registry.js";
 
 export interface PluginSettingsProps {
@@ -28,86 +38,28 @@ export function PluginSettings({ plugin, onSave, onClose }: PluginSettingsProps)
   };
 
   return (
-    <dialog
-      open
-      aria-labelledby="plugin-settings-title"
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: 16,
-        border: "none",
-        width: "100%",
-        height: "100%",
-        maxWidth: "none",
-        maxHeight: "none",
-      }}
-    >
-      <div
-        className="card"
-        style={{
-          maxWidth: 600,
-          width: "100%",
-          maxHeight: "85vh",
-          overflowY: "auto",
-          backgroundColor: "var(--bg-card, #ffffff)",
-          borderRadius: 8,
-          boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderBottom: "1px solid var(--border-color, #e2e8f0)",
-            paddingBottom: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <h3 id="plugin-settings-title" style={{ margin: 0 }}>
-              Settings: {plugin.name}
-            </h3>
-            <span style={{ fontSize: 12, color: "var(--text-muted, #64748b)" }}>
-              v{plugin.version} ({plugin.id})
-            </span>
-          </div>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={onClose}
-            aria-label="Close settings"
-          >
-            ✕
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-primary" aria-hidden="true" />
+            Settings: {plugin.name}
+          </DialogTitle>
+          <DialogDescription>
+            v{plugin.version} (<span className="font-mono text-xs">{plugin.id}</span>)
+          </DialogDescription>
+        </DialogHeader>
 
         {saveSuccess && (
-          <div
-            style={{
-              padding: "8px 12px",
-              backgroundColor: "#dcfce7",
-              color: "#166534",
-              borderRadius: 6,
-              marginBottom: 16,
-              fontSize: 14,
-            }}
-          >
-            ✓ Settings saved successfully.
-          </div>
+          <output className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Settings saved successfully.</span>
+          </output>
         )}
 
         {settingsSchema ? (
           <div>
-            <p style={{ fontSize: 14, color: "var(--text-muted, #64748b)", marginBottom: 16 }}>
+            <p className="text-xs text-muted-foreground mb-4">
               Configure preferences generated dynamically from the plugin schema (FR-053).
             </p>
             <Form
@@ -117,29 +69,27 @@ export function PluginSettings({ plugin, onSave, onClose }: PluginSettingsProps)
               formData={formData}
               onSubmit={handleSubmit}
             >
-              <div style={{ marginTop: 20, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button type="button" className="btn btn-outline" onClick={onClose}>
+              <div className="mt-5 flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={onClose}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Save Settings
-                </button>
+                </Button>
+                <Button type="submit">Save Settings</Button>
               </div>
             </Form>
           </div>
         ) : (
           <div>
-            <p style={{ color: "var(--text-muted, #64748b)" }}>
+            <p className="text-sm text-muted-foreground py-4">
               This plugin does not declare any configurable settings.
             </p>
-            <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-primary" onClick={onClose}>
+            <DialogFooter>
+              <Button type="button" onClick={onClose}>
                 Done
-              </button>
-            </div>
+              </Button>
+            </DialogFooter>
           </div>
         )}
-      </div>
-    </dialog>
+      </DialogContent>
+    </Dialog>
   );
 }

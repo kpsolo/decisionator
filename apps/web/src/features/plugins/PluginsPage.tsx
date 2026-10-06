@@ -1,6 +1,24 @@
+import { AlertTriangle, Boxes, Check, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog.js";
+import { Input } from "../../components/ui/input.js";
 import { type PluginManifest, validateManifest } from "../../host/module-host.js";
 import { PluginSettings } from "./PluginSettings.js";
 import {
@@ -110,199 +128,136 @@ export function PluginsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "16px 0" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 20,
-        }}
-      >
+    <div className="max-w-4xl mx-auto py-4 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 style={{ margin: 0 }}>Plugins & Extensions</h2>
-          <p style={{ margin: "4px 0 0 0", color: "var(--text-muted, #64748b)" }}>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Boxes className="h-6 w-6 text-primary" aria-hidden="true" />
+            Plugins & Extensions
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Manage decision strategies, idea sources, and sandboxed extensions (FR-050).
           </p>
         </div>
-        <button
+        <Button
           type="button"
-          className="btn btn-primary"
           onClick={() => {
             setIsInstallOpen(true);
             setInstallError(null);
             setPendingManifest(null);
           }}
+          leftIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
         >
-          + Install Plugin
-        </button>
+          Install Plugin
+        </Button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="space-y-4">
         {plugins.map((plugin) => (
-          <div
+          <Card
             key={plugin.id}
-            className="card"
-            style={{
-              padding: 20,
-              borderLeft: plugin.enabled
-                ? "4px solid #10b981"
-                : "4px solid var(--border-color, #cbd5e1)",
-              opacity: plugin.enabled ? 1 : 0.75,
-            }}
+            className={`border-l-4 transition-opacity ${
+              plugin.enabled ? "border-l-success opacity-100" : "border-l-border opacity-75"
+            }`}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 16,
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <h3 style={{ margin: 0 }}>{plugin.name}</h3>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      padding: "2px 8px",
-                      borderRadius: 12,
-                      backgroundColor: "var(--bg-muted, #f1f5f9)",
-                      color: "var(--text-muted, #64748b)",
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    v{plugin.version}
-                  </span>
-                  {plugin.source.type === "builtin" && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        backgroundColor: "#e0f2fe",
-                        color: "#0369a1",
-                        fontWeight: 600,
-                      }}
+            <CardContent className="p-5">
+              <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-foreground">{plugin.name}</h3>
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      v{plugin.version}
+                    </Badge>
+                    {plugin.source.type === "builtin" && (
+                      <Badge variant="secondary" className="text-[11px]">
+                        Built-in
+                      </Badge>
+                    )}
+                    <Badge
+                      variant={plugin.enabled ? "success" : "secondary"}
+                      className="text-[11px]"
                     >
-                      Built-in
-                    </span>
-                  )}
-                  <span
-                    style={{
-                      fontSize: 12,
-                      padding: "2px 8px",
-                      borderRadius: 12,
-                      backgroundColor: plugin.enabled ? "#dcfce7" : "#fee2e2",
-                      color: plugin.enabled ? "#166534" : "#991b1b",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {plugin.enabled ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--text-muted, #64748b)",
-                    margin: "4px 0",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {plugin.id}
-                </div>
-
-                {plugin.description && (
-                  <p style={{ margin: "8px 0 12px 0", fontSize: 14 }}>{plugin.description}</p>
-                )}
-
-                {/* Last Error if any */}
-                {plugin.lastError && (
-                  <div
-                    style={{
-                      backgroundColor: "#fef2f2",
-                      border: "1px solid #fecaca",
-                      color: "#b91c1c",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      fontSize: 13,
-                      marginBottom: 12,
-                    }}
-                  >
-                    ⚠️ <strong>Error:</strong> {plugin.lastError}
+                      {plugin.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
                   </div>
-                )}
 
-                {/* Granted permissions */}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: "var(--text-muted, #64748b)" }}>
-                    Permissions:
-                  </span>
-                  {plugin.grantedPermissions.length > 0 ? (
-                    plugin.grantedPermissions.map((perm) => (
-                      <span
-                        key={perm}
-                        style={{
-                          fontSize: 11,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          backgroundColor: "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                          fontFamily: "monospace",
-                        }}
-                      >
-                        {perm}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: 12, color: "var(--text-muted, #64748b)" }}>
-                      None requested
-                    </span>
+                  <div className="text-xs font-mono text-muted-foreground">{plugin.id}</div>
+
+                  {plugin.description && (
+                    <p className="text-sm text-muted-foreground">{plugin.description}</p>
+                  )}
+
+                  {plugin.lastError && (
+                    <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                      <div>
+                        <strong>Error:</strong> {plugin.lastError}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-xs text-muted-foreground">Permissions:</span>
+                    {plugin.grantedPermissions.length > 0 ? (
+                      plugin.grantedPermissions.map((perm) => (
+                        <span
+                          key={perm}
+                          className="inline-flex items-center rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-foreground"
+                        >
+                          {perm}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">None requested</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={plugin.enabled ? "outline" : "default"}
+                    onClick={() => handleToggleEnable(plugin)}
+                  >
+                    {plugin.enabled ? "Disable" : "Enable"}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setReviewingPermsPlugin(plugin)}
+                  >
+                    Permissions
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditingSettingsPlugin(plugin)}
+                  >
+                    Settings
+                  </Button>
+
+                  {plugin.source.type !== "builtin" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => handleUninstall(plugin.id, plugin.name)}
+                      aria-label={`Uninstall ${plugin.name}`}
+                      leftIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                    >
+                      Uninstall
+                    </Button>
                   )}
                 </div>
               </div>
-
-              {/* Actions */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  type="button"
-                  className={plugin.enabled ? "btn btn-outline" : "btn btn-primary"}
-                  onClick={() => handleToggleEnable(plugin)}
-                >
-                  {plugin.enabled ? "Disable" : "Enable"}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setReviewingPermsPlugin(plugin)}
-                >
-                  Permissions
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setEditingSettingsPlugin(plugin)}
-                >
-                  Settings
-                </button>
-
-                {plugin.source.type !== "builtin" && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    style={{ color: "#ef4444" }}
-                    onClick={() => handleUninstall(plugin.id, plugin.name)}
-                    aria-label={`Uninstall ${plugin.name}`}
-                  >
-                    Uninstall
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
@@ -320,46 +275,19 @@ export function PluginsPage() {
 
       {/* Permissions Review Modal */}
       {reviewingPermsPlugin && (
-        <dialog
-          open
-          aria-labelledby="perms-review-title"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 16,
-            border: "none",
-            width: "100%",
-            height: "100%",
-            maxWidth: "none",
-            maxHeight: "none",
-          }}
-        >
-          <div
-            className="card"
-            style={{
-              maxWidth: 500,
-              width: "100%",
-              backgroundColor: "var(--bg-card, #ffffff)",
-              borderRadius: 8,
-              padding: 24,
-            }}
-          >
-            <h3 id="perms-review-title" style={{ marginTop: 0 }}>
-              Permissions: {reviewingPermsPlugin.name}
-            </h3>
-            <p style={{ fontSize: 14, color: "var(--text-muted, #64748b)" }}>
-              Review or revoke capabilities granted to this plugin.
-            </p>
+        <Dialog open onOpenChange={(open) => !open && setReviewingPermsPlugin(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary" aria-hidden="true" />
+                Permissions: {reviewingPermsPlugin.name}
+              </DialogTitle>
+              <DialogDescription>
+                Review or revoke capabilities granted to this plugin.
+              </DialogDescription>
+            </DialogHeader>
 
-            <div style={{ margin: "16px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="space-y-3 py-2">
               {reviewingPermsPlugin.manifest.permissions &&
               reviewingPermsPlugin.manifest.permissions.length > 0 ? (
                 reviewingPermsPlugin.manifest.permissions.map((perm) => {
@@ -367,13 +295,7 @@ export function PluginsPage() {
                   return (
                     <label
                       key={perm}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        fontSize: 14,
-                        cursor: "pointer",
-                      }}
+                      className="flex items-center gap-2.5 rounded-lg border border-border p-2.5 text-xs hover:bg-muted/40 cursor-pointer"
                     >
                       <input
                         type="checkbox"
@@ -388,112 +310,61 @@ export function PluginsPage() {
                           if (updatedRecord) setReviewingPermsPlugin({ ...updatedRecord });
                           refreshPlugins();
                         }}
+                        className="rounded border-border text-primary focus:ring-ring"
                       />
-                      <span style={{ fontFamily: "monospace" }}>{perm}</span>
+                      <span className="font-mono text-foreground font-medium">{perm}</span>
                     </label>
                   );
                 })
               ) : (
-                <div style={{ fontSize: 14, color: "var(--text-muted, #64748b)" }}>
+                <div className="text-xs text-muted-foreground py-2">
                   No optional permissions declared by this plugin.
                 </div>
               )}
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setReviewingPermsPlugin(null)}
-              >
+            <DialogFooter>
+              <Button type="button" onClick={() => setReviewingPermsPlugin(null)}>
                 Done
-              </button>
-            </div>
-          </div>
-        </dialog>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Install Plugin Modal */}
       {isInstallOpen && (
-        <dialog
-          open
-          aria-labelledby="install-plugin-title"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 16,
-            border: "none",
-            width: "100%",
-            height: "100%",
-            maxWidth: "none",
-            maxHeight: "none",
-          }}
-        >
-          <div
-            className="card"
-            style={{
-              maxWidth: 600,
-              width: "100%",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              backgroundColor: "var(--bg-card, #ffffff)",
-              borderRadius: 8,
-              padding: 24,
-            }}
+        <Dialog open onOpenChange={(open) => !open && setIsInstallOpen(false)}>
+          <DialogContent
+            className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
+            aria-describedby={undefined}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 16,
-              }}
-            >
-              <h3 id="install-plugin-title" style={{ margin: 0 }}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-primary" aria-hidden="true" />
                 Install Plugin
-              </h3>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => setIsInstallOpen(false)}
-              >
-                ✕
-              </button>
-            </div>
+              </DialogTitle>
+            </DialogHeader>
 
-            {/* Unreviewed Source Warning (FR-061) */}
-            <div
-              style={{
-                backgroundColor: "#fffbeb",
-                border: "1px solid #fef3c7",
-                color: "#92400e",
-                padding: "12px 16px",
-                borderRadius: 8,
-                fontSize: 14,
-                marginBottom: 20,
-              }}
-            >
-              <strong>⚠️ Unreviewed Source Warning:</strong>
-              <p style={{ margin: "4px 0 0 0" }}>
-                Third-party plugins execute in an isolated sandbox. Only install plugins from
-                creators you trust. Review all requested permissions carefully before installing
-                (FR-061).
-              </p>
+            {/* Unreviewed Source Warning */}
+            <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-foreground">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" aria-hidden="true" />
+              <div className="space-y-1">
+                <strong className="text-foreground">Unreviewed Source Warning:</strong>
+                <p className="text-muted-foreground leading-relaxed">
+                  Third-party plugins execute in an isolated sandbox. Only install plugins from
+                  creators you trust. Review all requested permissions carefully before installing
+                  (FR-061).
+                </p>
+              </div>
             </div>
 
             {/* Mode selection */}
-            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-              <button
+            <div className="flex gap-2">
+              <Button
                 type="button"
-                className={installMode === "file" ? "btn btn-primary" : "btn btn-outline"}
+                size="sm"
+                variant={installMode === "file" ? "default" : "outline"}
                 onClick={() => {
                   setInstallMode("file");
                   setPendingManifest(null);
@@ -501,10 +372,11 @@ export function PluginsPage() {
                 }}
               >
                 Install from File
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={installMode === "url" ? "btn btn-primary" : "btn btn-outline"}
+                size="sm"
+                variant={installMode === "url" ? "default" : "outline"}
                 onClick={() => {
                   setInstallMode("url");
                   setPendingManifest(null);
@@ -512,150 +384,128 @@ export function PluginsPage() {
                 }}
               >
                 Install from URL
-              </button>
+              </Button>
             </div>
 
             {installMode === "file" ? (
-              <div style={{ marginBottom: 16 }}>
+              <div className="space-y-1.5">
                 <label
                   htmlFor="plugin-file-input"
-                  style={{ display: "block", fontSize: 14, marginBottom: 6 }}
+                  className="block text-xs font-medium text-foreground"
                 >
-                  Select plugin manifest file (<code>decisionator-plugin.json</code>):
+                  Select plugin manifest file (
+                  <code className="font-mono text-xs">decisionator-plugin.json</code>):
                 </label>
                 <input
                   id="plugin-file-input"
                   type="file"
                   accept=".json"
                   onChange={handleFileChange}
-                  style={{ width: "100%", padding: 8 }}
+                  className="w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border file:border-input file:text-xs file:font-medium file:bg-background hover:file:bg-accent cursor-pointer"
                 />
               </div>
             ) : (
-              <div style={{ marginBottom: 16 }}>
+              <div className="space-y-1.5">
                 <label
                   htmlFor="plugin-url-input"
-                  style={{ display: "block", fontSize: 14, marginBottom: 6 }}
+                  className="block text-xs font-medium text-foreground"
                 >
                   Enter manifest HTTPS URL:
                 </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
+                <div className="flex gap-2">
+                  <Input
                     id="plugin-url-input"
                     type="url"
                     placeholder="https://example.com/decisionator-plugin.json"
                     value={installUrl}
                     onChange={(e) => setInstallUrl(e.target.value)}
-                    style={{ flex: 1, padding: 8, borderRadius: 4, border: "1px solid #cbd5e1" }}
                   />
-                  <button type="button" className="btn btn-outline" onClick={handleFetchUrl}>
+                  <Button type="button" variant="outline" onClick={handleFetchUrl}>
                     Load
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
 
             {installError && (
               <div
-                style={{
-                  backgroundColor: "#fef2f2",
-                  color: "#b91c1c",
-                  padding: "10px 14px",
-                  borderRadius: 6,
-                  fontSize: 13,
-                  marginBottom: 16,
-                }}
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
               >
-                ✕ {installError}
+                <X className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{installError}</span>
               </div>
             )}
 
             {/* Manifest Preview & Permission Review */}
             {pendingManifest && (
-              <div
-                style={{
-                  backgroundColor: "var(--bg-muted, #f8fafc)",
-                  padding: 16,
-                  borderRadius: 8,
-                  marginBottom: 16,
-                }}
-              >
-                <h4 style={{ margin: "0 0 8px 0" }}>
-                  {pendingManifest.name}{" "}
-                  <span style={{ fontSize: 12 }}>v{pendingManifest.version}</span>
-                </h4>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#64748b",
-                    fontFamily: "monospace",
-                    marginBottom: 8,
-                  }}
-                >
-                  {pendingManifest.id}
-                </div>
-                {(pendingManifest as { description?: string }).description && (
-                  <p style={{ fontSize: 14, margin: "0 0 12px 0" }}>
-                    {(pendingManifest as { description?: string }).description}
-                  </p>
-                )}
-
-                <h5 style={{ margin: "12px 0 6px 0" }}>Permission Review:</h5>
-                <p
-                  style={{ fontSize: 12, color: "var(--text-muted, #64748b)", margin: "0 0 8px 0" }}
-                >
-                  Select which capabilities to grant this plugin:
-                </p>
-
-                {pendingManifest.permissions && pendingManifest.permissions.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {pendingManifest.permissions.map((perm: string) => (
-                      <label
-                        key={perm}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          fontSize: 13,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedPermissions.includes(perm)}
-                          onChange={() => togglePermission(perm)}
-                        />
-                        <span style={{ fontFamily: "monospace" }}>{perm}</span>
-                      </label>
-                    ))}
+              <Card className="bg-muted/30">
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">{pendingManifest.name}</CardTitle>
+                    <Badge variant="outline" className="text-[11px] font-mono">
+                      v{pendingManifest.version}
+                    </Badge>
                   </div>
-                ) : (
-                  <div style={{ fontSize: 13, color: "var(--text-muted, #64748b)" }}>
-                    This plugin requests no sensitive permissions.
+                  <CardDescription className="text-xs font-mono">
+                    {pendingManifest.id}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 space-y-3">
+                  {(pendingManifest as { description?: string }).description && (
+                    <p className="text-xs text-muted-foreground">
+                      {(pendingManifest as { description?: string }).description}
+                    </p>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold text-foreground">Permission Review:</div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Select which capabilities to grant this plugin:
+                    </p>
+
+                    {pendingManifest.permissions && pendingManifest.permissions.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {pendingManifest.permissions.map((perm: string) => (
+                          <label
+                            key={perm}
+                            className="flex items-center gap-2 rounded-md border border-border bg-card p-2 text-xs hover:bg-muted/40 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedPermissions.includes(perm)}
+                              onChange={() => togglePermission(perm)}
+                              className="rounded border-border text-primary focus:ring-ring"
+                            />
+                            <span className="font-mono text-foreground">{perm}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        This plugin requests no sensitive permissions.
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </CardContent>
+              </Card>
             )}
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => setIsInstallOpen(false)}
-              >
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsInstallOpen(false)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-primary"
                 disabled={!pendingManifest}
                 onClick={handleConfirmInstall}
+                leftIcon={<Check className="h-4 w-4" aria-hidden="true" />}
               >
                 Confirm & Install
-              </button>
-            </div>
-          </div>
-        </dialog>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

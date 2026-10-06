@@ -6,6 +6,9 @@ export interface DraftRecord {
   id: string; // ULID
   pastedText: string;
   aiAnswer?: string;
+  /** Project title/description suggested by an options JSON (optional; older drafts lack them). */
+  title?: string;
+  description?: string;
   preview: Option[];
   warnings: string[];
   updatedAt: string; // ISO-8601

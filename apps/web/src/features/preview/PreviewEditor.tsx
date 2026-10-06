@@ -1,6 +1,12 @@
 import type { Option } from "@decisionator/core";
+import { AlertCircle, ArrowLeft, Check, Edit2, Trash2 } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { Input } from "../../components/ui/input.js";
+import { Textarea } from "../../components/ui/textarea.js";
 
 export interface PreviewEditorProps {
   initialTitle?: string;
@@ -68,222 +74,184 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
   };
 
   return (
-    <div className="preview-editor card">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <h3 style={{ margin: 0 }}>Step 3: Review & Edit Project</h3>
-        <button
-          type="button"
-          onClick={onBack}
-          className="btn btn-outline"
-          style={{ padding: "4px 8px" }}
-        >
-          &larr; Back
-        </button>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label
-          htmlFor="project-title-input"
-          style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}
-        >
-          Project Title *
-        </label>
-        <input
-          id="project-title-input"
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Choose team retrospectives tool"
-          style={{
-            width: "100%",
-            padding: "8px 12px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            boxSizing: "border-box",
-            fontSize: 15,
-          }}
-        />
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label
-          htmlFor="project-description-input"
-          style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}
-        >
-          Description (Optional)
-        </label>
-        <textarea
-          id="project-description-input"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Context or decision criteria..."
-          rows={3}
-          style={{
-            width: "100%",
-            padding: "8px 12px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            boxSizing: "border-box",
-            fontSize: 13,
-          }}
-        />
-      </div>
-
-      {duplicateTitles.size > 0 && (
-        <div
-          role="alert"
-          style={{
-            padding: "8px 12px",
-            borderRadius: 6,
-            background: "rgba(234, 179, 8, 0.1)",
-            color: "#ca8a04",
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
-          Warning: Detected duplicate option titles! Consider renaming or merging them.
+    <Card className="border-border bg-card shadow-xs">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-xl font-bold">Step 3: Review & Edit Project</CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
+          >
+            Back
+          </Button>
         </div>
-      )}
+      </CardHeader>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <h4 style={{ margin: 0 }}>Options ({options.length})</h4>
-        <button
-          type="button"
-          onClick={handleAddOption}
-          className="btn btn-outline"
-          style={{ fontSize: 12 }}
-        >
-          + Add Option
-        </button>
-      </div>
+      <CardContent className="space-y-6">
+        {/* Project Metadata */}
+        <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+          <div className="space-y-1.5">
+            <label htmlFor="project-title-input" className="text-sm font-semibold text-foreground">
+              Project Title *
+            </label>
+            <Input
+              id="project-title-input"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Choose team retrospectives tool"
+              className="bg-background text-base"
+            />
+          </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-        {options.map((opt, index) => {
-          const isDupe = duplicateTitles.has(opt.title.trim().toLowerCase());
-          const isEditing = editingId === opt.id;
-
-          return (
-            <div
-              key={opt.id}
-              style={{
-                border: isDupe ? "1px solid #ca8a04" : "1px solid var(--border)",
-                borderRadius: 6,
-                padding: 12,
-                background: "var(--bg)",
-              }}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="project-description-input"
+              className="text-sm font-semibold text-foreground"
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 8,
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  {isEditing ? (
-                    <div>
-                      <input
-                        type="text"
-                        value={opt.title}
-                        onChange={(e) => handleUpdateOption(opt.id, "title", e.target.value)}
-                        style={{
-                          width: "100%",
-                          padding: "4px 8px",
-                          marginBottom: 8,
-                          borderRadius: 4,
-                          border: "1px solid var(--border)",
-                          background: "var(--card-bg)",
-                          color: "var(--text)",
-                        }}
-                      />
-                      <textarea
-                        value={opt.description || ""}
-                        onChange={(e) => handleUpdateOption(opt.id, "description", e.target.value)}
-                        placeholder="Description..."
-                        rows={2}
-                        style={{
-                          width: "100%",
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                          border: "1px solid var(--border)",
-                          background: "var(--card-bg)",
-                          color: "var(--text)",
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      <strong>
-                        {index + 1}. {opt.title}
-                      </strong>
-                      {opt.description && (
-                        <p
-                          style={{ margin: "4px 0 0 0", fontSize: 13, color: "var(--text-muted)" }}
-                        >
-                          {opt.description}
-                        </p>
+              Description (Optional)
+            </label>
+            <Textarea
+              id="project-description-input"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Context or decision criteria..."
+              rows={3}
+              className="bg-background text-sm resize-y"
+            />
+          </div>
+        </div>
+
+        {duplicateTitles.size > 0 && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3.5 text-xs text-warning font-medium"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>
+              Warning: Detected duplicate option titles! Consider renaming or merging them.
+            </span>
+          </div>
+        )}
+
+        {/* Options List */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-sm">{`Options (${options.length})`}</h4>
+            <Button type="button" variant="outline" size="sm" onClick={handleAddOption}>
+              + Add Option
+            </Button>
+          </div>
+
+          <div className="space-y-2.5">
+            {options.map((opt, index) => {
+              const isDupe = duplicateTitles.has(opt.title.trim().toLowerCase());
+              const isEditing = editingId === opt.id;
+
+              return (
+                <div
+                  key={opt.id}
+                  className={`rounded-lg border p-3.5 transition-colors ${
+                    isDupe
+                      ? "border-warning/60 bg-warning/5"
+                      : "border-border bg-card/60 hover:bg-accent/30"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2 min-w-0">
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <Input
+                            type="text"
+                            value={opt.title}
+                            onChange={(e) => handleUpdateOption(opt.id, "title", e.target.value)}
+                            aria-label={`Option ${index + 1} title`}
+                            className="bg-background text-sm font-medium"
+                          />
+                          <Textarea
+                            value={opt.description || ""}
+                            onChange={(e) =>
+                              handleUpdateOption(opt.id, "description", e.target.value)
+                            }
+                            aria-label={`Option ${index + 1} description`}
+                            placeholder="Description..."
+                            rows={2}
+                            className="bg-background text-xs resize-y"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <strong className="font-semibold text-sm text-foreground min-w-0 break-words">
+                              {index + 1}. {opt.title}
+                            </strong>
+                            {isDupe && (
+                              <Badge variant="warning" className="text-[10px] py-0 px-1.5">
+                                duplicate
+                              </Badge>
+                            )}
+                          </div>
+                          {opt.description && (
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                              {opt.description}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
 
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(isEditing ? null : opt.id)}
-                    className="btn btn-outline"
-                    style={{ fontSize: 12, padding: "2px 6px" }}
-                  >
-                    {isEditing ? "Done" : "Edit"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveOption(opt.id)}
-                    className="btn btn-outline"
-                    style={{
-                      fontSize: 12,
-                      padding: "2px 6px",
-                      color: "var(--color-danger, #dc2626)",
-                    }}
-                  >
-                    Remove
-                  </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingId(isEditing ? null : opt.id)}
+                        className="h-8 px-2.5 text-xs"
+                      >
+                        {isEditing ? (
+                          <span className="flex items-center gap-1 text-primary font-medium">
+                            <Check className="h-3.5 w-3.5" aria-hidden="true" /> Done
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Edit2 className="h-3.5 w-3.5" aria-hidden="true" /> Edit
+                          </span>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveOption(opt.id)}
+                        className="h-8 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      </CardContent>
 
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button
+      <CardFooter className="flex items-center justify-end border-t border-border pt-4">
+        <Button
           type="button"
+          variant="default"
           onClick={handleConfirm}
-          className="btn btn-primary"
           disabled={!title.trim() || options.length === 0}
         >
           Create Project &rarr;
-        </button>
-      </div>
-    </div>
+        </Button>
+      </CardFooter>
+    </Card>
   );
 };
+
+export default PreviewEditor;
