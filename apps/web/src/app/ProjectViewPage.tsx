@@ -248,10 +248,10 @@ export function ProjectViewPage() {
                         : "rgba(59, 130, 246, 0.15)",
                   color:
                     effectiveStoreId === "file"
-                      ? "#10b981"
+                      ? "#065f46"
                       : effectiveStoreId === "firestore"
-                        ? "#f59e0b"
-                        : "#3b82f6",
+                        ? "#92400e"
+                        : "#1e40af",
                   textTransform: "uppercase",
                   fontWeight: 600,
                 }}
@@ -388,19 +388,35 @@ export function ProjectViewPage() {
                   gradeCount={stat?.count}
                   commentCount={stat?.commentsCount}
                 />
-                <div style={{ marginTop: 12 }}>
-                  <GradeInput
-                    value={myGrade?.value || 0}
-                    onChange={(val) => handleGradeChange(opt.id, val)}
-                    disabled={!roleCapabilities.canVote}
-                  />
-                </div>
-                <div style={{ marginTop: 16 }}>
+                <div
+                  style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 12 }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <strong style={{ fontSize: 13 }}>My Rating:</strong>
+                    <GradeInput
+                      value={myGrade?.value}
+                      optionId={opt.id}
+                      authorName={currentUser}
+                      updatedAt={myGrade?.at}
+                      disabled={!roleCapabilities.canGrade}
+                      onChange={(val) => handleGradeChange(opt.id, val)}
+                    />
+                  </div>
+
                   <CommentThread
-                    comments={snapshot.comments.filter((c) => c.optionId === opt.id)}
+                    comments={snapshot.comments}
                     optionId={opt.id}
                     currentUserId={currentUser}
                     isOwner={isOwner}
+                    disabled={!roleCapabilities.canComment}
+                    disabledReason={roleCapabilities.disabledReason}
                     onAddComment={(body) => handleAddComment(body, opt.id)}
                     onEditComment={(commentId, body) => handleEditComment(commentId, body, opt.id)}
                     onToggleHide={(commentId, hidden) =>
