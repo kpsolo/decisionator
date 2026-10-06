@@ -17,6 +17,7 @@ export default defineConfig({
     // Password-protected store tests derive keys with production PBKDF2 (600 000 iterations);
     // under a full parallel run they can exceed the 5 s default.
     testTimeout: 30_000,
-    exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+    // .claude/worktrees holds other agent sessions' checkouts; never test them from here.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**", ".claude/**"],
   },
 });
