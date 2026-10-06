@@ -120,7 +120,7 @@ Rows submitted after the close time are ignored, using `at` compared with the ou
 | strategy | `{id, version}` | e.g. `org.decisionator.strategy.borda@1.0.0` |
 | settings | object | e.g. `{topN: 3}` |
 | inputs | `{options: {id, title}[], ballots: {by, ranking}[], grades: {optionId, average, count}[]}` | snapshot at close |
-| result | `{winner: ULID, order: {optionId, points, firstPlaces}[]}` | |
+| result | `{winner: ULID, chosen?: ULID[], order: {optionId, points?, firstPlaces?}[], explanation?}` | `points`/`firstPlaces` only for ranked (Borda) outcomes |
 | tieBreak | `"none" \| "average-grade" \| "first-places" \| "seeded-random"` | |
 | seed | hex(32)? | only when `seeded-random` was needed (R11 RNG) |
 | triggeredBy | participantId | the owner |

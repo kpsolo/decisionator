@@ -141,7 +141,7 @@ export async function runTally({
     result: {
       winner,
       chosen: decision.chosen || [winner],
-      order: decision.order || [{ optionId: winner, points: 0, firstPlaces: 0 }],
+      order: decision.order || [{ optionId: winner }],
       explanation: decision.explanation || "",
     },
     tieBreak: decision.tieBreak || "none",

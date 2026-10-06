@@ -8,10 +8,15 @@ export const TieBreakStrategySchema = z.enum([
 ]);
 export type TieBreakStrategy = z.infer<typeof TieBreakStrategySchema>;
 
+/**
+ * One entry of an outcome's final order. `points` and `firstPlaces` are only produced by ranked
+ * strategies (Borda); random, weighted and owner-pick orders list option ids alone
+ * (strategy contract v1.1.0 requires only `chosen` and `explanation`).
+ */
 export const OutcomeOrderItemSchema = z.object({
   optionId: z.string().min(1),
-  points: z.number(),
-  firstPlaces: z.number().int().nonnegative(),
+  points: z.number().optional(),
+  firstPlaces: z.number().int().nonnegative().optional(),
 });
 export type OutcomeOrderItem = z.infer<typeof OutcomeOrderItemSchema>;
 

@@ -7,6 +7,7 @@ import {
   OptionSchema,
   OutcomeRecordSchema,
   ProjectSchema,
+  createProjectExport,
   createRankingSchema,
 } from "../src/index.js";
 
@@ -231,6 +232,47 @@ describe("Data Model Zod Schemas (T017)", () => {
       };
 
       expect(OutcomeRecordSchema.safeParse(outcome).success).toBe(true);
+    });
+
+    it("accepts non-Borda orders without points or first places (random, weighted, owner pick)", () => {
+      // The strategy contract only requires `chosen` + `explanation`; points are Borda-specific.
+      const outcome = {
+        strategy: { id: "org.decisionator.strategy.random", version: "0.1.0" },
+        settings: {},
+        inputs: {
+          options: [
+            { id: "opt1", title: "Idea 1" },
+            { id: "opt2", title: "Idea 2" },
+          ],
+        },
+        result: {
+          winner: "opt2",
+          chosen: ["opt2"],
+          order: [{ optionId: "opt2" }, { optionId: "opt1" }],
+        },
+        seed: "0123456789abcdef0123456789abcdef",
+        triggeredBy: "owner@example.com",
+        at: "2026-10-05T12:00:00Z",
+      };
+
+      expect(OutcomeRecordSchema.safeParse(outcome).success).toBe(true);
+      const project = {
+        title: "P",
+        createdAt: "2026-10-05T12:00:00Z",
+        owner: "owner@example.com",
+      };
+      expect(() =>
+        createProjectExport({
+          // biome-ignore lint/suspicious/noExplicitAny: minimal project fixture
+          project: project as any,
+          options: [],
+          grades: [],
+          comments: [],
+          rankings: [],
+          // biome-ignore lint/suspicious/noExplicitAny: parsed by the export schema under test
+          outcomes: [outcome as any],
+        })
+      ).not.toThrow();
     });
   });
 
