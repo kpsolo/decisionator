@@ -83,7 +83,7 @@ export function NewProjectWizard() {
         options: data.options,
       });
       await clearDraftState();
-      navigate(`/p/${res.fileId}`);
+      navigate(`/p/${res.storeId}/${res.fileId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -94,9 +94,9 @@ export function NewProjectWizard() {
   if (loading) {
     return (
       <div className="card" style={{ textAlign: "center", padding: "40px 16px" }}>
-        <h3>Creating project in Google Drive...</h3>
+        <h3>Creating decision project...</h3>
         <p style={{ color: "var(--text-muted)", marginTop: 8 }}>
-          Setting up your spreadsheet and tabs. Please authorize when prompted.
+          Initializing project and saving options in your active storage.
         </p>
       </div>
     );

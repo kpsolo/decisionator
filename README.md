@@ -127,8 +127,11 @@ packages/
 ├── node/                            # Companion local daemon with MCP & REST agent API
 └── relay/                           # E2E encrypted sync relay & agent WebSocket tunnel
 plugins/
+├── share-inpage/                    # In-page browser host & guest peer coordination
 ├── source-paste/                    # Paste & plain-list / AI JSON candidate source
 ├── source-google-docs/              # Google Docs idea source with Google Picker integration
+├── store-file/                      # Local-first direct file storage (.decisionator.json)
+├── store-firestore/                 # Firebase Firestore real-time cloud storage with WebCrypto
 ├── store-google-sheets/             # Google Drive & Sheets storage adapter with queue & crypto
 ├── store-local/                     # Local-first ProjectStore backed by Automerge 3 & IndexedDB
 ├── strategy-borda/                  # Deterministic Borda ranking strategy

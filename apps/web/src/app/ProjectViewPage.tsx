@@ -1,10 +1,8 @@
 import type { Option } from "@decisionator/core";
 import { computeOptionStats } from "@decisionator/core";
-import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { GoogleAuthService, GoogleSheetsProjectStore } from "@decisionator/store-google-sheets";
-import React, { useEffect, useState } from "react";
+import type { ProjectRef, ProjectSnapshot } from "@decisionator/plugin-sdk";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getGoogleConfig } from "../config/google.js";
 import { AgentBrief } from "../features/agents/AgentBrief.js";
 import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
@@ -14,12 +12,30 @@ import { DeleteProject } from "../features/project/DeleteProject.js";
 import { ExportButton } from "../features/project/ExportButton.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
 import { useRole } from "../features/project/useRole.js";
+import { InPageShareModal } from "../features/sharing/InPageShareModal.js";
 import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
 import { StatsView } from "../features/stats/StatsView.js";
+import { useStorage } from "../storage/StorageContext.js";
 
 export function ProjectViewPage() {
-  const { fileId } = useParams();
+  const { fileId, storeId, id } = useParams();
   const navigate = useNavigate();
+  const { storageManager } = useStorage();
+
+  const effectiveId = id || fileId || "";
+  const effectiveStoreId =
+    storeId ||
+    (effectiveId.startsWith("file_")
+      ? "file"
+      : effectiveId.startsWith("fs_")
+        ? "firestore"
+        : "google-sheets");
+
+  const projectRef = useMemo<ProjectRef>(
+    () => ({ store: effectiveStoreId, id: effectiveId }),
+    [effectiveStoreId, effectiveId]
+  );
+  const store = storageManager.resolveStore(projectRef);
 
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
   const [currentUser, setCurrentUser] = useState<string>("");
@@ -29,30 +45,23 @@ export function ProjectViewPage() {
     details?: string;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<"options" | "stats" | "agents">("options");
+  const [showInPageShare, setShowInPageShare] = useState(false);
 
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [cachedPassword, setCachedPassword] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!fileId) return;
+    if (!effectiveId) return;
 
     let isMounted = true;
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
-    const validFileId = fileId;
     async function load() {
       try {
         setLoading(true);
         const identity = await store.signIn({ interactive: false });
         if (isMounted) setCurrentUser(identity.participantId);
 
-        const snap = await store.openProject(
-          { store: "google-sheets", id: validFileId },
-          { password: cachedPassword }
-        );
+        const snap = await store.openProject(projectRef, { password: cachedPassword });
         if (isMounted) {
           setSnapshot(snap);
           setNeedsPassword(false);
@@ -78,7 +87,7 @@ export function ProjectViewPage() {
     load();
 
     // Subscribe to watch updates
-    const unsub = store.watch({ store: "google-sheets", id: fileId }, (newSnap) => {
+    const unsub = store.watch(projectRef, (newSnap) => {
       if (isMounted) setSnapshot(newSnap);
     });
 
@@ -86,7 +95,7 @@ export function ProjectViewPage() {
       isMounted = false;
       unsub();
     };
-  }, [fileId, cachedPassword]);
+  }, [effectiveId, cachedPassword, store, projectRef]);
 
   if (loading) {
     return (
@@ -103,13 +112,7 @@ export function ProjectViewPage() {
         onUnlock={async (pwd) => {
           try {
             setLoading(true);
-            const cfg = getGoogleConfig();
-            const a = new GoogleAuthService({ clientId: cfg.clientId });
-            const s = new GoogleSheetsProjectStore(a);
-            const snap = await s.openProject(
-              { store: "google-sheets", id: fileId || "" },
-              { password: pwd }
-            );
+            const snap = await store.openProject(projectRef, { password: pwd });
             setCachedPassword(pwd);
             setSnapshot(snap);
             setNeedsPassword(false);
@@ -128,7 +131,7 @@ export function ProjectViewPage() {
     return <ProjectUnavailable reason={error.reason} details={error.details} />;
   }
 
-  if (!snapshot || !fileId) {
+  if (!snapshot || !effectiveId) {
     return <ProjectUnavailable reason="not_found" />;
   }
 
@@ -137,7 +140,7 @@ export function ProjectViewPage() {
   const statsMap = computeOptionStats(snapshot.options, snapshot.grades, snapshot.comments);
 
   const handleGradeChange = async (optionId: string, val: number) => {
-    if (!fileId) return;
+    if (!effectiveId) return;
     const gradeVal = val as 1 | 2 | 3 | 4 | 5;
 
     // Optimistic update
@@ -153,17 +156,10 @@ export function ProjectViewPage() {
     ];
     setSnapshot({ ...snapshot, grades: newGrades });
 
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
-    await store.append({ store: "google-sheets", id: fileId }, [
-      { kind: "grade", optionId, value: gradeVal },
-    ]);
+    await store.append(projectRef, [{ kind: "grade", optionId, value: gradeVal }]);
   };
 
   const handleAddComment = async (body: string, optionId: string) => {
-    // Optimistic update
     const newComments = [
       ...snapshot.comments,
       {
@@ -176,21 +172,11 @@ export function ProjectViewPage() {
     ];
     setSnapshot({ ...snapshot, comments: newComments });
 
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
-    await store.append({ store: "google-sheets", id: fileId }, [
-      { kind: "comment", optionId, body },
-    ]);
+    await store.append(projectRef, [{ kind: "comment", optionId, body }]);
   };
 
   const handleEditComment = async (commentId: string, newBody: string, optionId: string) => {
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
-    await store.append({ store: "google-sheets", id: fileId }, [
+    await store.append(projectRef, [
       { kind: "comment", optionId, body: newBody, replaces: commentId },
     ]);
 
@@ -201,11 +187,7 @@ export function ProjectViewPage() {
   };
 
   const handleToggleHide = async (commentId: string, hidden: boolean, optionId: string) => {
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
-    await store.append({ store: "google-sheets", id: fileId }, [
+    await store.append(projectRef, [
       { kind: "comment", optionId, body: "", replaces: commentId, hidden },
     ]);
 
@@ -214,29 +196,28 @@ export function ProjectViewPage() {
   };
 
   const handleReviewAction = async (
-    id: string,
+    actionId: string,
     action: "accepted" | "edited" | "dismissed",
     editedBody?: string
   ) => {
-    if (!fileId) return;
-    const existing = (snapshot.contributions || []).find((c) => c.id === id);
+    if (!effectiveId) return;
+    const existing = (snapshot.contributions || []).find((c) => c.id === actionId);
     if (!existing) return;
     const updated = {
       ...existing,
       reviewStatus: action,
       body: editedBody !== undefined ? editedBody : existing.body,
     };
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
 
-    await store.append({ store: "google-sheets", id: fileId }, [
-      { kind: "contribution", contribution: updated },
-    ]);
+    await store.append(projectRef, [{ kind: "contribution", contribution: updated }]);
 
-    const newContribs = (snapshot.contributions || []).map((c) => (c.id === id ? updated : c));
+    const newContribs = (snapshot.contributions || []).map((c) =>
+      c.id === actionId ? updated : c
+    );
     setSnapshot({ ...snapshot, contributions: newContribs });
   };
+
+  const baseProjectUrl = `/p/${effectiveStoreId}/${effectiveId}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -252,7 +233,32 @@ export function ProjectViewPage() {
           }}
         >
           <div>
-            <h2 style={{ margin: "0 0 6px 0" }}>{snapshot.project.title}</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h2 style={{ margin: "0 0 6px 0" }}>{snapshot.project.title}</h2>
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background:
+                    effectiveStoreId === "file"
+                      ? "rgba(16, 185, 129, 0.15)"
+                      : effectiveStoreId === "firestore"
+                        ? "rgba(245, 158, 11, 0.15)"
+                        : "rgba(59, 130, 246, 0.15)",
+                  color:
+                    effectiveStoreId === "file"
+                      ? "#10b981"
+                      : effectiveStoreId === "firestore"
+                        ? "#f59e0b"
+                        : "#3b82f6",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                {effectiveStoreId}
+              </span>
+            </div>
             {snapshot.project.description && (
               <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14 }}>
                 {snapshot.project.description}
@@ -266,7 +272,7 @@ export function ProjectViewPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <ExportButton snapshot={snapshot} />
             <DeleteProject
-              fileId={fileId}
+              fileId={effectiveId}
               projectTitle={snapshot.project.title}
               isOwner={isOwner}
               onDeleted={() => navigate("/")}
@@ -308,17 +314,42 @@ export function ProjectViewPage() {
           >
             Ask Agent & Review ({snapshot.contributions?.length || 0})
           </button>
-          <Link to={`/p/${fileId}/vote`} className="btn btn-outline" style={{ fontSize: 13 }}>
+          <Link to={`${baseProjectUrl}/vote`} className="btn btn-outline" style={{ fontSize: 13 }}>
             Vote
           </Link>
-          <Link to={`/p/${fileId}/results`} className="btn btn-outline" style={{ fontSize: 13 }}>
+          <Link
+            to={`${baseProjectUrl}/results`}
+            className="btn btn-outline"
+            style={{ fontSize: 13 }}
+          >
             Results
           </Link>
-          <Link to={`/p/${fileId}/share`} className="btn btn-outline" style={{ fontSize: 13 }}>
-            Share Link
+          <Link to={`${baseProjectUrl}/share`} className="btn btn-outline" style={{ fontSize: 13 }}>
+            Share
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowInPageShare(true)}
+            className="btn btn-outline"
+            style={{
+              fontSize: 13,
+              borderColor: "var(--color-primary, #3b82f6)",
+              color: "var(--color-primary, #3b82f6)",
+            }}
+          >
+            📡 In-Page Live Share
+          </button>
         </div>
       </div>
+
+      {showInPageShare && (
+        <InPageShareModal
+          projectRef={projectRef}
+          projectTitle={snapshot.project.title}
+          store={store}
+          onClose={() => setShowInPageShare(false)}
+        />
+      )}
 
       {/* Main Content */}
       {activeTab === "stats" ? (
@@ -357,39 +388,24 @@ export function ProjectViewPage() {
                   gradeCount={stat?.count}
                   commentCount={stat?.commentsCount}
                 />
-
-                <div
-                  style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 12 }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <strong style={{ fontSize: 13 }}>My Rating:</strong>
-                    <GradeInput
-                      value={myGrade?.value}
-                      optionId={opt.id}
-                      authorName={currentUser}
-                      updatedAt={myGrade?.at}
-                      disabled={!roleCapabilities.canGrade}
-                      onChange={(val) => handleGradeChange(opt.id, val)}
-                    />
-                  </div>
-
+                <div style={{ marginTop: 12 }}>
+                  <GradeInput
+                    value={myGrade?.value || 0}
+                    onChange={(val) => handleGradeChange(opt.id, val)}
+                    disabled={!roleCapabilities.canVote}
+                  />
+                </div>
+                <div style={{ marginTop: 16 }}>
                   <CommentThread
-                    comments={snapshot.comments}
+                    comments={snapshot.comments.filter((c) => c.optionId === opt.id)}
                     optionId={opt.id}
                     currentUserId={currentUser}
                     isOwner={isOwner}
-                    disabled={!roleCapabilities.canComment}
-                    disabledReason={roleCapabilities.disabledReason}
                     onAddComment={(body) => handleAddComment(body, opt.id)}
-                    onEditComment={(cId, body) => handleEditComment(cId, body, opt.id)}
-                    onToggleHide={(cId, hidden) => handleToggleHide(cId, hidden, opt.id)}
+                    onEditComment={(commentId, body) => handleEditComment(commentId, body, opt.id)}
+                    onToggleHide={(commentId, hidden) =>
+                      handleToggleHide(commentId, hidden, opt.id)
+                    }
                   />
                 </div>
               </div>

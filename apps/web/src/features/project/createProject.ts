@@ -1,24 +1,26 @@
-import type { Option, Project } from "@decisionator/core";
-import { GoogleAuthService, GoogleSheetsProjectStore } from "@decisionator/store-google-sheets";
-import { getGoogleConfig } from "../../config/google.js";
+import type { Option } from "@decisionator/core";
+import { getStorageManager } from "../../storage/storage-manager.js";
 
 export interface CreateProjectParams {
   title: string;
   description?: string;
   options: Option[];
+  storeId?: string;
 }
 
-export async function createProjectFlow(params: CreateProjectParams): Promise<{ fileId: string }> {
-  const config = getGoogleConfig();
-  const auth = new GoogleAuthService({
-    clientId: config.clientId,
-  });
+export async function createProjectFlow(
+  params: CreateProjectParams
+): Promise<{ storeId: string; fileId: string }> {
+  const sm = getStorageManager();
+  const store = params.storeId
+    ? sm.getStore(params.storeId) || sm.getActiveStore()
+    : sm.getActiveStore();
 
-  // 1. Request interactive sign-in
-  await auth.requestToken(true);
+  // If store is Google Sheets, request interactive token
+  if (store.id.includes("google-sheets")) {
+    await store.signIn({ interactive: true });
+  }
 
-  // 2. Instantiate store and create project
-  const store = new GoogleSheetsProjectStore(auth);
   const ref = await store.createProject({
     title: params.title,
     description: params.description,
@@ -31,5 +33,13 @@ export async function createProjectFlow(params: CreateProjectParams): Promise<{ 
     },
   });
 
-  return { fileId: ref.id };
+  const resolvedStoreId =
+    ref.store ||
+    (store.id.includes("google-sheets")
+      ? "google-sheets"
+      : store.id.includes("firestore")
+        ? "firestore"
+        : "file");
+
+  return { storeId: resolvedStoreId, fileId: ref.id };
 }

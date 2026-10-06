@@ -1,0 +1,24 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.store.firestore",
+  "name": "Firebase Firestore store",
+  "version": "0.1.0",
+  "description": "Store decision projects in Google Cloud Firebase Firestore with real-time sync and client-side encryption",
+  "platform": {
+    "runtime": "^1.0.0",
+    "projectStore": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "projectStore": {
+      "storeKind": "firestore",
+      "supportsPassword": true,
+      "supportsSharing": true,
+      "supportsIndividualRemoval": true
+    }
+  },
+  "permissions": [
+    "net:https://firestore.googleapis.com",
+    "net:https://identitytoolkit.googleapis.com"
+  ]
+}

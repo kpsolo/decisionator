@@ -4,3 +4,4 @@ export * from "./project-store.js";
 export * from "./idea-source.js";
 export * from "./strategy.js";
 export * from "./runtime.js";
+export * from "./storage-manager.js";

@@ -352,13 +352,18 @@ export function ProjectSharePage() {
   );
 }
 
+import { StorageSettings } from "../features/settings/StorageSettings.js";
+
 export function SettingsPage() {
   return (
-    <div className="card">
-      <h2>Application Settings</h2>
-      <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-        Theme preferences, Google API credentials, and offline cache management.
-      </p>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="card">
+        <h2>Application Settings</h2>
+        <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
+          Storage provider settings, active persistence target, and credentials management.
+        </p>
+      </div>
+      <StorageSettings />
     </div>
   );
 }
