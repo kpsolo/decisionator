@@ -7,48 +7,8 @@ test.describe("US1: Create, Format, Grade, and Delete Project (T038)", () => {
   }) => {
     const startTime = Date.now();
 
-    // 1. Navigate to Home
-    await page.goto("./");
-    await expect(page.getByText("My Decision Projects")).toBeVisible();
-    await checkA11y(page, "Home Page");
-
-    // 2. Click + New Decision Project
-    await page.getByRole("link", { name: "+ New Decision Project" }).click();
-    await expect(page.getByText("Step 1: Paste Your Ideas")).toBeVisible();
-    await checkA11y(page, "New Project - Paste Step");
-
-    // 3. Paste 10 lines of ideas
-    const sampleIdeas = [
-      "1. Automated daily sync — AI summaries",
-      "2. Weekly retrospective board with voting",
-      "3. Micro-surveys after major releases",
-      "4. Centralized documentation hub",
-      "5. Pair programming rotation calendar",
-      "6. Incident post-mortem repository",
-      "7. Architecture review request queue",
-      "8. Continuous dependency vulnerability alerts",
-      "9. Flaky test dashboard and isolation",
-      "10. Hackathon project ideation board",
-    ].join("\n");
-
-    const textarea = page.locator("textarea");
-    await textarea.fill(sampleIdeas);
-
-    // 4. Use as plain list
-    await page.getByRole("button", { name: "Use as plain list" }).click();
-    await expect(page.getByText("Step 3: Review & Edit Project")).toBeVisible();
-    await checkA11y(page, "New Project - Preview Step");
-
-    // Check that 10 options were generated
-    await expect(page.getByText("Options (10)")).toBeVisible();
-
-    // 5. Fill project title
-    const titleInput = page.locator("#project-title-input");
-    await titleInput.fill("Engineering Productivity Q4");
-
-    // 6. Confirm and create project
     // Setup mock Google OAuth & Sheets API in browser context
-    await page.evaluate(() => {
+    await page.addInitScript(() => {
       // biome-ignore lint/suspicious/noExplicitAny: Mocking browser global
       (window as any).google = {
         accounts: {
@@ -165,6 +125,46 @@ test.describe("US1: Create, Format, Grade, and Delete Project (T038)", () => {
       return route.fulfill({ status: 200, json: {} });
     });
 
+    // 1. Navigate to Home
+    await page.goto("./");
+    await expect(page.getByText("My Decision Projects")).toBeVisible();
+    await checkA11y(page, "Home Page");
+
+    // 2. Click + New Decision Project
+    await page.getByRole("link", { name: "+ New Decision Project" }).click();
+    await expect(page.getByText("Step 1: Paste Your Ideas")).toBeVisible();
+    await checkA11y(page, "New Project - Paste Step");
+
+    // 3. Paste 10 lines of ideas
+    const sampleIdeas = [
+      "1. Automated daily sync — AI summaries",
+      "2. Weekly retrospective board with voting",
+      "3. Micro-surveys after major releases",
+      "4. Centralized documentation hub",
+      "5. Pair programming rotation calendar",
+      "6. Incident post-mortem repository",
+      "7. Architecture review request queue",
+      "8. Continuous dependency vulnerability alerts",
+      "9. Flaky test dashboard and isolation",
+      "10. Hackathon project ideation board",
+    ].join("\n");
+
+    const textarea = page.locator("textarea");
+    await textarea.fill(sampleIdeas);
+
+    // 4. Use as plain list
+    await page.getByRole("button", { name: "Use as plain list" }).click();
+    await expect(page.getByText("Step 3: Review & Edit Project")).toBeVisible();
+    await checkA11y(page, "New Project - Preview Step");
+
+    // Check that 10 options were generated
+    await expect(page.getByText("Options (10)")).toBeVisible();
+
+    // 5. Fill project title
+    const titleInput = page.locator("#project-title-input");
+    await titleInput.fill("Engineering Productivity Q4");
+
+    // 6. Confirm and create project
     await page.getByRole("button", { name: "Create Project →" }).click();
 
     // 7. Verify Navigation to Project overview

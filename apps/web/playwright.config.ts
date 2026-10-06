@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "html",
   use: {
-    baseURL: "http://localhost:5173/decisionator/",
+    baseURL: "http://127.0.0.1:5173/decisionator/",
     trace: "on-first-retry",
     reducedMotion: "reduce",
   },
@@ -28,7 +28,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "pnpm run dev",
-    url: "http://localhost:5173/decisionator/",
+    url: "http://127.0.0.1:5173/decisionator/",
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
     env: {
