@@ -642,6 +642,20 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       throw new Error("PERMISSION_DENIED: Only owner may configure sharing");
     }
 
+    // Drive cannot exclude one person from an "anyone with the link" permission (research R21),
+    // so individual removal needs the link to end up off. Checked before anything is written.
+    const removeUsers = req.removeUsers ?? [];
+    if (removeUsers.length > 0) {
+      const linkOn =
+        req.linkSharing?.enabled ??
+        (await this.client.listPermissions(ref.id)).permissions.some((p) => p.type === "anyone");
+      if (linkOn) {
+        throw new Error(
+          "NOT_SUPPORTED: Anyone with the link keeps access. Turn off link sharing to remove individual collaborators."
+        );
+      }
+    }
+
     if (req.linkSharing) {
       if (req.linkSharing.enabled) {
         await this.client.createPermission(ref.id, {
@@ -665,6 +679,17 @@ export class GoogleSheetsProjectStore implements ProjectStore {
           emailAddress: inv.email,
           role: inv.role === "contribute" ? "writer" : "reader",
         });
+      }
+    }
+
+    if (removeUsers.length > 0) {
+      // Listed after the invites above so a permission they replaced is not targeted by a stale id.
+      const perms = await this.client.listPermissions(ref.id);
+      for (const email of removeUsers) {
+        const target = perms.permissions.find(
+          (p) => p.type === "user" && p.role !== "owner" && p.emailAddress === email
+        );
+        if (target?.id) await this.client.deletePermission(ref.id, target.id);
       }
     }
 

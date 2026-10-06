@@ -450,6 +450,9 @@ export class FirestoreProjectStore implements ProjectStore {
     const doc = this.projects.get(ref.id);
     if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
 
+    const role = this.resolveRole(doc, this.currentUser);
+    if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can manage sharing");
+
     if (req.inviteUsers) {
       for (const invite of req.inviteUsers) {
         const existing = doc.collaborators.find((c) => c.email === invite.email);

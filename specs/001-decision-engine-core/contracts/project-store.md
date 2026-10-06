@@ -1,4 +1,4 @@
-# Contract: Project Store — v1.2.0
+# Contract: Project Store — v1.2.1
 
 The extension point that keeps project storage pluggable (spec FR-011, Principle I).
 - MVP implementation: `store-google-sheets` ([sheet-store.md](./sheet-store.md)).
@@ -21,7 +21,7 @@ interface ProjectStore {
   append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult>; // grades, comments, rankings, outcomes
   updateOptions(ref: ProjectRef, ops: OptionOp[]): Promise<void>;      // owner only
   updateMeta(ref: ProjectRef, patch: MetaPatch): Promise<void>;        // owner only (voting state, settings)
-  share(ref: ProjectRef, req: ShareRequest): Promise<ShareState>;      // link on/off + role, invite/remove email (FR-015, FR-018)
+  share(ref: ProjectRef, req: ShareRequest): Promise<ShareState>;      // owner only; link on/off + role, invite/remove email (FR-015, FR-018)
   getShareState(ref: ProjectRef): Promise<ShareState>;
   export(ref: ProjectRef): Promise<ExportBundle>;                      // FR-080
   deleteProject(ref: ProjectRef): Promise<void>;                       // owner only; Google: Drive trash (FR-025)
@@ -85,6 +85,13 @@ only persist.
      the rest of the session, so that `append` can encrypt and `openProject`/`watch` work without
      the password again; it must never persist that key, and it must refuse to write into a
      protected project for which it holds no key rather than write plaintext.
+7. **Sharing is owner-only (v1.2.1).** Only the project **owner** may call `share`. Any other
+   participant, whatever their role, gets an error whose message starts with `PERMISSION_DENIED`,
+   and nothing is changed. `inviteUsers` adds a collaborator or changes their role;
+   `removeUsers` revokes the named collaborators. Removing an email that is not a collaborator,
+   or the owner's own email, is a no-op. A store that cannot revoke an individual (for example
+   Google while link sharing stays on, research R21) throws `NOT_SUPPORTED` before changing
+   anything (rule 3).
 
 ## Contract test kit
 
@@ -102,12 +109,16 @@ covers:
   `byName`, latest-wins per delegate for grades and rankings (per round), `PERMISSION_DENIED` for a
   non-owner and for delegated `outcome`/`contribution` entries (nothing written),
   `INVALID_ARGUMENT` for malformed delegates, and a delegated comment round-tripping through a
-  password-protected project.
+  password-protected project;
+- sharing (v1.2.1): a non-owner (`view` or `contribute`) calling `share` to invite, change a role,
+  remove a collaborator or toggle link sharing gets `PERMISSION_DENIED` and changes nothing, and
+  the owner's `removeUsers` revokes only the named collaborators.
 
 ## Changelog
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.2.1 (unreleased) | 2026-10-06 | `share` is owner-only: non-owners get `PERMISSION_DENIED` (rule 7). `removeUsers` must revoke the named collaborators; Google refuses it with `NOT_SUPPORTED` while link sharing stays on. Contract kit covers both |
 | 1.2.0 (unreleased) | 2026-10-06 | Add delegated append: `append(ref, entries, { onBehalfOf })` lets the owner record grades, comments and rankings for another participant (live-session guests, moved projects); new optional `byName` on grades, comments and rankings; latest-wins keyed on the stamped author (rule 6) |
 | 1.1.0 (unreleased) | 2026-10-05 | Add `deleteProject` (owner only, moves Sheet to Drive trash) and `forgetProject` (participant, clears local data and listing) per constitution Principle V and FR-025 |
 | 1.0.0 | 2026-10-05 | Initial project store contract |

@@ -73,6 +73,53 @@ describe("Sharing and Password Store Compliance (T061)", () => {
     expect(shareRes.collaborators.some((c) => c.email === "collaborator@example.com")).toBe(true);
   });
 
+  it("removeUsers deletes the collaborator's Drive permission and keeps the owner's", async () => {
+    const { store, client } = setupStore();
+    const ref = await store.createProject({ title: "Removal Project" });
+    await store.share(ref, {
+      inviteUsers: [
+        { email: "bob@example.com", role: "view" },
+        { email: "carol@example.com", role: "contribute" },
+      ],
+    });
+
+    const res = await store.share(ref, {
+      removeUsers: ["bob@example.com", "owner@example.com", "stranger@example.com"],
+    });
+    expect(res.collaborators.some((c) => c.email === "bob@example.com")).toBe(false);
+
+    const perms = (await client.listPermissions(ref.id)).permissions;
+    expect(perms.some((p) => p.emailAddress === "bob@example.com")).toBe(false);
+    expect(perms.find((p) => p.emailAddress === "carol@example.com")?.role).toBe("writer");
+    expect(perms.find((p) => p.emailAddress === "owner@example.com")?.role).toBe("owner");
+  });
+
+  it("refuses removeUsers with NOT_SUPPORTED while link sharing stays on, changing nothing", async () => {
+    const { store, client } = setupStore();
+    const ref = await store.createProject({ title: "Link Shared Project" });
+    await store.share(ref, {
+      linkSharing: { enabled: true, role: "view" },
+      inviteUsers: [{ email: "bob@example.com", role: "view" }],
+    });
+
+    await expect(
+      store.share(ref, {
+        inviteUsers: [{ email: "carol@example.com", role: "view" }],
+        removeUsers: ["bob@example.com"],
+      })
+    ).rejects.toThrow(/^NOT_SUPPORTED/);
+
+    let perms = (await client.listPermissions(ref.id)).permissions;
+    expect(perms.some((p) => p.emailAddress === "bob@example.com")).toBe(true);
+    expect(perms.some((p) => p.emailAddress === "carol@example.com")).toBe(false);
+
+    // Turning the link off in the same call makes individual removal possible.
+    await store.share(ref, { linkSharing: { enabled: false }, removeUsers: ["bob@example.com"] });
+    perms = (await client.listPermissions(ref.id)).permissions;
+    expect(perms.some((p) => p.type === "anyone")).toBe(false);
+    expect(perms.some((p) => p.emailAddress === "bob@example.com")).toBe(false);
+  });
+
   it("enforces SC-007: in password mode, no plaintext title, option or comment reaches Sheets", async () => {
     const { store, client } = setupStore();
     const secretTitle = "Ultra Secret Initiative";

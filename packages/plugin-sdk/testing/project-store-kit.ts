@@ -213,6 +213,65 @@ export function runProjectStoreContractTests(factory: ProjectStoreFactory): void
       await expect(storeBob.openProject(ref)).rejects.toThrow(/unavailable|not found/i);
     });
 
+    describe("share (v1.2.1)", () => {
+      async function sharedProject() {
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const storeAlice = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await storeAlice.createProject({ title: "Shared Project", options: [] });
+        await storeAlice.share(ref, {
+          inviteUsers: [
+            { email: "bob@example.com", role: "view" },
+            { email: "carol@example.com", role: "contribute" },
+          ],
+        });
+        return { storeAlice, ref };
+      }
+
+      function roleOf(state: { collaborators: { email: string; role: string }[] }, email: string) {
+        return state.collaborators.find((c) => c.email === email)?.role;
+      }
+
+      it("non-owner share is rejected with PERMISSION_DENIED", async () => {
+        const { storeAlice, ref } = await sharedProject();
+
+        fakeGoogleState.setCurrentUser("bob@example.com");
+        const storeBob = await factory({ currentUserEmail: "bob@example.com" });
+        await expect(
+          storeBob.share(ref, { inviteUsers: [{ email: "mallory@example.com", role: "view" }] })
+        ).rejects.toThrow(/^PERMISSION_DENIED/);
+        await expect(
+          storeBob.share(ref, { inviteUsers: [{ email: "bob@example.com", role: "contribute" }] })
+        ).rejects.toThrow(/^PERMISSION_DENIED/);
+
+        fakeGoogleState.setCurrentUser("carol@example.com");
+        const storeCarol = await factory({ currentUserEmail: "carol@example.com" });
+        await expect(storeCarol.share(ref, { removeUsers: ["bob@example.com"] })).rejects.toThrow(
+          /^PERMISSION_DENIED/
+        );
+        await expect(
+          storeCarol.share(ref, { linkSharing: { enabled: true, role: "contribute" } })
+        ).rejects.toThrow(/^PERMISSION_DENIED/);
+
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const state = await storeAlice.getShareState(ref);
+        expect(roleOf(state, "bob@example.com")).toBe("view");
+        expect(roleOf(state, "carol@example.com")).toBe("contribute");
+        expect(roleOf(state, "mallory@example.com")).toBeUndefined();
+      });
+
+      it("owner removeUsers revokes the named collaborators only", async () => {
+        const { storeAlice, ref } = await sharedProject();
+
+        const state = await storeAlice.share(ref, { removeUsers: ["bob@example.com"] });
+        expect(roleOf(state, "bob@example.com")).toBeUndefined();
+        expect(roleOf(state, "carol@example.com")).toBe("contribute");
+
+        const reread = await storeAlice.getShareState(ref);
+        expect(roleOf(reread, "bob@example.com")).toBeUndefined();
+        expect(roleOf(reread, "carol@example.com")).toBe("contribute");
+      });
+    });
+
     it("verifies queue and backoff behavior under 429", async () => {
       fakeGoogleState.setCurrentUser("alice@example.com");
       const store = await factory({ currentUserEmail: "alice@example.com" });

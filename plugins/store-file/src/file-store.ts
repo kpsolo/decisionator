@@ -489,6 +489,10 @@ export class FileProjectStore implements ProjectStore {
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
     await this.mutate(ref.id, async (db, doc) => {
+      if (this.resolveRole(doc, this.currentUser) !== "owner") {
+        throw new Error("PERMISSION_DENIED: Only owner can manage sharing");
+      }
+
       if (req.inviteUsers) {
         for (const invite of req.inviteUsers) {
           const existing = doc.collaborators.find((c) => c.email === invite.email);
