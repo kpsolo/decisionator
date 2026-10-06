@@ -235,5 +235,232 @@ export function runProjectStoreContractTests(factory: ProjectStoreFactory): void
       // Either queued or retried successfully once backoff cleared
       expect(result.queued + result.sent).toBeGreaterThanOrEqual(1);
     });
+
+    describe("delegated append (v1.2.0)", () => {
+      const OPT_A = "01J00000000000000000000001";
+      const OPT_B = "01J00000000000000000000002";
+      const twoOptions = [OPT_A, OPT_B].map((id, idx) => ({
+        id,
+        order: idx + 1,
+        title: `Option ${idx + 1}`,
+        description: `Option ${idx + 1} description`,
+        status: "active" as const,
+        tags: [],
+        pros: [],
+        cons: [],
+        links: [],
+        at: "2026-10-05T00:00:00Z",
+        by: "alice@example.com",
+      }));
+
+      async function ownerProject(password?: string) {
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const store = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await store.createProject(
+          { title: "Live Session Project", options: twoOptions },
+          password ? { password } : undefined
+        );
+        return { store, ref };
+      }
+
+      it("records delegated grades under each delegate without replacing the owner's grade", async () => {
+        const { store, ref } = await ownerProject();
+
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 4 }]);
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 2 }], {
+          onBehalfOf: { participantId: "peer:a", displayName: "Ann" },
+        });
+        // A caller-supplied `by` is ignored: the delegate id wins.
+        await store.append(
+          ref,
+          [{ kind: "grade", optionId: OPT_A, value: 5, by: "mallory@example.com" } as Entry],
+          { onBehalfOf: { participantId: "peer:b", displayName: "  Ben  " } }
+        );
+
+        const snap = await store.openProject(ref);
+        const grades = snap.grades.filter((g) => g.optionId === OPT_A);
+        expect(grades).toHaveLength(3);
+
+        const own = grades.find((g) => g.by === "alice@example.com");
+        expect(own?.value).toBe(4);
+        expect(own?.byName).toBeUndefined();
+
+        const a = grades.find((g) => g.by === "peer:a");
+        expect(a?.value).toBe(2);
+        expect(a?.byName).toBe("Ann");
+        expect(a?.at).toBeTruthy();
+
+        const b = grades.find((g) => g.by === "peer:b");
+        expect(b?.value).toBe(5);
+        expect(b?.byName).toBe("Ben");
+        expect(grades.some((g) => g.by === "mallory@example.com")).toBe(false);
+      });
+
+      it("records delegated comments and omits byName when the delegate has no name", async () => {
+        const { store, ref } = await ownerProject();
+
+        await store.append(ref, [{ kind: "comment", optionId: OPT_A, body: "From a guest" }], {
+          onBehalfOf: { participantId: "peer:anon" },
+        });
+
+        const snap = await store.openProject(ref);
+        expect(snap.comments).toHaveLength(1);
+        expect(snap.comments[0]?.by).toBe("peer:anon");
+        expect(snap.comments[0]?.body).toBe("From a guest");
+        expect(snap.comments[0]?.byName).toBeUndefined();
+      });
+
+      it("applies latest-wins per delegate: grades per (by, optionId), rankings per (by, round)", async () => {
+        const { store, ref } = await ownerProject();
+        const peerA = { onBehalfOf: { participantId: "peer:a", displayName: "Ann" } };
+
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 2 }], peerA);
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 3 }], peerA);
+
+        await store.append(ref, [{ kind: "ranking", round: 1, ranking: [OPT_A, OPT_B] }]);
+        await store.append(ref, [{ kind: "ranking", round: 1, ranking: [OPT_A] }], peerA);
+        await store.append(ref, [{ kind: "ranking", round: 1, ranking: [OPT_B, OPT_A] }], peerA);
+        await store.append(ref, [{ kind: "ranking", round: 2, ranking: [OPT_A, OPT_B] }], peerA);
+
+        const snap = await store.openProject(ref);
+
+        const aGrades = snap.grades.filter((g) => g.by === "peer:a" && g.optionId === OPT_A);
+        expect(aGrades).toHaveLength(1);
+        expect(aGrades[0]?.value).toBe(3);
+
+        const aRound1 = snap.rankings.filter((r) => r.by === "peer:a" && r.round === 1);
+        expect(aRound1).toHaveLength(1);
+        expect(aRound1[0]?.ranking).toEqual([OPT_B, OPT_A]);
+        expect(aRound1[0]?.byName).toBe("Ann");
+
+        const aRound2 = snap.rankings.filter((r) => r.by === "peer:a" && r.round === 2);
+        expect(aRound2).toHaveLength(1);
+        expect(aRound2[0]?.ranking).toEqual([OPT_A, OPT_B]);
+
+        const own = snap.rankings.filter((r) => r.by === "alice@example.com");
+        expect(own).toHaveLength(1);
+        expect(own[0]?.ranking).toEqual([OPT_A, OPT_B]);
+      });
+
+      it("rejects delegation by a non-owner with PERMISSION_DENIED", async () => {
+        const { store: storeAlice, ref } = await ownerProject();
+        await storeAlice.share(ref, {
+          inviteUsers: [{ email: "bob@example.com", role: "contribute" }],
+        });
+
+        fakeGoogleState.setCurrentUser("bob@example.com");
+        const storeBob = await factory({ currentUserEmail: "bob@example.com" });
+
+        await expect(
+          storeBob.append(ref, [{ kind: "grade", optionId: OPT_A, value: 1 }], {
+            onBehalfOf: { participantId: "peer:a" },
+          })
+        ).rejects.toThrow(/PERMISSION_DENIED/);
+
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const snap = await storeAlice.openProject(ref);
+        expect(snap.grades.some((g) => g.by === "peer:a")).toBe(false);
+      });
+
+      it("rejects delegated outcome and contribution entries and writes nothing from that call", async () => {
+        const { store, ref } = await ownerProject();
+        const outcome = {
+          strategy: { id: "org.decisionator.strategy.owner-pick", version: "1.0.0" },
+          settings: {},
+          inputs: { options: [{ id: OPT_A, title: "Option 1" }] },
+          result: { winner: OPT_A, order: [{ optionId: OPT_A }] },
+          tieBreak: "none" as const,
+          triggeredBy: "peer:a",
+          at: "2026-10-06T00:00:00Z",
+        };
+
+        await expect(
+          store.append(
+            ref,
+            [
+              { kind: "grade", optionId: OPT_A, value: 5 },
+              { kind: "outcome", outcome },
+            ],
+            { onBehalfOf: { participantId: "peer:a" } }
+          )
+        ).rejects.toThrow(/PERMISSION_DENIED/);
+
+        await expect(
+          store.append(
+            ref,
+            [
+              { kind: "comment", optionId: OPT_A, body: "Should not land" },
+              {
+                kind: "contribution",
+                contribution: {
+                  id: "ctb_1",
+                  at: "2026-10-06T00:00:00Z",
+                  by: "peer:a",
+                  targetKind: "option",
+                  targetId: OPT_A,
+                  type: "note",
+                  body: "Note",
+                  author: { kind: "human" },
+                  reviewStatus: "pending",
+                },
+              },
+            ],
+            { onBehalfOf: { participantId: "peer:a" } }
+          )
+        ).rejects.toThrow(/PERMISSION_DENIED/);
+
+        const snap = await store.openProject(ref);
+        expect(snap.grades).toHaveLength(0);
+        expect(snap.comments).toHaveLength(0);
+        expect(snap.outcomes).toHaveLength(0);
+        expect(snap.contributions ?? []).toHaveLength(0);
+      });
+
+      it("rejects malformed delegates with INVALID_ARGUMENT", async () => {
+        const { store, ref } = await ownerProject();
+        const grade: Entry[] = [{ kind: "grade", optionId: OPT_A, value: 3 }];
+
+        await expect(
+          store.append(ref, grade, { onBehalfOf: { participantId: "" } })
+        ).rejects.toThrow(/^INVALID_ARGUMENT/);
+        await expect(
+          store.append(ref, grade, { onBehalfOf: { participantId: "x".repeat(201) } })
+        ).rejects.toThrow(/^INVALID_ARGUMENT/);
+        await expect(
+          store.append(ref, grade, { onBehalfOf: { participantId: "peer:a", displayName: "   " } })
+        ).rejects.toThrow(/^INVALID_ARGUMENT/);
+        await expect(
+          store.append(ref, grade, {
+            onBehalfOf: { participantId: "peer:a", displayName: "n".repeat(81) },
+          })
+        ).rejects.toThrow(/^INVALID_ARGUMENT/);
+
+        const snap = await store.openProject(ref);
+        expect(snap.grades).toHaveLength(0);
+      });
+
+      it("round-trips a delegated comment on a password-protected project", async () => {
+        const password = "correct-horse-battery-staple";
+        const { store, ref } = await ownerProject(password);
+
+        // The owner unlocks the project in this session before recording guest entries.
+        await store.openProject(ref, { password });
+        await store.append(ref, [{ kind: "comment", optionId: OPT_A, body: "Owner note" }]);
+        await store.append(ref, [{ kind: "comment", optionId: OPT_A, body: "Guest secret" }], {
+          onBehalfOf: { participantId: "peer:a", displayName: "Ann" },
+        });
+
+        // A fresh session must be able to read both with the password.
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const fresh = await factory({ currentUserEmail: "alice@example.com" });
+        const snap = await fresh.openProject(ref, { password });
+
+        const guest = snap.comments.find((c) => c.by === "peer:a");
+        expect(guest?.body).toBe("Guest secret");
+        expect(guest?.byName).toBe("Ann");
+        const own = snap.comments.find((c) => c.by === "alice@example.com");
+        expect(own?.body).toBe("Owner note");
+      });
+    });
   });
 }

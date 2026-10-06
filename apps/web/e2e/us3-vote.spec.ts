@@ -186,6 +186,10 @@ test.describe("US3: Ranked Vote and Results (T074)", () => {
         for (const upd of postData.data || []) {
           if (upd.range === "meta!B6") {
             votingState = JSON.parse(upd.values[0][0]);
+          } else if (upd.range === "meta!A:B") {
+            // The store rewrites meta rows by key.
+            const row = (upd.values as string[][]).find((r) => r[0] === "voting");
+            if (row?.[1]) votingState = JSON.parse(row[1]);
           }
         }
         return route.fulfill({ status: 200, json: { responses: [] } });

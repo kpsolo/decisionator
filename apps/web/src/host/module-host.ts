@@ -24,7 +24,7 @@ export const HOST_PLATFORM_VERSIONS: HostPlatformVersions = {
   runtime: "1.0.0",
   strategy: "1.1.0",
   ideaSource: "1.0.0",
-  projectStore: "1.1.0",
+  projectStore: "1.2.0",
   uiSlot: "1.0.0",
 };
 
@@ -179,7 +179,8 @@ export class ModuleHost {
       openProject: (ref, opts) =>
         withTimeout(manifest.id, () => store.openProject(ref, opts), 5000),
       watch: (ref, onChange) => store.watch(ref, onChange),
-      append: (ref, entries) => withTimeout(manifest.id, () => store.append(ref, entries), 5000),
+      append: (ref, entries, opts) =>
+        withTimeout(manifest.id, () => store.append(ref, entries, opts), 5000),
       updateOptions: (ref, ops) =>
         withTimeout(manifest.id, () => store.updateOptions(ref, ops), 5000),
       updateMeta: (ref, patch) =>

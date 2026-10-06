@@ -14,22 +14,24 @@ import {
   generateSalt,
   makeVerifier,
 } from "@decisionator/core";
-import type {
-  AppendResult,
-  Entry,
-  ExportBundle,
-  Identity,
-  MetaPatch,
-  NewProject,
-  OptionOp,
-  ParticipantRole,
-  ProjectRef,
-  ProjectSnapshot,
-  ProjectStore,
-  ProjectSummary,
-  ShareRequest,
-  ShareState,
-  Unsubscribe,
+import {
+  type AppendOptions,
+  type AppendResult,
+  type Entry,
+  type ExportBundle,
+  type Identity,
+  type MetaPatch,
+  type NewProject,
+  type OptionOp,
+  type ParticipantRole,
+  type ProjectRef,
+  type ProjectSnapshot,
+  type ProjectStore,
+  type ProjectSummary,
+  type ShareRequest,
+  type ShareState,
+  type Unsubscribe,
+  resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
 
@@ -332,7 +334,7 @@ export class LocalProjectStore implements ProjectStore {
     }
   }
 
-  async append(ref: ProjectRef, entries: Entry[]): Promise<AppendResult> {
+  async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
     let doc = await this.loadDoc(ref.id);
     const role =
       doc.meta.owner === this.currentUser
@@ -342,6 +344,11 @@ export class LocalProjectStore implements ProjectStore {
     if (role === "view") {
       throw new Error("PERMISSION_DENIED: View role cannot append");
     }
+    // Validates the whole call before anything is written.
+    const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+    const by = delegated?.by ?? this.currentUser;
+    // Automerge rejects `undefined` values, so the key is omitted when there is no name.
+    const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
     const now = new Date().toISOString();
 
@@ -349,14 +356,13 @@ export class LocalProjectStore implements ProjectStore {
       for (const entry of entries) {
         if (entry.kind === "grade") {
           // Latest wins per (by, optionId)
-          const idx = d.grades.findIndex(
-            (g) => g.by === this.currentUser && g.optionId === entry.optionId
-          );
+          const idx = d.grades.findIndex((g) => g.by === by && g.optionId === entry.optionId);
           const newGrade: Grade = {
             id: `g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             optionId: entry.optionId,
             value: entry.value,
-            by: this.currentUser,
+            by,
+            ...byName,
             at: now,
           };
           if (idx !== -1) {
@@ -369,20 +375,23 @@ export class LocalProjectStore implements ProjectStore {
             id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             optionId: entry.optionId,
             body: entry.body,
-            by: this.currentUser,
+            by,
+            ...byName,
             at: now,
             ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
             ...(entry.replaces !== undefined ? { replaces: entry.replaces } : {}),
           };
           d.comments.push(newComment);
         } else if (entry.kind === "ranking") {
-          // Latest wins per by
-          const idx = d.rankings.findIndex((r) => r.by === this.currentUser);
+          // Latest wins per (by, round)
+          const round = entry.round ?? d.meta.voting.round;
+          const idx = d.rankings.findIndex((r) => r.by === by && r.round === round);
           const newRanking: Ranking = {
             id: `r_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             ranking: entry.ranking,
-            round: entry.round ?? d.meta.voting.round,
-            by: this.currentUser,
+            round,
+            by,
+            ...byName,
             at: now,
           };
           if (idx !== -1) {

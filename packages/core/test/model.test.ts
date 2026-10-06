@@ -173,6 +173,18 @@ describe("Data Model Zod Schemas (T017)", () => {
           body: "x".repeat(10000),
         }).success
       ).toBe(true);
+
+      // Hide/unhide markers and hidden comments redacted for guests carry no body.
+      expect(
+        CommentSchema.safeParse({
+          id: "c2",
+          at: "2026-10-05T12:00:00Z",
+          by: "user@example.com",
+          optionId: "opt1",
+          body: "",
+          hidden: true,
+        }).success
+      ).toBe(true);
     });
   });
 

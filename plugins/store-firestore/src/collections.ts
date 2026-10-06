@@ -56,6 +56,7 @@ export type FirestoreEntryDoc =
       optionId: string;
       value: 1 | 2 | 3 | 4 | 5;
       by: string;
+      byName?: string;
       at: string;
     }
   | {
@@ -64,6 +65,7 @@ export type FirestoreEntryDoc =
       optionId: string;
       body: string;
       by: string;
+      byName?: string;
       at: string;
       hidden?: boolean;
       replaces?: string;
@@ -74,6 +76,7 @@ export type FirestoreEntryDoc =
       ranking: string[];
       round: number;
       by: string;
+      byName?: string;
       at: string;
     }
   | {

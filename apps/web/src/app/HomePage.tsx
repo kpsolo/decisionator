@@ -5,9 +5,9 @@ import { ArrowRight, Clock, FileJson, FolderOpen, Sparkles } from "lucide-react"
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { DeciIcon } from "../components/DeciLogo.js";
 import { Badge } from "../components/ui/badge.js";
 import { Button } from "../components/ui/button.js";
-import { DeciIcon } from "../components/DeciLogo.js";
 import {
   Card,
   CardContent,
@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "../components/ui/card.js";
 import { Skeleton } from "../components/ui/skeleton.js";
+import { copyEntriesAsAuthors } from "../features/project/copy-entries.js";
 import { getStorageManager } from "../storage/storage-manager.js";
 import { getDatabase } from "../sync/db.js";
 
@@ -81,23 +82,8 @@ export function HomePage() {
         fileStore.setFileHandle(ref.id, fileHandle);
       }
 
-      // Restore votes, comments, outcomes
-      const entries: Parameters<typeof fileStore.append>[1] = [];
-      for (const g of validated.grades) {
-        entries.push({ kind: "grade", optionId: g.optionId, value: g.value });
-      }
-      for (const c of validated.comments) {
-        entries.push({ kind: "comment", optionId: c.optionId, body: c.body });
-      }
-      for (const r of validated.rankings) {
-        entries.push({ kind: "ranking", ranking: r.ranking, round: r.round });
-      }
-      for (const o of validated.outcomes) {
-        entries.push({ kind: "outcome", outcome: o });
-      }
-      if (entries.length > 0) {
-        await fileStore.append(ref, entries);
-      }
+      // Restore votes, comments and outcomes under their original authors.
+      await copyEntriesAsAuthors(fileStore, ref, validated);
 
       navigate(`/p/file/${ref.id}`);
     } catch (err: unknown) {

@@ -8,6 +8,9 @@ import { Button } from "../components/ui/button.js";
 import { Toaster } from "../components/ui/toaster.js";
 import { TooltipProvider } from "../components/ui/tooltip.js";
 import { DevToolbar } from "../dev/DevToolbar.js";
+import { LiveIndicator } from "../features/live/LiveIndicator.js";
+import { LiveSessionDialog } from "../features/live/LiveSessionDialog.js";
+import { LiveShareProvider } from "../features/live/LiveShareContext.js";
 import { cn } from "../lib/utils.js";
 import { SyncBanner } from "../sync/SyncBanner.js";
 import { routes } from "./routes.js";
@@ -47,6 +50,7 @@ export function AppShell() {
             <span className="text-base font-semibold tracking-tight">Deci</span>
           </Link>
           <nav aria-label="Main" className="flex items-center gap-1 sm:gap-1.5">
+            <LiveIndicator />
             <NavLink to="/settings" className={navLinkClass} aria-label="Settings">
               <Settings className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">Settings</span>
@@ -76,6 +80,7 @@ export function AppShell() {
         {routeElements}
       </main>
       <DevToolbar budget={appBudget} />
+      <LiveSessionDialog />
       <Toaster />
     </div>
   );
@@ -86,7 +91,9 @@ export function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="decisionator-theme">
       <TooltipProvider delayDuration={300}>
-        <AppShell />
+        <LiveShareProvider>
+          <AppShell />
+        </LiveShareProvider>
       </TooltipProvider>
     </ThemeProvider>
   );

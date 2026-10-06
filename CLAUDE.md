@@ -43,7 +43,10 @@ From `specs/001-decision-engine-core/plan.md` (MVP = US1–US3):
 - `plugins/store-google-sheets`, `plugins/store-file`, `plugins/store-firestore`, `plugins/share-inpage`, `plugins/source-paste`, `plugins/strategy-borda`: first-party
   modules.
 - Universal Storage: defaults to local file (`.decisionator.json` via File System Access API) if no remote store is activated; Firestore and Google Drive backends selectable via Storage Settings.
-- In-Page Sharing: zero-server live session hosted right in the browser tab via WebRTC DataChannels / BroadcastChannel.
+- Live sessions (`share-inpage`, contract `specs/004-live-share-network/contracts/live-share.md`):
+  the owner's tab hosts guests over WebRTC data channels (star); offers go sealed through Nostr
+  relays or BroadcastChannel. Guest entries are recorded via `append(..., { onBehalfOf })`
+  (ProjectStore v1.2.0). The hosting session lives in `LiveShareProvider`, not in a page.
 - Google: Identity Services token model, `drive.file` scope only, Drive v3 + Sheets v4 via
   `fetch`, Picker `setFileIds`. Tokens live in memory. Stay under the quota budget in
   `contracts/sheet-store.md`.

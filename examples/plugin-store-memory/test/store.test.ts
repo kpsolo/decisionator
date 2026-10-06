@@ -11,6 +11,7 @@ describe("MemoryProjectStore Compliance", () => {
           id: "opt_1",
           order: 1,
           title: "Option One",
+          description: "",
           status: "active",
           tags: [],
           pros: [],

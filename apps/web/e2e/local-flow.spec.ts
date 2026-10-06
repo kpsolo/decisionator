@@ -95,9 +95,10 @@ test("local store: full decision lifecycle", async ({ page }) => {
     await page.getByRole("link", { name: "Share" }).click();
     await expect(page.getByText("This project is stored on this device")).toBeVisible();
     await page.getByRole("button", { name: "Start live session" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await page.getByRole("button", { name: "End Session" }).click();
+    await expect(page.getByRole("dialog").getByText("Live", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "End session" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
+    await expect(page.getByRole("button", { name: /^Live session for/ })).toHaveCount(0);
   });
 
   await test.step("export downloads a JSON bundle", async () => {

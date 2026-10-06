@@ -186,6 +186,8 @@ export const RankBallot: React.FC<RankBallotProps> = ({
       await onSubmitBallot(rankedTopN);
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 3000);
+    } catch {
+      // The caller reports why the ballot was not saved; just don't claim it was.
     } finally {
       setLoading(false);
     }

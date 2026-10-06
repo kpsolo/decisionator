@@ -8,11 +8,12 @@ import { Button } from "../components/ui/button.js";
 import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card.js";
 import { Skeleton } from "../components/ui/skeleton.js";
 import { StrategyChooser } from "../features/decide/StrategyChooser.js";
+import { LiveNetworkSettings } from "../features/live/LiveNetworkSettings.js";
+import { projectKey, useLiveShare } from "../features/live/LiveShareContext.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
 import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
 import { StorageSettings } from "../features/settings/StorageSettings.js";
-import { InPageShareModal } from "../features/sharing/InPageShareModal.js";
 import { PasswordSetup } from "../features/sharing/PasswordSetup.js";
 import { ShareDialog } from "../features/sharing/ShareDialog.js";
 import { RankBallot } from "../features/voting/RankBallot.js";
@@ -336,8 +337,9 @@ export function ProjectSharePage() {
   const isLocal = storeId === "file";
   // ShareDialog is modal; open it on arrival and let closing it reveal the rest of the page.
   const [shareOpen, setShareOpen] = React.useState(!isLocal);
-  const [liveOpen, setLiveOpen] = React.useState(false);
   const [projectTitle, setProjectTitle] = React.useState("");
+  const live = useLiveShare();
+  const isLiveHere = live.session?.key === projectKey(projectRef);
 
   React.useEffect(() => {
     if (!isLocal || !fileId) return;
@@ -385,16 +387,18 @@ export function ProjectSharePage() {
             <CardTitle className="text-base">This project is stored on this device</CardTitle>
             <CardDescription className="leading-relaxed">
               There is no shareable link for a local project. Start a live session to let others
-              join from their browsers while this tab stays open, or move the project to Google
-              Sheets or Firestore in Settings to share it by link.
+              join from their browsers or phones while this tab stays open, or move the project to
+              Google Sheets or Firestore in Settings to share it by link.
             </CardDescription>
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 size="sm"
-                onClick={() => setLiveOpen(true)}
+                onClick={() =>
+                  live.openFor({ store, projectRef, projectTitle: projectTitle || fileId })
+                }
                 leftIcon={<Radio className="h-4 w-4" />}
               >
-                Start live session
+                {isLiveHere ? "Show live session" : "Start live session"}
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/settings">Storage settings</Link>
@@ -406,15 +410,6 @@ export function ProjectSharePage() {
         shareOpen && (
           <ShareDialog store={store} projectRef={projectRef} onClose={() => setShareOpen(false)} />
         )
-      )}
-
-      {liveOpen && (
-        <InPageShareModal
-          projectRef={projectRef}
-          projectTitle={projectTitle}
-          store={store}
-          onClose={() => setLiveOpen(false)}
-        />
       )}
 
       {!isLocal &&
@@ -460,6 +455,7 @@ export function SettingsPage() {
         description="Storage provider settings, active persistence target, and credentials management."
       />
       <StorageSettings />
+      <LiveNetworkSettings />
     </div>
   );
 }

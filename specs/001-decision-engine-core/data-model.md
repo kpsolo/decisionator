@@ -85,6 +85,7 @@ Option fields mirror [contracts/options-format.schema.json](./contracts/options-
 | optionId | ULID | must exist |
 | value | 1–5 | |
 | at / by | timestamp / participantId | stamped by the store |
+| byName | string? | 1–80 chars; display name of a delegated author (project-store v1.2.0) |
 
 **Effective grade** = the latest row per (by, optionId).
 
@@ -97,6 +98,7 @@ Option fields mirror [contracts/options-format.schema.json](./contracts/options-
 | replaces | ULID? | an edit, or a hide/unhide, of an earlier comment |
 | hidden | boolean? | only the owner may hide others' comments |
 | at / by | timestamp / participantId | |
+| byName | string? | 1–80 chars; display name of a delegated author (project-store v1.2.0) |
 
 **Effective comment** = the latest row in its `replaces` chain. Hidden comments are shown only in
 history.
@@ -108,6 +110,7 @@ history.
 | round | int | the voting round it belongs to |
 | ranking | ULID[] | ordered, unique, active options, length 1..topN |
 | at / by | timestamp / participantId | |
+| byName | string? | 1–80 chars; display name of a delegated author (project-store v1.2.0) |
 
 **Effective ballot** = the latest row per (by, round), submitted while the round was open.
 Rows submitted after the close time are ignored, using `at` compared with the outcome's `at`.
