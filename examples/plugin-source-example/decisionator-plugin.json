@@ -1,0 +1,19 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.examples.source.simple-list",
+  "name": "Simple List Idea Source",
+  "description": "Example idea source parsing comma- or line-delimited items",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "ideaSource": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "ideaSource": {
+      "sourceType": "clipboard",
+      "supportsRefresh": false,
+      "input": "clipboard"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "001-*", "00*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Test & Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.34.6
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Contract tests
+        run: pnpm test:contract
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @decisionator/web exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        env:
+          VITE_GOOGLE_CLIENT_ID: mock-client-id.apps.googleusercontent.com
+          VITE_GOOGLE_API_KEY: mock-api-key
+        run: pnpm --filter @decisionator/web exec playwright test --project=chromium --reporter=list
+
+      - name: Upload Playwright Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: apps/web/playwright-report/
+          retention-days: 7

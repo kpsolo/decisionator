@@ -1,0 +1,188 @@
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "Titles-Only Side Projects"
+  },
+  "options": [
+    {
+      "title": "Habit tracker for couples",
+      "description": "A shared habit-tracking application designed for couples to build routines and track mutual daily goals together[cite: 3]. It offers shared accountability features and progress visualizations for paired routines[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["habits", "couples", "productivity", "mobile"],
+      "pros": ["Strong mutual accountability", "Clear relationship niche"],
+      "cons": ["Requires both partners to stay actively engaged"],
+      "effort": "S"
+    },
+    {
+      "title": "Recipe cost calculator",
+      "description": "A kitchen utility that calculates the exact per-portion and total cost of homemade recipes based on ingredient prices[cite: 3]. It helps home cooks and meal planners manage grocery budgets accurately[cite: 3].",
+      "category": "Finance & Utilities",
+      "tags": ["cooking", "budget", "calculator", "food"],
+      "pros": ["High practical utility for budget conscious cooks", "Simple arithmetic model"],
+      "cons": ["Manual ingredient price entry can be tedious"],
+      "effort": "S"
+    },
+    {
+      "title": "Podcast clip maker",
+      "description": "A web tool that trims podcast episodes into bite-sized, captioned audio or video snippets for social media sharing[cite: 3]. It automates transcription and waveform styling to accelerate content repurposing[cite: 3].",
+      "category": "Media & Content",
+      "tags": ["podcast", "video", "audio", "social-media"],
+      "pros": ["High utility for content creators", "Strong viral sharing loop"],
+      "cons": ["Server-side video rendering costs"],
+      "effort": "M"
+    },
+    {
+      "title": "Local farmers market finder",
+      "description": "A directory and map discovering nearby farmers markets, complete with operating hours, seasonal produce lists, and vendor updates[cite: 3]. It connects consumers directly with local agricultural producers[cite: 3].",
+      "category": "Community & Maps",
+      "tags": ["maps", "local", "food", "community"],
+      "pros": ["Supports local sustainable food systems", "Straightforward geo-directory model"],
+      "cons": ["Keeping seasonal vendor schedules up to date"],
+      "effort": "S"
+    },
+    {
+      "title": "Board game night scheduler",
+      "description": "A coordination tool tailored for tabletop gaming groups to vote on games, confirm player counts, and lock down session dates[cite: 3]. It eliminates chaotic group-chat polling ahead of game nights[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["board-games", "scheduling", "coordination"],
+      "pros": ["Addresses specific player-count matching pains", "Highly engaged niche audience"],
+      "cons": ["Intermittent frequency of group game nights"],
+      "effort": "S"
+    },
+    {
+      "title": "Personal API for my life stats",
+      "description": "A unified personal developer API that collects and aggregates personal health, reading, commit activity, and productivity metrics[cite: 3]. It exposes structured JSON endpoints to power personal dashboards and portfolio widgets[cite: 3].",
+      "category": "Developer Tools",
+      "tags": ["api", "quantified-self", "dashboard", "personal-data"],
+      "pros": ["Highly customizable for tech enthusiasts", "Complete ownership of personal telemetry"],
+      "cons": ["Mainly appeals to developers and quantified-self users"],
+      "effort": "M"
+    },
+    {
+      "title": "Meme generator for Slack",
+      "description": "A Slack-native integration that lets team members quickly generate captioned memes using slash commands or message shortcuts[cite: 3]. It brings lightweight humor and culture into workplace communication channels[cite: 3].",
+      "category": "Productivity & Workplace",
+      "tags": ["slack", "bot", "memes", "workplace"],
+      "pros": ["High viral adoption within Slack teams", "Simple image-rendering pipeline"],
+      "cons": ["Limited potential for direct monetization"],
+      "effort": "XS"
+    },
+    {
+      "title": "Language exchange matcher",
+      "description": "A peer-matching platform that pairs language learners based on complementary native and target languages, interests, and schedules[cite: 3]. It facilitates conversational practice sessions via video or text[cite: 3].",
+      "category": "Education",
+      "tags": ["languages", "matching", "education", "peer-to-peer"],
+      "pros": ["High authentic learning value", "Strong global community potential"],
+      "cons": ["Requires matching liquidity across both languages"],
+      "effort": "M"
+    },
+    {
+      "title": "Bike route weather planner",
+      "description": "A cycling-specific mapping tool that forecasts wind direction, rain windows, and temperature along planned bike routes[cite: 3]. It suggests optimal departure times to avoid headwinds and sudden downpours[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["cycling", "weather", "maps", "sports"],
+      "pros": ["Solves a major cyclist pain point around wind and weather", "Valuable routing overlays"],
+      "cons": ["Requires integrating mapping routing with micro-weather APIs"],
+      "effort": "M"
+    },
+    {
+      "title": "Home inventory for insurance",
+      "description": "A streamlined mobile cataloging tool for documenting personal belongings, receipts, and serial numbers room by room[cite: 3]. It generates organized claim reports for insurance policies in case of loss or theft[cite: 3].",
+      "category": "Finance & Utilities",
+      "tags": ["home", "insurance", "inventory", "records"],
+      "pros": ["Invaluable during real-world insurance claims", "Clear document export utility"],
+      "cons": ["High friction for initial manual home inventory setup"],
+      "effort": "M"
+    },
+    {
+      "title": "Kids chore rewards app",
+      "description": "A gamified household management tool where parents assign daily chores and children earn points toward custom rewards or pocket money[cite: 3]. It teaches responsibility and basic financial concepts through daily tasks[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["parenting", "gamification", "habits", "family"],
+      "pros": ["Motivates children through clear incentives", "Reduces household parenting friction"],
+      "cons": ["Must keep child interfaces engaging over time"],
+      "effort": "S"
+    },
+    {
+      "title": "Book club voting bot",
+      "description": "A chat bot built for book clubs to collect book nominations and run ranked-choice voting for upcoming reads[cite: 3]. It handles voting deadlines and announces the winning book selection automatically[cite: 3].",
+      "category": "Productivity & Workplace",
+      "tags": ["bot", "books", "voting", "community"],
+      "pros": ["Streamlines book selection without arguments", "Very easy to build and launch"],
+      "cons": ["Small addressable niche with low monetization potential"],
+      "effort": "XS"
+    },
+    {
+      "title": "Secondhand textbook swap",
+      "description": "A campus-oriented marketplace for university students to buy, sell, or exchange used textbooks locally by course code[cite: 3]. It helps students save money on expensive course materials while reducing campus waste[cite: 3].",
+      "category": "Community & Maps",
+      "tags": ["education", "marketplace", "books", "students"],
+      "pros": ["Direct cost savings for budget-strapped students", "Natural word-of-mouth campus growth"],
+      "cons": ["Cyclical demand spikes concentrated at semester starts"],
+      "effort": "M"
+    },
+    {
+      "title": "Coffee shop wifi map",
+      "description": "A crowdsourced directory showing remote-friendly coffee shops with tested Wi-Fi download speeds, noise levels, and power outlet availability[cite: 3]. It assists remote workers and digital nomads in finding reliable workspaces[cite: 3].",
+      "category": "Community & Maps",
+      "tags": ["maps", "remotework", "coffee", "wifi"],
+      "pros": ["High utility for digital nomads and freelancers", "Crowdsourced review loop"],
+      "cons": ["Requires active community contributors to verify Wi-Fi changes"],
+      "effort": "S"
+    },
+    {
+      "title": "Gift idea tracker",
+      "description": "A private personal registry where users jot down gift ideas throughout the year as friends and family mention preferences[cite: 3]. It organizes ideas by recipient, budget, and occasion to make holiday shopping stress-free[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["gifts", "notes", "organization", "shopping"],
+      "pros": ["Eliminates last-minute holiday gift panic", "Simple and focused use case"],
+      "cons": ["Infrequent seasonal usage patterns"],
+      "effort": "XS"
+    },
+    {
+      "title": "Freelance invoice reminder",
+      "description": "An automated billing companion that monitors outstanding client invoices and schedules polite payment reminders before and after due dates[cite: 3]. It helps solo freelancers get paid on time without awkward personal follow-ups[cite: 3].",
+      "category": "Finance & Utilities",
+      "tags": ["freelance", "invoicing", "finance", "automation"],
+      "pros": ["Directly protects freelancer cash flow", "Saves uncomfortable manual chasing"],
+      "cons": ["Requires trust and integration with accounting or mail services"],
+      "effort": "S"
+    },
+    {
+      "title": "Pet medication reminder",
+      "description": "A dedicated pet health schedule tracker that alerts owners when it is time for daily medications, flea prevention, or annual vet vaccinations[cite: 3]. It supports multiple pets and custom dosage schedules[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["pets", "health", "reminders", "mobile"],
+      "pros": ["High emotional investment from pet owners", "Clear recurring alert utility"],
+      "cons": ["Competes with generic reminder and calendar apps"],
+      "effort": "XS"
+    },
+    {
+      "title": "Apartment noise logger",
+      "description": "A mobile ambient audio monitor that logs sustained decibel spikes and timestamps disruptive neighborhood or construction noises[cite: 3]. It produces objective, timestamped noise logs for property management or landlord disputes[cite: 3].",
+      "category": "Finance & Utilities",
+      "tags": ["audio", "housing", "utility", "sensors"],
+      "pros": ["Provides objective documentation for dispute resolution", "High perceived relief value"],
+      "cons": ["Mobile mic calibration variance across device hardware"],
+      "effort": "S"
+    },
+    {
+      "title": "Volunteer shift planner",
+      "description": "A lightweight volunteer coordination tool that lets non-profits publish upcoming shifts and allows volunteers to self-roster and swap slots[cite: 3]. It simplifies staffing logistics for charities and community events[cite: 3].",
+      "category": "Productivity & Workplace",
+      "tags": ["volunteering", "scheduling", "nonprofit", "coordination"],
+      "pros": ["Meaningful social impact for community organizers", "Replaces messy shared spreadsheets"],
+      "cons": ["Non-profits often have constrained software budgets"],
+      "effort": "M"
+    },
+    {
+      "title": "Wedding seating planner",
+      "description": "An interactive drag-and-drop table layout tool that helps couples arrange wedding guest seating while managing dietary restrictions and table dynamics[cite: 3]. It exports clean visual seating charts for venues and caterers[cite: 3].",
+      "category": "Lifestyle & Social",
+      "tags": ["wedding", "events", "drag-and-drop", "planning"],
+      "pros": ["Solves a famously stressful event-planning chore", "Strong willingness to pay for event software"],
+      "cons": ["Strictly one-time transactional user lifecycle"],
+      "effort": "M"
+    }
+  ]
+}

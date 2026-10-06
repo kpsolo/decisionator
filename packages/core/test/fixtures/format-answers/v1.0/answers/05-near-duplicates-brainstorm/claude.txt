@@ -1,0 +1,17 @@
+```json
+{
+  "format": "decisionator.options/v1",
+  "project": { "title": "How do we get more people to try Deci?" },
+  "options": [
+    { "title": "Launch on Product Hunt", "description": "Post Deci on Product Hunt (producthunt.com).", "category": "Launch platforms", "tags": ["product-hunt", "launch"], "effort": "S", "links": [{ "url": "https://www.producthunt.com" }] },
+    { "title": "Blog post about the Borda count", "description": "Write a blog post explaining the Borda count.", "category": "Content", "tags": ["blog", "borda", "voting"], "effort": "S" },
+    { "title": "X thread on ranked voting", "description": "A Twitter/X thread explaining ranked voting and why it beats simple polls.", "category": "Content", "tags": ["x", "twitter", "ranked-voting"], "effort": "XS" },
+    { "title": "Ask friends to share the link", "description": "Ask friends to share the Deci link.", "category": "Word of mouth", "tags": ["friends", "referrals"], "effort": "XS" },
+    { "title": "Share in Ukrainian startup Telegram channels", "description": "Share Deci in Telegram channels for Ukrainian startup founders.", "category": "Communities", "tags": ["telegram", "ukraine", "founders"], "effort": "XS" },
+    { "title": "YouTube demo video", "description": "A short demo video of about 2 minutes for YouTube.", "category": "Content", "tags": ["youtube", "video", "demo"], "effort": "S" },
+    { "title": "Reddit r/SideProject post", "description": "Post about Deci on the r/SideProject subreddit.", "category": "Communities", "tags": ["reddit", "side-project"], "effort": "XS" },
+    { "title": "Decision template gallery", "description": "A gallery of ready-made decision templates, for example hiring, trips and lunch.", "category": "Product", "tags": ["templates", "onboarding"], "effort": "M" },
+    { "title": "Slack integration", "description": "Integrate with Slack so teams discover Deci.", "category": "Product", "tags": ["slack", "integration", "teams"], "effort": "M" }
+  ]
+}
+```

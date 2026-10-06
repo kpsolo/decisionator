@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.store.file",
+  "name": "Local File Store",
+  "version": "0.1.0",
+  "description": "Store decision projects directly as JSON files on the local disk via File System Access API",
+  "platform": {
+    "runtime": "^1.0.0",
+    "projectStore": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "projectStore": {
+      "storeKind": "file",
+      "supportsPassword": true,
+      "supportsSharing": false,
+      "supportsIndividualRemoval": true
+    }
+  },
+  "permissions": ["filesystem:read", "filesystem:write"]
+}

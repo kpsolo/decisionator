@@ -1,0 +1,19 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.fixture.incompatible",
+  "name": "Incompatible Test Plugin",
+  "description": "Fixture plugin designed to trigger platform incompatibility rejection",
+  "version": "1.0.0",
+  "platform": {
+    "runtime": "^99.0.0"
+  },
+  "main": "index.js",
+  "provides": {
+    "strategy": {
+      "sourceType": "custom",
+      "ballots": "none",
+      "interactive": false,
+      "usesRandomness": false
+    }
+  }
+}

@@ -1,0 +1,40 @@
+Turn the idea list below into JSON for Deci.
+
+Rules:
+- Reply with ONLY one JSON code block: no other text, no citations.
+- Use exactly this structure: {"format": "decisionator.options/v1", "project": {"title": "..."}, "options": [ ... ]}
+- Project title: the list's own heading if it has one, otherwise a short summary of the list.
+- One option per distinct idea; merge duplicates. Skip lines that are not ideas
+  (headings, notes, to-dos, questions for people).
+- For titles and descriptions use only what the list says; do not invent ideas, features or facts.
+  If an idea has only a title, write at most one short sentence.
+- For each option: "title" (short, required; drop side notes such as "??" or "(check)"),
+  "description" (1–3 sentences), "category" (one short group name; reuse the same names),
+  "tags" (up to 5), "links" (any URLs from the list, as [{"url": "..."}]),
+  and optionally your own short estimates: "pros" and "cons" (each a list of short phrases,
+  e.g. ["Fast to build"]) and "effort" (one of XS, S, M, L, XL).
+- Write all text in the same language as the idea list, unless told otherwise below.
+Write all text in Ukrainian, even if you usually reply in another language.
+
+Example of the expected shape:
+```json
+{"format":"decisionator.options/v1","project":{"title":"Weekend plans"},"options":[{"title":"Picnic in the park","description":"Bring food and games to the city park.","category":"Outdoors","tags":["food","friends"],"effort":"XS"}]}
+```
+
+Idea list:
+<<<IDEAS
+Ідеї для тімбілдингу / offsite ideas (Q4)
+
+1. Похід у Карпати на 2 дні — hiking + ночівля в колибі
+2. Escape room у Львові, потім вечеря
+3. Cooking class: вчимося готувати вареники разом
+4. Сплав на байдарках по Дністру
+5. Hackathon weekend — build something for Deci 😄
+6. Винна дегустація на Закарпатті (Берегове)
+7. Board games night в офісі + піца
+8. Волонтерство: допомога в притулку для тварин
+9. Workshop з публічних виступів (public speaking) with an external coach
+10. Paintball або airsoft
+11. Поїздка до Одеси на море, if weather allows
+12. Online quiz for remote folks — щоб ніхто не залишився осторонь
+IDEAS>>>

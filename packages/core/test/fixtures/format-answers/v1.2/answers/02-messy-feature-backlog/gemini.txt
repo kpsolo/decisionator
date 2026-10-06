@@ -1,0 +1,157 @@
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "IDEAS for Deci v2"
+  },
+  "options": [
+    {
+      "title": "Dark mode",
+      "description": "Add dark mode support across the interface.",
+      "category": "UI/UX",
+      "tags": ["theme", "ui"],
+      "effort": "S",
+      "pros": ["Popular user request", "Reduces eye strain"],
+      "cons": ["Requires maintaining dual color palettes"]
+    },
+    {
+      "title": "Export to PDF",
+      "description": "Export results to PDF to attach them to emails.",
+      "category": "Export & Sharing",
+      "tags": ["export", "pdf", "email"],
+      "effort": "M",
+      "pros": ["Convenient sharing outside the app"],
+      "cons": ["Formatting consistency across PDF viewers"]
+    },
+    {
+      "title": "Slack bot",
+      "description": "Post the vote result into a Slack channel.",
+      "category": "Integrations",
+      "tags": ["slack", "bot", "notifications"],
+      "effort": "M",
+      "pros": ["Improves team visibility"],
+      "cons": ["Requires Slack App configuration"]
+    },
+    {
+      "title": "Mobile app",
+      "description": "Dedicated mobile application.",
+      "category": "Platform",
+      "tags": ["mobile", "app", "ios", "android"],
+      "effort": "XL",
+      "pros": ["Access on the go"],
+      "cons": ["High maintenance and development overhead"]
+    },
+    {
+      "title": "Import from Trello boards",
+      "description": "Import items and boards directly from Trello.",
+      "category": "Integrations",
+      "tags": ["trello", "import"],
+      "effort": "M",
+      "pros": ["Eases onboarding of existing tasks"],
+      "cons": ["Dependent on Trello API stability"]
+    },
+    {
+      "title": "Notion integration",
+      "description": "Pull a Notion database as options.",
+      "category": "Integrations",
+      "tags": ["notion", "import", "database"],
+      "effort": "M",
+      "pros": ["Seamless connection to existing documentation"],
+      "cons": ["Needs Notion schema mapping"]
+    },
+    {
+      "title": "Keyboard shortcuts",
+      "description": "Support keyboard shortcuts for faster navigation and actions.",
+      "category": "UI/UX",
+      "tags": ["shortcuts", "accessibility", "power-user"],
+      "effort": "S",
+      "pros": ["Speeds up power-user workflows"],
+      "cons": ["Potential clashes with browser default shortcuts"]
+    },
+    {
+      "title": "Anonymous voting mode",
+      "description": "Enable an anonymous voting mode for participants who are shy in public votes.",
+      "category": "Voting & Decisions",
+      "tags": ["voting", "privacy", "anonymous"],
+      "effort": "S",
+      "pros": ["Reduces social bias in results"],
+      "cons": ["Harder to audit duplicate votes manually"]
+    },
+    {
+      "title": "Templates for common decisions",
+      "description": "Pre-made templates for scenarios such as hiring, vendor choice, and team lunch.",
+      "category": "Voting & Decisions",
+      "tags": ["templates", "productivity"],
+      "effort": "S",
+      "pros": ["Reduces setup time for new decisions"],
+      "cons": ["Requires curated template designs"]
+    },
+    {
+      "title": "Deadline for voting",
+      "description": "Automatically close voting at a set time and send reminders.",
+      "category": "Voting & Decisions",
+      "tags": ["deadline", "automation", "reminders"],
+      "effort": "M",
+      "pros": ["Keeps decision timelines on track"],
+      "cons": ["Requires scheduled background worker tasks"]
+    },
+    {
+      "title": "Comments with @mentions",
+      "description": "Allow comments on options with @mentions to notify team members.",
+      "category": "Collaboration",
+      "tags": ["comments", "mentions", "notifications"],
+      "effort": "M",
+      "pros": ["Enables focused discussions"],
+      "cons": ["Notification management complexity"]
+    },
+    {
+      "title": "Weighted criteria",
+      "description": "Support weighted evaluation criteria, such as price 40%, quality 30%, and speed 30%.",
+      "category": "Voting & Decisions",
+      "tags": ["scoring", "criteria", "weights"],
+      "effort": "M",
+      "pros": ["Enables more nuanced decision modeling"],
+      "cons": ["More complex UI for voters"]
+    },
+    {
+      "title": "Emoji reactions on options",
+      "description": "Let users add emoji reactions directly on options.",
+      "category": "Collaboration",
+      "tags": ["emoji", "reactions", "engagement"],
+      "effort": "XS",
+      "pros": ["Lightweight informal feedback"],
+      "cons": ["May clutter option cards"]
+    },
+    {
+      "title": "Show who hasn't voted yet",
+      "description": "Display a list of participants who have not yet submitted their votes.",
+      "category": "Voting & Decisions",
+      "tags": ["tracking", "participants", "reminders"],
+      "effort": "XS",
+      "pros": ["Makes it easy to identify missing participants"],
+      "cons": ["May conflict with anonymous voting mode"]
+    },
+    {
+      "title": "Link previews for URLs in options",
+      "description": "Render rich link previews for URLs included inside options.",
+      "category": "UI/UX",
+      "tags": ["links", "preview", "rich-text"],
+      "links": [
+        {
+          "url": "https://example.com/product"
+        }
+      ],
+      "effort": "M",
+      "pros": ["Improves visual context of external links"],
+      "cons": ["Requires metadata scraping and security handling"]
+    },
+    {
+      "title": "Undo for accidental grade changes",
+      "description": "Provide an undo mechanism for accidental score or grade edits.",
+      "category": "Voting & Decisions",
+      "tags": ["undo", "history", "ux"],
+      "effort": "S",
+      "pros": ["Prevents user errors and frustration"],
+      "cons": ["Requires local action history tracking"]
+    }
+  ]
+}

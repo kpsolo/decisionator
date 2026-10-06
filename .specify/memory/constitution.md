@@ -1,25 +1,23 @@
 <!--
 Sync Impact Report
-- Version change: (template) → 1.0.0
-- Modified principles: n/a (initial ratification)
-- Added principles:
-  I. Minimal Core, Everything Is a Module
-  II. Stable, Versioned Plugin Contracts
-  III. Simple by Default, Deep on Demand
-  IV. Agent-Native by Design
-  V. User Owns the Data
-  VI. Transparent, Reproducible Decisions
-  VII. Test-First for Contracts and Strategies
-- Added sections: Plugin & Integration Constraints; Development Workflow & Quality Gates; Governance
+- Version change: 1.0.2 → 1.1.0 (MINOR: new "Staged Compliance" section; Constitution Check bullet
+  expanded to reference it)
+- Modified principles: none (wording of all seven principles unchanged)
+- Added sections: Development Workflow & Quality Gates → "Staged Compliance (pre-1.0 releases)"
 - Removed sections: none
-- Templates reviewed: plan-template.md (Constitution Check reads this file at runtime — no edit
-  needed), spec-template.md, tasks-template.md — no changes required
+- Motivation: /speckit-analyze on 001-decision-engine-core flagged two MUSTs the Google-based MVP
+  cannot meet (Principle IV agent API parity; offline-capable core). The plan recorded them as
+  justified deviations, but the constitution had no explicit rule for deferring a MUST.
+- Templates reviewed: plan-template.md (Constitution Check reads this file at runtime; deferred
+  items go in Complexity Tracking, no template edit needed), spec-template.md, tasks-template.md
+  - no changes required
+- Follow-up: specs/001-decision-engine-core/plan.md Constitution Check updated to cite this section
 - Deferred TODOs: none
 -->
 
-# Deciginator Constitution
+# Deci Constitution
 
-Deciginator is an open-source, modular decision-making engine: people collect ideas, shape them
+Deci is an open-source, modular decision-making engine: people collect ideas, shape them
 into options, enrich them (manually or through their own AI agents), decide using a pluggable
 strategy, and share the result with collaborators.
 
@@ -155,7 +153,8 @@ the ecosystem.
   `/speckit-analyze` → `/speckit-implement`. Specs describe *what/why*; plans describe *how*.
 - **Constitution Check**: every plan MUST pass the Constitution Check gate before Phase 0
   research and again after Phase 1 design; violations go in Complexity Tracking with
-  justification or the plan is revised.
+  justification or the plan is revised. A MUST may be deferred only under Staged Compliance
+  (below); any other violation fails the gate.
 - **Pull requests**: all changes land via reviewed PRs; CI MUST pass (lint, type checks,
   tests, contract tests). Changes to a plugin contract or the agentic API require an updated
   contract doc and changelog entry in the same PR.
@@ -163,6 +162,28 @@ the ecosystem.
   the agentic API ships with a machine-readable description.
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`, …) to support automated
   changelogs and semantic versioning.
+
+### Staged Compliance (pre-1.0 releases)
+
+Before the first stable 1.0 release, a plan MAY defer a MUST from Principle IV (agent API parity)
+or the "Offline-capable core" constraint for an early release (MVP or beta) only when all of the
+following hold:
+
+1. The deferral is listed in the plan's Complexity Tracking with its rationale and the
+   **user story or increment that resolves it**, and that story is in the same feature's spec.
+2. An interim measure covers the principle's intent as far as the release allows, and the plan
+   names it (for example, a published format contract that any agent can use, or offline drafts
+   with a persisted write queue).
+3. The deferral is disclosed to users in the release notes and the product requirements document.
+4. `/speckit-analyze` reports the item as a recorded deferral, not as a violation, and lists it
+   again before every release until it is resolved.
+
+These MUST NOT be deferred: Principle I (first-party modules use only public contracts),
+Principle II (versioned contracts and compatibility checks), Principle III (simple primary flow),
+Principle V (user data control, credentials, export and delete), Principle VI (reproducible,
+append-only decisions), Principle VII (test-first for contracts and strategies), the plugin
+permission model, failure isolation and accessibility. A stable 1.0 release MUST satisfy every principle with no
+deferrals.
 
 ## Governance
 
@@ -179,4 +200,4 @@ conflicts with it, the constitution wins.
 - **Runtime guidance**: day-to-day agent guidance lives in `CLAUDE.md` (kept up to date as
   plans introduce tech stack and conventions) and MUST stay consistent with this document.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-05
+**Version**: 1.1.0 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-05

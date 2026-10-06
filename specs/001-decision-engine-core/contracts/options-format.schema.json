@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://decisionator.dev/schemas/options/v1.json",
+  "title": "Deci options format v1 (decisionator.options/v1)",
+  "description": "What an AI assistant (or a connected agent) returns when asked to format a raw idea list. Lenient on input: unknown fields are ignored with a warning, not rejected.",
+  "type": "object",
+  "required": ["format", "options"],
+  "properties": {
+    "format": { "const": "decisionator.options/v1" },
+    "project": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 20000 }
+      }
+    },
+    "options": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/option" }
+    }
+  },
+  "$defs": {
+    "option": {
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Short name of the idea." },
+        "description": { "type": "string", "maxLength": 20000, "description": "Markdown. What it is and why it matters." },
+        "category": { "type": "string", "maxLength": 60, "description": "One group name, used by 'group by category'." },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 40 }, "maxItems": 10 },
+        "pros": { "type": "array", "items": { "type": "string", "maxLength": 300 }, "maxItems": 20 },
+        "cons": { "type": "array", "items": { "type": "string", "maxLength": 300 }, "maxItems": 20 },
+        "effort": { "enum": ["XS", "S", "M", "L", "XL"], "description": "Rough size estimate." },
+        "links": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": ["url"],
+            "properties": {
+              "title": { "type": "string", "maxLength": 200 },
+              "url": { "type": "string", "pattern": "^https?://" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "format": "decisionator.options/v1",
+      "project": { "title": "Which app do we build next?" },
+      "options": [
+        {
+          "title": "Habit tracker with friends",
+          "description": "Track daily habits and nudge friends who fall behind.",
+          "category": "Social",
+          "tags": ["mobile", "habits"],
+          "pros": ["Clear daily use case"],
+          "cons": ["Crowded market"],
+          "effort": "M"
+        },
+        {
+          "title": "Receipt splitter",
+          "description": "Photograph a receipt and split items between people.",
+          "category": "Finance",
+          "effort": "S"
+        }
+      ]
+    }
+  ]
+}

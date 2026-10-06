@@ -1,0 +1,34 @@
+[
+  {
+    "seed": "000102030405060708090a0b0c0d0e0f",
+    "calls": [
+      { "method": "nextUint32", "expected": 2237479810 },
+      { "method": "nextUint32", "expected": 1432266169 },
+      { "method": "nextUint32", "expected": 209670291 }
+    ]
+  },
+  {
+    "seed": "000102030405060708090a0b0c0d0e0f",
+    "calls": [
+      { "method": "int", "arg": 4, "expected": 2 },
+      { "method": "int", "arg": 4, "expected": 1 },
+      { "method": "int", "arg": 4, "expected": 3 },
+      { "method": "int", "arg": 4, "expected": 2 },
+      { "method": "int", "arg": 4, "expected": 0 }
+    ]
+  },
+  {
+    "seed": "ffffffffffffffffffffffffffffffff",
+    "calls": [
+      { "method": "int", "arg": 10, "expected": 3 },
+      { "method": "int", "arg": 10, "expected": 8 },
+      { "method": "int", "arg": 10, "expected": 9 },
+      { "method": "int", "arg": 10, "expected": 1 },
+      { "method": "int", "arg": 10, "expected": 4 }
+    ]
+  },
+  {
+    "seed": "ffffffffffffffffffffffffffffffff",
+    "calls": [{ "method": "float", "expected": 0.060539633583655994 }]
+  }
+]

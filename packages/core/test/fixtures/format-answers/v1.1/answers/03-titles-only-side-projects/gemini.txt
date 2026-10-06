@@ -1,0 +1,148 @@
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "Side Projects"
+  },
+  "options": [
+    {
+      "title": "Habit tracker for couples",
+      "description": "A habit tracking tool designed for couples to share and monitor habits together.",
+      "category": "Lifestyle",
+      "tags": ["habits", "relationships", "tracking"],
+      "effort": "S"
+    },
+    {
+      "title": "Recipe cost calculator",
+      "description": "A calculator to determine the cost of ingredients and meals for recipes.",
+      "category": "Food & Cooking",
+      "tags": ["recipes", "finance", "cooking", "calculator"],
+      "effort": "S"
+    },
+    {
+      "title": "Podcast clip maker",
+      "description": "A tool to create and extract short audio or video clips from podcasts.",
+      "category": "Media & Audio",
+      "tags": ["podcast", "audio", "video", "content"],
+      "effort": "M"
+    },
+    {
+      "title": "Local farmers market finder",
+      "description": "A directory tool to help users find nearby farmers markets.",
+      "category": "Community & Maps",
+      "tags": ["food", "local", "maps", "directory"],
+      "effort": "S"
+    },
+    {
+      "title": "Board game night scheduler",
+      "description": "A scheduling assistant to organize and coordinate board game nights among friends.",
+      "category": "Social & Events",
+      "tags": ["board-games", "scheduling", "events", "social"],
+      "effort": "S"
+    },
+    {
+      "title": "Personal API for my life stats",
+      "description": "An API service to aggregate and expose personal life metrics and statistics.",
+      "category": "Developer & Productivity",
+      "tags": ["api", "quantified-self", "data", "developer"],
+      "effort": "M"
+    },
+    {
+      "title": "Meme generator for Slack",
+      "description": "A Slack bot or integration that allows users to quickly generate memes.",
+      "category": "Social & Events",
+      "tags": ["slack", "memes", "bot", "chat"],
+      "effort": "XS"
+    },
+    {
+      "title": "Language exchange matcher",
+      "description": "A platform that matches individuals seeking to practice and exchange languages.",
+      "category": "Education & Learning",
+      "tags": ["languages", "education", "matching", "social"],
+      "effort": "M"
+    },
+    {
+      "title": "Bike route weather planner",
+      "description": "A planning tool that checks weather forecasts along cycling routes.",
+      "category": "Outdoors & Travel",
+      "tags": ["cycling", "weather", "maps", "planning"],
+      "effort": "M"
+    },
+    {
+      "title": "Home inventory for insurance",
+      "description": "An inventory cataloging application to record home belongings for insurance documentation.",
+      "category": "Finance & Home",
+      "tags": ["home", "inventory", "insurance", "finance"],
+      "effort": "M"
+    },
+    {
+      "title": "Kids chore rewards app",
+      "description": "An application to track household chores and assign rewards for kids.",
+      "category": "Family & Parenting",
+      "tags": ["parenting", "chores", "gamification", "family"],
+      "effort": "S"
+    },
+    {
+      "title": "Book club voting bot",
+      "description": "A bot that facilitates book nominations and voting for book clubs.",
+      "category": "Community & Maps",
+      "tags": ["books", "voting", "bot", "community"],
+      "effort": "XS"
+    },
+    {
+      "title": "Secondhand textbook swap",
+      "description": "A marketplace platform for students to swap or resell used textbooks.",
+      "category": "Education & Learning",
+      "tags": ["textbooks", "students", "swap", "marketplace"],
+      "effort": "M"
+    },
+    {
+      "title": "Coffee shop wifi map",
+      "description": "A map-based guide showing local coffee shops with reliable Wi-Fi for remote work.",
+      "category": "Community & Maps",
+      "tags": ["coffee", "wifi", "remote-work", "maps"],
+      "effort": "S"
+    },
+    {
+      "title": "Gift idea tracker",
+      "description": "An organizer to jot down, categorize, and track gift ideas for loved ones.",
+      "category": "Lifestyle",
+      "tags": ["gifts", "notes", "organization"],
+      "effort": "XS"
+    },
+    {
+      "title": "Freelance invoice reminder",
+      "description": "A notification tool to follow up on pending and overdue client invoices.",
+      "category": "Finance & Home",
+      "tags": ["freelance", "invoicing", "reminders", "finance"],
+      "effort": "S"
+    },
+    {
+      "title": "Pet medication reminder",
+      "description": "A scheduling and alert tool to keep track of medication dosages for pets.",
+      "category": "Lifestyle",
+      "tags": ["pets", "health", "reminders"],
+      "effort": "XS"
+    },
+    {
+      "title": "Apartment noise logger",
+      "description": "An audio monitoring or logging tool to record noise disruptions in apartments.",
+      "category": "Finance & Home",
+      "tags": ["apartment", "audio", "logging", "home"],
+      "effort": "S"
+    },
+    {
+      "title": "Volunteer shift planner",
+      "description": "A management tool to coordinate and schedule volunteer shifts.",
+      "category": "Community & Maps",
+      "tags": ["volunteering", "shifts", "scheduling", "community"],
+      "effort": "M"
+    },
+    {
+      "title": "Wedding seating planner",
+      "description": "An interactive planner to arrange tables and seating assignments for weddings.",
+      "category": "Social & Events",
+      "tags": ["wedding", "events", "seating", "planner"],
+      "effort": "M"
+    }
+  ]
+}

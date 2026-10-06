@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.strategy.borda",
+  "name": "Borda count ranking strategy",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "strategy": {
+      "usesRandomness": true,
+      "minOptions": 2,
+      "requiresWeights": false,
+      "ballots": "ranking"
+    }
+  },
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "topN": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "default": 3
+      }
+    }
+  }
+}

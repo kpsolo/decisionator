@@ -1,0 +1,40 @@
+Turn the idea list below into JSON for Deci.
+
+Rules:
+- Reply with ONLY one JSON code block, no other text.
+- Use exactly this structure: {"format": "decisionator.options/v1", "project": {"title": "..."}, "options": [ ... ]}
+- One option per distinct idea. Keep the author's meaning; do not invent new ideas.
+- For each option: "title" (short, required), "description" (1–3 sentences),
+  "category" (one short group name; reuse the same names across options),
+  "tags" (up to 5), "pros" and "cons" (short phrases, optional),
+  "effort" (one of XS, S, M, L, XL, optional).
+- If an idea is unclear, keep its original text as the title and leave other fields out.
+
+Example of the expected shape:
+```json
+{"format":"decisionator.options/v1","project":{"title":"Which app do we build next?"},"options":[{"title":"Receipt splitter","description":"Photograph a receipt and split items between people.","category":"Finance","tags":["mobile"],"effort":"S"}]}
+```
+
+Idea list:
+<<<IDEAS
+Habit tracker for couples
+Recipe cost calculator
+Podcast clip maker
+Local farmers market finder
+Board game night scheduler
+Personal API for my life stats
+Meme generator for Slack
+Language exchange matcher
+Bike route weather planner
+Home inventory for insurance
+Kids chore rewards app
+Book club voting bot
+Secondhand textbook swap
+Coffee shop wifi map
+Gift idea tracker
+Freelance invoice reminder
+Pet medication reminder
+Apartment noise logger
+Volunteer shift planner
+Wedding seating planner
+IDEAS>>>

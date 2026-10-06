@@ -1,0 +1,458 @@
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "Which app do we build next?"
+  },
+  "options": [
+    {
+      "title": "Obsession AI",
+      "description": "An intelligent news engine where users follow hyper-specific niche topics or micro-trends rather than broad categories. It leverages LLMs to synthesize noise-free daily digests drawn from global articles, forums, and newsletters.",
+      "category": "News & Content",
+      "tags": ["ai", "news", "llm", "curation"],
+      "pros": ["Noise-free personalized digests", "Addresses niche interests"],
+      "cons": ["High scraping and LLM API costs"],
+      "effort": "M"
+    },
+    {
+      "title": "QuestLock",
+      "description": "A friction-based app locker that restricts access to addictive social media until you solve quick logic or math puzzles. It turns mindless screen opening into an intentional, mentally stimulating action.",
+      "category": "Productivity",
+      "tags": ["screen-time", "digital-wellbeing", "mobile"],
+      "pros": ["Creates mindful friction", "Simple user loop"],
+      "cons": ["OS restrictions on app blocking APIs"],
+      "effort": "S"
+    },
+    {
+      "title": "BrainTime",
+      "description": "A gamified screen-time manager that requires users to 'earn' recreational app minutes by solving cognitive exercises and trivia. It replaces standard timers with a reward system that promotes daily mental fitness.",
+      "category": "Productivity",
+      "tags": ["gamification", "wellbeing", "screen-time"],
+      "pros": ["Positive reinforcement model", "Engaging game mechanics"],
+      "cons": ["Requires maintaining a deep trivia library"],
+      "effort": "M"
+    },
+    {
+      "title": "OrthoPlanes",
+      "description": "A minimalist, zen-style endless flight game rendered in a clean orthographic perspective with relaxing physics. Players glide through procedurally generated atmospheric landscapes while dodging environmental obstacles.",
+      "category": "Gaming",
+      "tags": ["game", "indie", "zen", "minimalist"],
+      "pros": ["High replayability", "Aesthetic visual appeal"],
+      "cons": ["Difficult monetization in hyper-casual segment"],
+      "effort": "M"
+    },
+    {
+      "title": "TrustVerify",
+      "description": "An automated risk and trust intelligence platform that evaluates the credibility of SaaS tools, new web domains, and local business sites. It combines SSL telemetry, domain age, security breach databases, and authentic customer sentiment into an instant trust score.",
+      "category": "Security",
+      "tags": ["security", "trust", "b2b", "analytics"],
+      "pros": ["Clear value for risk-averse teams", "Automated scoring pipeline"],
+      "cons": ["Requires extensive data aggregation feeds"],
+      "effort": "L"
+    },
+    {
+      "title": "CleanIngred AI",
+      "description": "A mobile scanner that analyzes food and cosmetic ingredient labels via camera to detect toxic additives, allergens, and microplastics. It translates complex chemical names into plain language and suggests clean, healthier alternatives.",
+      "category": "Health & Lifestyle",
+      "tags": ["health", "ocr", "ai", "consumer"],
+      "pros": ["Direct consumer health impact", "High camera utility"],
+      "cons": ["Complex chemical ontology mapping"],
+      "effort": "M"
+    },
+    {
+      "title": "RentLocal",
+      "description": "A peer-to-peer rental marketplace that allows neighbors to borrow and lend household tools, camping gear, and electronics. Built-in insurance verification, deposits, and local pickup coordination make renting safer and cheaper than buying.",
+      "category": "Marketplace",
+      "tags": ["p2p", "sharing-economy", "local", "community"],
+      "pros": ["Strong community network effect", "Promotes sustainability"],
+      "cons": ["Two-sided marketplace chicken-and-egg problem"],
+      "effort": "L"
+    },
+    {
+      "title": "AdaptFolio",
+      "description": "An AI portfolio builder that dynamically adapts visual styling, case studies, and copy to match the viewer's industry profile (e.g., enterprise, early-stage startup, or agency). Designers share a single link that personalizes its pitch depending on who is opening it.",
+      "category": "Design Tools",
+      "tags": ["portfolio", "ai", "design", "careers"],
+      "pros": ["Personalized conversion for applicants", "Unique positioning"],
+      "cons": ["Complex viewer intent detection"],
+      "effort": "M"
+    },
+    {
+      "title": "LifePart (Memento Mori)",
+      "description": "An existential data-visualization tool that maps the user's lived lifespan against global demographics, historical figures, and various professions. It offers perspective on mortality by illustrating life milestones (e.g., comparing your remaining time to the average life of a Tokyo firefighter).",
+      "category": "Health & Lifestyle",
+      "tags": ["dataviz", "mindfulness", "perspective"],
+      "pros": ["High emotional resonance and shareability", "Lightweight backend"],
+      "cons": ["Niche audience comfort with mortality themes"],
+      "effort": "S"
+    },
+    {
+      "title": "InfoVault",
+      "description": "A curated search platform and design repository showcasing top-tier data visualizations categorized by format (interactive, web, print) and industry. It provides designers and journalists with visual breakdowns, color swatches, and source data references.",
+      "category": "Design Tools",
+      "tags": ["dataviz", "inspiration", "curation", "design"],
+      "pros": ["Valuable reference resource for creatives", "Strong SEO potential"],
+      "cons": ["Requires ongoing manual curation"],
+      "effort": "S"
+    },
+    {
+      "title": "ItemDescriber API",
+      "description": "A developer-first multimodal API that accepts product images or barcodes and generates standardized e-commerce titles, attributes, and SEO-optimized descriptions. It automates catalog enrichment and inventory digitization for retailers within milliseconds.",
+      "category": "Developer Tools",
+      "tags": ["api", "ecommerce", "multimodal", "b2b"],
+      "pros": ["Clear B2B ROI for catalog operations", "Developer-friendly integration"],
+      "cons": ["Requires fine-tuning across diverse retail niches"],
+      "effort": "M"
+    },
+    {
+      "title": "MockScreens",
+      "description": "A high-fidelity mockup generator for creating realistic social media posts, direct message exchanges, and OS notification screenshots. It helps marketers, UI designers, and content creators build clean visual assets for presentations and ad campaigns.",
+      "category": "Design Tools",
+      "tags": ["mockups", "marketing", "ui-tools", "social-media"],
+      "pros": ["Instant utility for marketers", "High viral screenshot usage"],
+      "cons": ["Must constantly update templates to match OS UI shifts"],
+      "effort": "S"
+    },
+    {
+      "title": "DesignTV",
+      "description": "A continuous ambient video-streaming platform tailored for studio monitors, broadcasting award-winning websites, motion design reels, and live web showcases. It functions as an effortless source of passive background inspiration for creative teams and design agencies.",
+      "category": "Design Tools",
+      "tags": ["video", "ambient", "inspiration", "agencies"],
+      "pros": ["Great ambient agency aesthetic", "Low user interaction friction"],
+      "cons": ["Bandwidth streaming costs and licensing"],
+      "effort": "M"
+    },
+    {
+      "title": "TeleFocus",
+      "description": "A lightweight Telegram client extension that enforces daily reading limits on public broadcast channels to curb doomscrolling. It greys out channel feeds once quotas are reached while keeping direct chats and notifications accessible.",
+      "category": "Productivity",
+      "tags": ["telegram", "digital-wellbeing", "extension"],
+      "pros": ["Directly combats information overload", "Preserves direct messaging access"],
+      "cons": ["Dependent on third-party Telegram API/client stability"],
+      "effort": "S"
+    },
+    {
+      "title": "ProVocab",
+      "description": "A career-targeted language flashcard app tailored for designers, marketers, and developers working in international teams. It builds professional fluency through role-specific vocabulary, critique templates, and real workplace audio dialogues.",
+      "category": "Education",
+      "tags": ["language-learning", "edtech", "career", "b2b"],
+      "pros": ["Highly targeted practical vocabulary", "Higher willingness to pay"],
+      "cons": ["Requires industry-specific pedagogical content creation"],
+      "effort": "M"
+    },
+    {
+      "title": "PupilCheck AI",
+      "description": "A health-monitoring mobile app that uses smartphone cameras to measure pupil dilation response and symmetry. It screens for signs of fatigue, concussion risks, and neurological strain to provide early biometric wellness insights.",
+      "category": "Health & Lifestyle",
+      "tags": ["biometrics", "computer-vision", "health", "ai"],
+      "pros": ["Cutting-edge non-invasive biometric metric", "Mobile hardware accessibility"],
+      "cons": ["Medical compliance and regulatory scrutiny"],
+      "effort": "XL"
+    },
+    {
+      "title": "JoyChronicle",
+      "description": "A minimalist micro-journaling app that prompts users to record daily gratitude alongside an automated snapshot of that day's major world headlines. Over time, it creates a personal memory vault that pairs individual wellbeing with historic context.",
+      "category": "Health & Lifestyle",
+      "tags": ["journaling", "gratitude", "mindfulness"],
+      "pros": ["High contextual nostalgia value", "Quick daily habit loop"],
+      "cons": ["Crowded micro-journaling space"],
+      "effort": "S"
+    },
+    {
+      "title": "VisuWord",
+      "description": "A vocabulary-building app that pairs foreign terms with vivid, AI-generated visual mnemonics and contextual illustrations. By anchoring words directly to memorable visual imagery rather than text translations, it dramatically increases retention speed.",
+      "category": "Education",
+      "tags": ["language-learning", "ai-art", "mnemonics", "edtech"],
+      "pros": ["Proven visual learning efficacy", "Generative image automation"],
+      "cons": ["Image generation latency and cost"],
+      "effort": "M"
+    },
+    {
+      "title": "FloraFlow",
+      "description": "A plant care companion app that generates dynamic watering schedules based on plant species, pot volume, and ambient weather. It pairs with optional Bluetooth soil sensors to alert owners before root rot or dehydration sets in.",
+      "category": "Home & Utilities",
+      "tags": ["smart-home", "iot", "plants", "weather"],
+      "pros": ["Dynamic weather-aware scheduling", "Hardware upsell opportunities"],
+      "cons": ["Hardware support complexity"],
+      "effort": "M"
+    },
+    {
+      "title": "LinguaCoach AI",
+      "description": "An interactive language tutor that listens to users read aloud, highlighting pronunciation slips and grammatical hesitations in real time. It automatically compiles missed words into targeted spaced-repetition drills to build spoken confidence.",
+      "category": "Education",
+      "tags": ["language-learning", "speech-recognition", "ai"],
+      "pros": ["Real-time phonetic speech coaching", "Automated drill generation"],
+      "cons": ["Real-time audio processing latency requirements"],
+      "effort": "L"
+    },
+    {
+      "title": "CareerLongevity",
+      "description": "An interactive web visualization exploring life expectancy, chronic stress indicators, and physical hazards across hundreds of modern professions. Users can filter by industry and lifestyle factors to see how career trajectories correlate with long-term vitality.",
+      "category": "Analytics & Data",
+      "tags": ["dataviz", "career", "interactive", "research"],
+      "pros": ["High viral PR and educational appeal", "Compelling data storytelling"],
+      "cons": ["Requires sourcing and cleaning complex actuarial datasets"],
+      "effort": "M"
+    },
+    {
+      "title": "Shortly Reader",
+      "description": "A speed-reading extension that extracts main takeaways from long-form articles into bulleted briefs with instant inline translation. It allows professionals to digest multi-language reports in seconds without breaking their browsing workflow.",
+      "category": "Productivity",
+      "tags": ["extension", "summarizer", "translation", "productivity"],
+      "pros": ["Seamless browser workflow integration", "Direct time savings"],
+      "cons": ["Competition from native browser AI features"],
+      "effort": "S"
+    },
+    {
+      "title": "AutoPal",
+      "description": "A digital car concierge app that translates OBD2 engine error codes into plain language and tracks routine maintenance schedules. It connects vehicle owners with vetted local repair shops and provides transparent repair cost benchmarks to prevent overcharging.",
+      "category": "Home & Utilities",
+      "tags": ["automotive", "obd2", "local-services", "marketplace"],
+      "pros": ["Removes diagnostic anxiety for owners", "Clear referral monetization"],
+      "cons": ["Vetting local auto shops is operationally heavy"],
+      "effort": "L"
+    },
+    {
+      "title": "LexicaRare",
+      "description": "A vocabulary app dedicated to teaching rare, articulate, and literary words through etymological stories and historical excerpts. It uses spaced repetition and sentence-writing prompts to help writers and speakers expand their active lexicon.",
+      "category": "Education",
+      "tags": ["vocabulary", "writing", "literature", "spaced-repetition"],
+      "pros": ["Distinct niche appeal for writers and book lovers", "High user retention"],
+      "cons": ["Smaller total addressable market"],
+      "effort": "S"
+    },
+    {
+      "title": "InstaMap",
+      "description": "A travel planner that extracts geotags and venue mentions from saved Instagram collections and renders them onto an interactive map. It automatically organizes visual travel inspiration into exportable itineraries for Google Maps and Apple Maps.",
+      "category": "Travel",
+      "tags": ["travel", "instagram", "maps", "itinerary"],
+      "pros": ["Bridges social inspiration directly into travel navigation", "High organic sharing"],
+      "cons": ["Reliance on Instagram data export/scraping limitations"],
+      "effort": "M"
+    },
+    {
+      "title": "CelestialAlign",
+      "description": "An AR photography tool that calculates the exact future date and minute the sun or moon will intersect a designated landmark on your camera screen. It takes the guesswork out of astro- and landscape photography through live solar/lunar path overlays.",
+      "category": "Design Tools",
+      "tags": ["photography", "ar", "astronomy", "calculator"],
+      "pros": ["High-value utility for professional photographers", "Strong paid-app appeal"],
+      "cons": ["Complex ephemeris and AR alignment math"],
+      "effort": "M"
+    },
+    {
+      "title": "LabTrack Health",
+      "description": "A universal medical dashboard that aggregates bloodwork and test reports from multiple diagnostic laboratories like Synevo into a single record. It tracks biomarker trends over time against clinical reference ranges and offers plain-English medical summaries.",
+      "category": "Health & Lifestyle",
+      "tags": ["health", "biomarkers", "dashboard", "medical"],
+      "pros": ["Empowers proactive longitudinal health tracking", "Clear user pain point"],
+      "cons": ["Parsing diverse unstandardized lab PDFs"],
+      "effort": "L"
+    },
+    {
+      "title": "PrintPop",
+      "description": "An automated photo-to-merch platform that turns Instagram albums into custom magnetic tiles or skin-safe temporary tattoo sheets. Customers connect their social accounts, crop selections, and order customized physical keepsakes in a few taps.",
+      "category": "Marketplace",
+      "tags": ["ecommerce", "photo-printing", "merch", "social"],
+      "pros": ["Tangible physical output from digital memories", "Gift purchase suitability"],
+      "cons": ["Physical fulfillment, printing, and shipping logistics"],
+      "effort": "L"
+    },
+    {
+      "title": "PackCraft 3D",
+      "description": "A browser-based packaging design tool that lets brands customize 3D boxes and dielines with real-time AR surface previews before manufacturing. It includes an AR mobile viewer to project packaging prototypes and art prints accurately onto physical walls and counters.",
+      "category": "Design Tools",
+      "tags": ["3d", "packaging", "ar", "webgl"],
+      "pros": ["Saves costly packaging prototyping cycles", "Modern browser 3D appeal"],
+      "cons": ["Demanding WebGL rendering and dieline export precision"],
+      "effort": "L"
+    },
+    {
+      "title": "InkLetter",
+      "description": "A web platform and API that translates typed digital notes into authentic, robotically penned handwritten letters on physical stationery. It gives businesses and individuals an automated way to send personalized, tactile thank-you notes at digital scale.",
+      "category": "Developer Tools",
+      "tags": ["hardware", "api", "direct-mail", "marketing"],
+      "pros": ["Unmatched open rates compared to email", "Novel tactile personalization"],
+      "cons": ["Hardware plotter maintenance and mailing operations"],
+      "effort": "XL"
+    },
+    {
+      "title": "CardTranslate",
+      "description": "A community platform for translating indie tabletop and card games, offering printable translation sleeve overlays and digital rulebooks. It allows international board game fans to enjoy localized versions of foreign card games with print-and-play precision.",
+      "category": "Gaming",
+      "tags": ["board-games", "crowdsourcing", "translation", "print-and-play"],
+      "pros": ["Passionate niche community", "Solves language barrier in tabletop games"],
+      "cons": ["Copyright and intellectual property gray areas"],
+      "effort": "S"
+    },
+    {
+      "title": "LaunchHub UA",
+      "description": "A community-driven discovery and upvoting portal dedicated to spotlighting early-stage tech products, indie apps, and AI tools across Ukraine and Eastern Europe. It connects local founders with early adopters, tech talent, and regional angel investors.",
+      "category": "News & Content",
+      "tags": ["startups", "ukraine", "discovery", "community"],
+      "pros": ["Fills a clear regional startup spotlight gap", "Strong community goodwill"],
+      "cons": ["Requires sustained community moderation and engagement"],
+      "effort": "S"
+    },
+    {
+      "title": "FlipVintage",
+      "description": "A circular economy tool that assists vintage pickers and thrift sellers in sourcing, evaluating, and buying used home goods from private sellers. It utilizes image recognition to pull historical resale prices from eBay and marketplaces, identifying profitable items instantly.",
+      "category": "Marketplace",
+      "tags": ["resale", "vintage", "computer-vision", "ecommerce"],
+      "pros": ["Direct profit enablement for thrift resellers", "Camera-first convenience"],
+      "cons": ["Scraping historical resale data accuracy"],
+      "effort": "M"
+    },
+    {
+      "title": "VideoJournal",
+      "description": "A minimalist video magazine that delivers an editorial daily playlist of five exceptional, high-craft short films, documentaries, and video essays. It replaces algorithmic feeds with intentional, ad-free visual journalism.",
+      "category": "News & Content",
+      "tags": ["video", "curation", "documentaries", "culture"],
+      "pros": ["Premium calm media consumption", "Clean aesthetic experience"],
+      "cons": ["Content licensing and ongoing editorial curation overhead"],
+      "effort": "M"
+    },
+    {
+      "title": "WeekendConcierge AI",
+      "description": "An AI-powered concierge that designs personalized weekend itineraries, dinner bookings, and group events tailored to your social circle's taste and budget. It coordinates restaurant reservations, purchases tickets, and sends automated calendar invites to your guests.",
+      "category": "Travel",
+      "tags": ["ai", "concierge", "itinerary", "events"],
+      "pros": ["Solves social planning coordination friction", "High perceived value"],
+      "cons": ["Integration with disparate ticketing and booking engines"],
+      "effort": "L"
+    },
+    {
+      "title": "DecisionPro",
+      "description": "A structured decision-making platform where users build weighted pro/con evaluation models for major life or business choices. Users can optionally submit anonymized decision dilemmas to verified industry experts for quick, paid peer audits.",
+      "category": "Productivity",
+      "tags": ["decision-making", "analytics", "expert-network"],
+      "pros": ["Brings objective clarity to difficult choices", "Expert marketplace monetization"],
+      "cons": ["Cold-start for expert audit network"],
+      "effort": "M"
+    },
+    {
+      "title": "DealAlert",
+      "description": "A cross-platform listing tracker and browser extension that monitors classifieds, product availability, and discount changes across multiple websites. It pings users immediately via Telegram or push notifications when listings meet their custom criteria.",
+      "category": "Productivity",
+      "tags": ["tracker", "alerts", "ecommerce", "extension"],
+      "pros": ["High purchase-intent trigger", "Immediate user value on price drops"],
+      "cons": ["Vulnerability to target site layout changes and anti-bot filters"],
+      "effort": "M"
+    },
+    {
+      "title": "YouGarderobe",
+      "description": "A digital closet app that categorizes your wardrobe via photo or video, automatically detecting color schemes, fabrics, and aesthetics. It pulls local weather forecasts and your calendar to generate cohesive outfit suggestions tailored to your mood.",
+      "category": "Health & Lifestyle",
+      "tags": ["fashion", "computer-vision", "outfits", "lifestyle"],
+      "pros": ["Solves daily what-to-wear fatigue", "Rich catalog tagging"],
+      "cons": ["Initial user onboarding friction to photograph wardrobe"],
+      "effort": "M"
+    },
+    {
+      "title": "RenoBudget",
+      "description": "A home renovation management app that tracks contractor estimates, receipts, building materials, and milestone payments in one collaborative space. It visualizes expenses in real time against your original budget to prevent financial surprises.",
+      "category": "Home & Utilities",
+      "tags": ["budgeting", "renovation", "construction", "finance"],
+      "pros": ["Tackles major source of renovation stress and overspending", "Clear milestone tracking"],
+      "cons": ["Intermittent lifecycle usage tied to renovation projects"],
+      "effort": "M"
+    },
+    {
+      "title": "ExploreUA",
+      "description": "An illustrated travel guide app featuring curated thematic walking routes, architectural backstories, and local lore across Ukrainian cities. It includes offline interactive maps and gamified digital badges that unlock as travelers visit historic landmarks.",
+      "category": "Travel",
+      "tags": ["travel", "ukraine", "offline-maps", "gamification"],
+      "pros": ["Rich local cultural discovery", "Fully functional offline"],
+      "cons": ["Content generation intensive for every new route"],
+      "effort": "M"
+    },
+    {
+      "title": "MindfulWake",
+      "description": "A persistent alarm clock app that only turns off once you identify and log your current emotional and physical state using Nonviolent Communication (NVC) prompts. It eliminates unconscious snoozing by forcing quick emotional awareness upon waking.",
+      "category": "Health & Lifestyle",
+      "tags": ["mindfulness", "alarm", "habits", "mental-health"],
+      "pros": ["Disrupts snooze reflex with grounded self-awareness", "Novel mindfulness mechanic"],
+      "cons": ["Potential user irritation during groggy mornings"],
+      "effort": "S"
+    },
+    {
+      "title": "IconAuditor",
+      "description": "A design audit tool that evaluates app icons by measuring pixel density, contrast ratios, and visual weight across different operating system backgrounds. It flags visibility issues and previews icon legibility before store submission.",
+      "category": "Design Tools",
+      "tags": ["design", "app-store", "ui-tools", "developer-tools"],
+      "pros": ["Essential pre-flight tool for mobile designers", "Fast automated visual audits"],
+      "cons": ["Targeted at a narrow specialist audience"],
+      "effort": "XS"
+    },
+    {
+      "title": "HyperFocal Pro",
+      "description": "An optical depth-of-field and hyperfocal distance calculator engineered for landscape and street photographers. It maps focal lengths and apertures against specific sensor sizes with an intuitive visual slider to guarantee edge-to-edge sharpness.",
+      "category": "Design Tools",
+      "tags": ["photography", "optics", "calculator", "mobile"],
+      "pros": ["Tactile visual sliders for field use", "Rock-solid optical accuracy"],
+      "cons": ["Established utility space with existing legacy calculators"],
+      "effort": "XS"
+    },
+    {
+      "title": "NewsQuest",
+      "description": "A current-events puzzle game that connects breaking world headlines to historical Wikipedia articles. Players earn points by solving context paths, linking today's geopolitical and scientific news back to its historic origins.",
+      "category": "Gaming",
+      "tags": ["trivia", "news", "puzzles", "education"],
+      "pros": ["Turns news literacy into an engaging intellectual puzzle", "Dynamic daily content"],
+      "cons": ["Requires automated graph traversal validation against Wikipedia"],
+      "effort": "M"
+    },
+    {
+      "title": "DailyWords & Compliments",
+      "description": "A bilingual daily affirmation app delivering curated philosophical quotes, compliments, and idiomatic translations with native audio pronunciation. It features customizable lock-screen widgets that combine positive mindset reinforcement with foreign language acquisition.",
+      "category": "Education",
+      "tags": ["widgets", "affirmations", "language-learning", "wellness"],
+      "pros": ["High daily engagement via home/lock-screen widgets", "Blends mental wellbeing with learning"],
+      "cons": ["Requires continuous curation of inspiring multilingual content"],
+      "effort": "S"
+    },
+    {
+      "title": "StyleCurator",
+      "description": "An e-commerce styling platform that pairs algorithmic fit models with human fashion advisors to ship personalized menswear boxes to customers' doors. Shoppers try clothes on at home, keep what they like, and return the rest with zero subscription friction.",
+      "category": "Marketplace",
+      "tags": ["fashion", "ecommerce", "subscription-box", "retail"],
+      "pros": ["High basket value and customer loyalty", "Curated touch saves shopping time"],
+      "cons": ["High reverse logistics, shipping, and inventory handling costs"],
+      "effort": "XL"
+    },
+    {
+      "title": "DoodleClash AI",
+      "description": "A real-time multiplayer drawing and guessing party game supporting multiple languages (including Ukrainian) with an integrated AI sketch guesser. Friends can compete in private rooms or challenge neural vision models in fast-paced drawing rounds.",
+      "category": "Gaming",
+      "tags": ["party-game", "ai", "multiplayer", "drawing"],
+      "pros": ["High viral party entertainment value", "Great multilingual accessibility"],
+      "cons": ["Websocket infrastructure scaling under peak loads"],
+      "effort": "M"
+    },
+    {
+      "title": "YieldSim",
+      "description": "A financial modeling calculator that simulates compound interest, dividend reinvestment, and inflation-adjusted retirement horizons. It features Monte Carlo risk simulations and visual asset allocation charts to help retail investors plan savings targets accurately.",
+      "category": "Analytics & Data",
+      "tags": ["finance", "investing", "calculator", "dataviz"],
+      "pros": ["Empowers retail investors with institutional-grade modeling", "Intuitive visualization"],
+      "cons": ["Regulatory disclaimers required for financial tooling"],
+      "effort": "S"
+    },
+    {
+      "title": "TapLog",
+      "description": "A zero-friction productivity timer that pairs with physical Bluetooth shortcut buttons (like Flic) to start, pause, and switch task timers instantly. It syncs with billing software to automatically convert physical clicks into clean, invoice-ready timesheets.",
+      "category": "Productivity",
+      "tags": ["productivity", "hardware", "time-tracking", "invoicing"],
+      "pros": ["Eliminates time-tracking friction via tactile physical buttons", "Direct billing integration"],
+      "cons": ["Relies on external Bluetooth hardware pairing"],
+      "effort": "M"
+    },
+    {
+      "title": "AudioBilingual",
+      "description": "An immersive language-learning player that synchronizes foreign audiobook narration with line-by-line bilingual transcripts. Listeners can tap any spoken phrase to pause, hear a pronunciation breakdown, and review side-by-side translated text.",
+      "category": "Education",
+      "tags": ["audiobooks", "language-learning", "edtech", "audio"],
+      "pros": ["Immersive contextual listening practice", "Precise line-by-line synchronization"],
+      "cons": ["Audiobook audio and text synchronization licensing"],
+      "effort": "M"
+    }
+  ]
+}

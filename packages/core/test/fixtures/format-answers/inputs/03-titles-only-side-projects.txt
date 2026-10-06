@@ -1,0 +1,20 @@
+Habit tracker for couples
+Recipe cost calculator
+Podcast clip maker
+Local farmers market finder
+Board game night scheduler
+Personal API for my life stats
+Meme generator for Slack
+Language exchange matcher
+Bike route weather planner
+Home inventory for insurance
+Kids chore rewards app
+Book club voting bot
+Secondhand textbook swap
+Coffee shop wifi map
+Gift idea tracker
+Freelance invoice reminder
+Pet medication reminder
+Apartment noise logger
+Volunteer shift planner
+Wedding seating planner

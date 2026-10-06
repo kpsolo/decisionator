@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.source.google-docs",
+  "name": "Google Docs Idea Source",
+  "description": "Imports lists or heading sections from Google Docs documents",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "ideaSource": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "ideaSource": {
+      "sourceType": "google-docs",
+      "supportsRefresh": true,
+      "input": "oauth"
+    }
+  },
+  "permissions": ["oauth:google-drive", "net:https://docs.googleapis.com"],
+  "oauth": {
+    "google-drive": {
+      "flow": "gis-token",
+      "scopes": ["https://www.googleapis.com/auth/drive.file"],
+      "clientIdEnv": "VITE_GOOGLE_CLIENT_ID"
+    }
+  }
+}

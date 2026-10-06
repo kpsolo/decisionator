@@ -1,0 +1,228 @@
+{
+  "format": "decisionator.options/v1",
+  "project": {
+    "title": "Side projects"
+  },
+  "options": [
+    {
+      "title": "Habit tracker for couples",
+      "description": "A habit tracking application designed for couples.",
+      "category": "Productivity",
+      "tags": [
+        "habits",
+        "couples",
+        "lifestyle"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Recipe cost calculator",
+      "description": "Calculate the cost of recipes based on ingredients.",
+      "category": "Utilities",
+      "tags": [
+        "food",
+        "calculator",
+        "recipes"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Podcast clip maker",
+      "description": "A tool to create clips from podcasts.",
+      "category": "Media",
+      "tags": [
+        "podcast",
+        "audio",
+        "content"
+      ],
+      "effort": "L"
+    },
+    {
+      "title": "Local farmers market finder",
+      "description": "Find local farmers markets in your area.",
+      "category": "Local",
+      "tags": [
+        "market",
+        "food",
+        "shopping"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Board game night scheduler",
+      "description": "Schedule game nights for board game enthusiasts.",
+      "category": "Social",
+      "tags": [
+        "games",
+        "scheduling",
+        "events"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Personal API for my life stats",
+      "description": "A personal API to track and expose personal life statistics.",
+      "category": "Developer Tools",
+      "tags": [
+        "api",
+        "stats",
+        "personal"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Meme generator for Slack",
+      "description": "Generate and share memes directly within Slack.",
+      "category": "Productivity",
+      "tags": [
+        "slack",
+        "memes",
+        "fun"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Language exchange matcher",
+      "description": "Match users looking to exchange and learn languages.",
+      "category": "Education",
+      "tags": [
+        "language",
+        "learning",
+        "social"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Bike route weather planner",
+      "description": "Plan bike routes taking weather conditions into account.",
+      "category": "Travel",
+      "tags": [
+        "bike",
+        "weather",
+        "routes"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Home inventory for insurance",
+      "description": "Keep an inventory of home belongings for insurance purposes.",
+      "category": "Utilities",
+      "tags": [
+        "home",
+        "insurance",
+        "inventory"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Kids chore rewards app",
+      "description": "An application to track kids' chores and manage rewards.",
+      "category": "Family",
+      "tags": [
+        "kids",
+        "chores",
+        "rewards"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Book club voting bot",
+      "description": "A bot to facilitate voting for book clubs.",
+      "category": "Social",
+      "tags": [
+        "books",
+        "bot",
+        "voting"
+      ],
+      "effort": "XS"
+    },
+    {
+      "title": "Secondhand textbook swap",
+      "description": "A platform to swap secondhand textbooks.",
+      "category": "Marketplace",
+      "tags": [
+        "books",
+        "students",
+        "swap"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Coffee shop wifi map",
+      "description": "A map displaying coffee shops with available wifi.",
+      "category": "Local",
+      "tags": [
+        "coffee",
+        "wifi",
+        "map"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Gift idea tracker",
+      "description": "Track gift ideas for friends and family members.",
+      "category": "Utilities",
+      "tags": [
+        "gifts",
+        "tracker",
+        "shopping"
+      ],
+      "effort": "XS"
+    },
+    {
+      "title": "Freelance invoice reminder",
+      "description": "Send automated reminders for freelance invoices.",
+      "category": "Business",
+      "tags": [
+        "freelance",
+        "invoices",
+        "finance"
+      ],
+      "effort": "S"
+    },
+    {
+      "title": "Pet medication reminder",
+      "description": "Reminders for administering pet medications.",
+      "category": "Pets",
+      "tags": [
+        "pets",
+        "health",
+        "reminders"
+      ],
+      "effort": "XS"
+    },
+    {
+      "title": "Apartment noise logger",
+      "description": "Log and monitor noise levels in an apartment.",
+      "category": "Utilities",
+      "tags": [
+        "apartment",
+        "noise",
+        "logger"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Volunteer shift planner",
+      "description": "Plan and schedule shifts for volunteers.",
+      "category": "Management",
+      "tags": [
+        "volunteer",
+        "scheduling",
+        "events"
+      ],
+      "effort": "M"
+    },
+    {
+      "title": "Wedding seating planner",
+      "description": "Organize and plan seating arrangements for weddings.",
+      "category": "Events",
+      "tags": [
+        "wedding",
+        "planning",
+        "seating"
+      ],
+      "effort": "M"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+Turn the idea list below into JSON for Deci.
+
+Rules:
+- Reply with ONLY one JSON code block, no other text.
+- Use exactly this structure: {"format": "decisionator.options/v1", "project": {"title": "..."}, "options": [ ... ]}
+- One option per distinct idea. Keep the author's meaning; do not invent new ideas.
+- For each option: "title" (short, required), "description" (1–3 sentences),
+  "category" (one short group name; reuse the same names across options),
+  "tags" (up to 5), "pros" and "cons" (short phrases, optional),
+  "effort" (one of XS, S, M, L, XL, optional).
+- If an idea is unclear, keep its original text as the title and leave other fields out.
+
+Example of the expected shape:
+```json
+{"format":"decisionator.options/v1","project":{"title":"Which app do we build next?"},"options":[{"title":"Receipt splitter","description":"Photograph a receipt and split items between people.","category":"Finance","tags":["mobile"],"effort":"S"}]}
+```
+
+Idea list:
+<<<IDEAS
+Brainstorm: how do we get more people to try Deci?
+
+- Post on Product Hunt
+- launch on producthunt.com
+- Write a blog post about the Borda count
+- Twitter/X thread explaining ranked voting
+- X thread: why ranked voting beats simple polls
+- Ask friends to share the link
+- Share in Ukrainian startup Telegram channels
+- Telegram channels for UA founders — share there
+- YouTube demo video (2 min)
+- short demo video for YouTube
+- Reddit r/SideProject post
+- Template gallery: ready-made decision templates
+- Templates (hiring, trips, lunch)
+- Integrate with Slack so teams find us
+IDEAS>>>

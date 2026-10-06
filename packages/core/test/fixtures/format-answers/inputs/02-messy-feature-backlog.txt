@@ -1,0 +1,23 @@
+IDEAS for Deci v2 (brainstorm, unsorted!!)
+
+- dark mode
+* export to PDF — so we can attach results to emails
+•  Slack bot: post the vote result into a channel
+1) mobile app?? maybe later
+2) import from Trello boards
+[ ] Notion integration: pull a database as options
+- [x] keyboard shortcuts (done already? check)
+-   anonymous voting mode – people are shy in public votes
+* templates for common decisions (hiring, vendor choice, team lunch)
+deadline for voting
+  -> auto close at a set time + reminder
+- comments with @mentions
+• weighted criteria (price 40%, quality 30%, speed 30%)
+- ask Ben about the API limits
+* emoji reactions on options 👍🔥
+- show who hasn't voted yet
+- link previews for URLs in options e.g. https://example.com/product
+- undo for accidental grade changes
+
+---
+TODO later: clean this up
