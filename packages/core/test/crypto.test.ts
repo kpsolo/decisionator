@@ -88,8 +88,11 @@ describe("WebCrypto Password Codec", () => {
 
     const encrypted = await encrypt(plaintext, key);
     const parts = encrypted.split(":");
-    // modify one character of ciphertext base64
-    const tampered = `${parts[0]}:${parts[1]}:${parts[2]}:A${(parts[3] ?? "").slice(1)}`;
+    // modify first character of ciphertext base64 deterministically
+    const cipherText = parts[3] ?? "";
+    const firstChar = cipherText[0] ?? "A";
+    const flippedChar = firstChar === "A" ? "B" : "A";
+    const tampered = `${parts[0]}:${parts[1]}:${parts[2]}:${flippedChar}${cipherText.slice(1)}`;
 
     await expect(decrypt(tampered, key)).rejects.toThrow();
   });
