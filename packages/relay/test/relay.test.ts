@@ -371,8 +371,9 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
       // Wait for live WS notification
       await new Promise((r) => setTimeout(r, 200));
       expect(liveEvents.length).toBe(1);
-      expect(liveEvents[0].docId).toBe("live-doc");
-      expect(liveEvents[0].seq).toBe(1);
+      const firstEvent = liveEvents[0];
+      expect(firstEvent?.docId).toBe("live-doc");
+      expect(firstEvent?.seq).toBe(1);
 
       liveWs.close();
 

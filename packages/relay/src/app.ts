@@ -314,7 +314,13 @@ export function createRelayApp(options: RelayServerOptions = {}) {
     }
 
     const body = auth.jsonBody;
-    if (!body || typeof body.seq !== "number" || typeof body.ciphertext !== "string") {
+    if (
+      !body ||
+      typeof body.seq !== "number" ||
+      typeof body.keyEpoch !== "number" ||
+      typeof body.nonce !== "string" ||
+      typeof body.ciphertext !== "string"
+    ) {
       return c.json({ error: "Invalid snapshot payload" }, 400);
     }
 
