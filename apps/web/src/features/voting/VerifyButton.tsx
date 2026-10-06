@@ -5,8 +5,10 @@ import { bordaStrategy } from "@decisionator/strategy-borda";
 import { ownerPickStrategy } from "@decisionator/strategy-owner-pick";
 import { randomStrategy } from "@decisionator/strategy-random";
 import { weightedStrategy } from "@decisionator/strategy-weighted";
+import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
 
 const STRATEGY_REGISTRY: Record<string, StrategyPlugin> = {
   "org.decisionator.strategy.borda": bordaStrategy,
@@ -64,50 +66,36 @@ export const VerifyButton: React.FC<VerifyButtonProps> = ({ outcome }) => {
   };
 
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      <button
+    <div className="inline-flex flex-wrap items-center gap-2">
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={handleVerify}
-        className="btn btn-outline"
-        style={{ fontSize: 12, padding: "4px 8px" }}
+        leftIcon={<ShieldCheck className="h-3.5 w-3.5" />}
       >
         Verify Outcome
-      </button>
+      </Button>
 
-      {status === "reproduced" && (
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--color-success, #22c55e)",
-          }}
-        >
-          Reproduced ✓
-        </span>
-      )}
+      <output className="inline-flex items-center text-xs">
+        {status === "reproduced" && (
+          <span className="inline-flex items-center gap-1 font-semibold text-success">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+            Reproduced ✓
+          </span>
+        )}
 
-      {status === "mismatch" && (
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--color-danger, #ef4444)",
-          }}
-        >
-          Mismatch ✗
-        </span>
-      )}
+        {status === "mismatch" && (
+          <span className="inline-flex items-center gap-1 font-semibold text-destructive">
+            <XCircle className="h-3.5 w-3.5" aria-hidden />
+            Mismatch ✗
+          </span>
+        )}
 
-      {status === "unavailable" && (
-        <span
-          style={{
-            fontSize: 12,
-            color: "var(--text-muted)",
-          }}
-        >
-          Strategy unavailable
-        </span>
-      )}
+        {status === "unavailable" && (
+          <span className="text-muted-foreground">Strategy unavailable</span>
+        )}
+      </output>
     </div>
   );
 };

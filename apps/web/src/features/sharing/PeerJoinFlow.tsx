@@ -1,7 +1,19 @@
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import { InPagePeerClient } from "@decisionator/share-inpage";
-import React, { useEffect, useState } from "react";
+import { Radio, Unplug, Users } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
+import { Input } from "../../components/ui/input.js";
+import { Skeleton } from "../../components/ui/skeleton.js";
 import { GradeInput } from "../grading/GradeInput.js";
 
 export function PeerJoinFlow() {
@@ -14,6 +26,7 @@ export function PeerJoinFlow() {
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
   const [peerClient, setPeerClient] = useState<InPagePeerClient | null>(null);
   const [disconnectedReason, setDisconnectedReason] = useState<string | null>(null);
+  const nameId = useId();
 
   const handleJoin = () => {
     if (!sessionId) return;
@@ -48,121 +61,125 @@ export function PeerJoinFlow() {
 
   if (disconnectedReason) {
     return (
-      <div className="card" style={{ textAlign: "center", padding: 32 }}>
-        <h3>Session Disconnected</h3>
-        <p style={{ color: "var(--text-muted)", marginTop: 8 }}>{disconnectedReason}</p>
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
-          The host closed their browser tab. Thank you for participating!
-        </p>
-      </div>
+      <Card className="mx-auto mt-6 max-w-md text-center">
+        <CardHeader className="items-center">
+          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <Unplug className="h-5 w-5 text-muted-foreground" aria-hidden />
+          </div>
+          <CardTitle>Session Disconnected</CardTitle>
+          <CardDescription>{disconnectedReason}</CardDescription>
+          <p className="pt-2 text-sm text-muted-foreground">
+            The host closed their browser tab. Thank you for participating!
+          </p>
+        </CardHeader>
+      </Card>
     );
   }
 
   if (!joined) {
     return (
-      <div className="card" style={{ maxWidth: 440, margin: "40px auto", padding: 24 }}>
-        <h3>Join Live Decision Session</h3>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-          Connect directly to the in-page host session: <code>{sessionId}</code>
-        </p>
-        <div style={{ marginTop: 16 }}>
-          <label htmlFor="peer-display-name" style={{ fontSize: 12, fontWeight: 600 }}>
-            Your Name
-          </label>
-          <input
-            id="peer-display-name"
-            type="text"
-            className="input"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            style={{ width: "100%", marginTop: 4 }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={handleJoin}
-          className="btn btn-primary"
-          style={{ width: "100%", marginTop: 16 }}
-        >
-          Connect & Vote
-        </button>
-      </div>
+      <Card className="mx-auto mt-6 max-w-md">
+        <CardHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Users className="h-5 w-5" aria-hidden />
+          </div>
+          <CardTitle>Join Live Decision Session</CardTitle>
+          <CardDescription className="[overflow-wrap:anywhere]">
+            Connect directly to the in-page host session:{" "}
+            <code className="font-mono text-xs">{sessionId}</code>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleJoin();
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={nameId} className="text-sm font-medium">
+                Your Name
+              </label>
+              <Input
+                id={nameId}
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                autoComplete="nickname"
+              />
+            </div>
+            <Button type="submit" className="w-full">
+              Connect & Vote
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     );
   }
 
   if (!snapshot) {
     return (
-      <div className="card" style={{ textAlign: "center", padding: 32 }}>
-        <h3>Connecting to host...</h3>
-        <p style={{ color: "var(--text-muted)", marginTop: 8 }}>
-          Waiting for the host's tab to share the current project state.
-        </p>
-      </div>
+      <Card className="mx-auto mt-6 max-w-md" aria-busy="true">
+        <CardHeader>
+          <CardTitle>Connecting to host...</CardTitle>
+          <CardDescription>
+            Waiting for the host's tab to share the current project state.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-16 w-full" />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div
-      style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 680, margin: "0 auto" }}
-    >
-      <div className="card">
-        <span
-          style={{
-            fontSize: 10,
-            padding: "2px 6px",
-            borderRadius: 4,
-            background: "rgba(16, 185, 129, 0.15)",
-            color: "#10b981",
-            fontWeight: 600,
-          }}
-        >
-          CONNECTED PEER
-        </span>
-        <h2 style={{ margin: "8px 0 4px" }}>{snapshot.project.title}</h2>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+      <div className="space-y-2">
+        <Badge variant="success" className="gap-1.5 uppercase tracking-wide">
+          <Radio className="h-3 w-3" aria-hidden />
+          Connected peer
+        </Badge>
+        <h2 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
+          {snapshot.project.title}
+        </h2>
         {snapshot.project.description && (
-          <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
-            {snapshot.project.description}
-          </p>
+          <p className="text-sm text-muted-foreground">{snapshot.project.description}</p>
         )}
       </div>
 
-      <div className="card">
-        <h3>Cast Your Grades</h3>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
-          Your selections are sent directly to the host's browser tab in real time.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Cast Your Grades</CardTitle>
+          <CardDescription>
+            Your selections are sent directly to the host's browser tab in real time.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
           {snapshot.options.map((opt) => {
             const myGrade = snapshot.grades.find(
               (g) => g.by === participantId && g.optionId === opt.id
             );
             return (
-              <div
-                key={opt.id}
-                style={{
-                  padding: 12,
-                  borderRadius: 6,
-                  border: "1px solid var(--border)",
-                  background: "var(--bg)",
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>{opt.title}</div>
+              <div key={opt.id} className="rounded-lg border border-border bg-background/60 p-4">
+                <div className="font-semibold [overflow-wrap:anywhere]">{opt.title}</div>
                 {opt.description && (
-                  <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
-                    {opt.description}
-                  </div>
+                  <div className="mt-1 text-sm text-muted-foreground">{opt.description}</div>
                 )}
-                <GradeInput
-                  value={myGrade?.value || 0}
-                  onChange={(val) => handleGrade(opt.id, val)}
-                  disabled={false}
-                />
+                <div className="mt-3">
+                  <GradeInput
+                    value={myGrade?.value || 0}
+                    onChange={(val) => handleGrade(opt.id, val)}
+                    disabled={false}
+                  />
+                </div>
               </div>
             );
           })}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,5 +1,8 @@
 import type { Option, OutcomeRecord, Ranking } from "@decisionator/core";
+import { Award, History, Trophy } from "lucide-react";
 import type React from "react";
+import { Badge } from "../../components/ui/badge.js";
+import { Card, CardContent, CardHeader } from "../../components/ui/card.js";
 import { VerifyButton } from "./VerifyButton.js";
 
 export interface ResultsViewProps {
@@ -23,161 +26,155 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   const latestOutcome =
     outcomes.find((o) => (o.round ?? 1) === currentRound) || outcomes[outcomes.length - 1];
 
-  // If voting is open and live results is off
   if (isOpen && !liveResults) {
     const roundBallotCount = rankings.filter((r) => (r.round ?? 1) === currentRound).length;
     return (
-      <div
-        className="card"
-        style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", padding: 32 }}
-      >
-        <h3 style={{ marginBottom: 8 }}>Voting in Progress</h3>
-        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
-          Live results are disabled for this round. {roundBallotCount}{" "}
-          {roundBallotCount === 1 ? "ballot has" : "ballots have"} been submitted. Results will be
-          revealed when voting is closed by the owner.
-        </p>
-      </div>
+      <Card className="max-w-xl mx-auto border-border bg-card text-center py-12 shadow-xs">
+        <CardContent className="space-y-3">
+          <h3 className="text-lg font-bold">Voting in Progress</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Live results are disabled for this round. {roundBallotCount}{" "}
+            {roundBallotCount === 1 ? "ballot has" : "ballots have"} been submitted. Results will be
+            revealed when voting is closed by the owner.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   if (!latestOutcome) {
     return (
-      <div
-        className="card"
-        style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", padding: 32 }}
-      >
-        <h3 style={{ marginBottom: 8 }}>No Outcomes Recorded Yet</h3>
-        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
-          Once voting is closed, the deterministic tally will record an outcome here.
-        </p>
-      </div>
+      <Card className="max-w-xl mx-auto border-border bg-card text-center py-12 shadow-xs">
+        <CardContent className="space-y-3">
+          <h3 className="text-lg font-bold">No Outcomes Recorded Yet</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Once voting is closed, the deterministic tally will record an outcome here.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   const winnerOption = optionMap.get(latestOutcome.result.winner);
 
   return (
-    <div
-      style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 640, margin: "0 auto" }}
-    >
-      {/* Winner Card */}
-      <div
-        className="card"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(234, 179, 8, 0.1) 0%, rgba(34, 197, 94, 0.1) 100%)",
-          border: "1px solid rgba(234, 179, 8, 0.4)",
-          padding: 24,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                color: "var(--color-warning, #eab308)",
-              }}
-            >
-              ★ Round {latestOutcome.round ?? 1} Winner ★
-            </span>
-            <h2 style={{ margin: "6px 0 8px 0" }}>
-              {winnerOption?.title || latestOutcome.result.winner}
-            </h2>
-            {winnerOption?.description && (
-              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14 }}>
-                {winnerOption.description}
-              </p>
-            )}
-          </div>
-          <VerifyButton outcome={latestOutcome} />
-        </div>
+    <div className="space-y-6 max-w-xl mx-auto">
+      {/* Winner Hero Card */}
+      <Card className="border-rating/40 bg-gradient-to-br from-rating/10 via-card to-success/10 shadow-sm">
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-foreground font-bold text-xs uppercase tracking-wider">
+                <Trophy className="h-4 w-4 text-rating" aria-hidden="true" />
+                <span>{`Round ${latestOutcome.round ?? 1} Winner`}</span>
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                {winnerOption?.title || latestOutcome.result.winner}
+              </h2>
+              {winnerOption?.description && (
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {winnerOption.description}
+                </p>
+              )}
+            </div>
 
-        <div
-          style={{
-            marginTop: 16,
-            fontSize: 13,
-            color: "var(--text-muted)",
-            display: "flex",
-            gap: 16,
-          }}
-        >
-          <span>
-            Tie-Break Used: <strong>{latestOutcome.tieBreak}</strong>
-          </span>
-          <span>
-            Decided: <strong>{new Date(latestOutcome.at).toLocaleDateString()}</strong>
-          </span>
-        </div>
-      </div>
+            <VerifyButton outcome={latestOutcome} />
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-muted-foreground border-t border-border/80 pt-3 flex-wrap">
+            <span>
+              Tie-Break Used:{" "}
+              <strong className="font-medium text-foreground">{latestOutcome.tieBreak}</strong>
+            </span>
+            <span>
+              Decided:{" "}
+              <strong className="font-medium text-foreground">
+                {new Date(latestOutcome.at).toLocaleDateString()}
+              </strong>
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Full Order & Points Card */}
-      <div className="card">
-        <h4 style={{ margin: "0 0 16px 0" }}>Final Ranked Order & Points</h4>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <Card className="border-border bg-card shadow-xs">
+        <CardHeader>
+          <h4 className="text-base font-semibold leading-none tracking-tight flex items-center gap-2">
+            <Award className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>Final Ranked Order & Points</span>
+          </h4>
+        </CardHeader>
+        <CardContent className="space-y-2">
           {latestOutcome.result.order.map((item, idx) => {
             const opt = optionMap.get(item.optionId);
             return (
               <div
                 key={item.optionId}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  borderRadius: 6,
-                  background: idx === 0 ? "rgba(234, 179, 8, 0.1)" : "var(--bg)",
-                  border: "1px solid var(--border)",
-                }}
+                className={`flex items-center justify-between p-3 rounded-lg border text-sm transition-colors ${
+                  idx === 0
+                    ? "border-rating/40 bg-rating/10 font-semibold"
+                    : "border-border bg-card/60"
+                }`}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, width: 24 }}>#{idx + 1}</span>
-                  <span style={{ fontWeight: 500, fontSize: 14 }}>
-                    {opt?.title || item.optionId}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
+                      idx === 0
+                        ? "bg-primary-solid text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    #{idx + 1}
                   </span>
+                  <span className="truncate text-foreground">{opt?.title || item.optionId}</span>
                 </div>
-                <div style={{ display: "flex", gap: 16, fontSize: 13, color: "var(--text-muted)" }}>
-                  <span>{item.firstPlaces} 1st places</span>
-                  <strong>{item.points} pts</strong>
-                </div>
+
+                {/* Ranked (Borda) outcomes carry points; draws and owner picks list order only. */}
+                {(item.firstPlaces !== undefined || item.points !== undefined) && (
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0 pl-2">
+                    {item.firstPlaces !== undefined && <span>{item.firstPlaces} 1st places</span>}
+                    {item.points !== undefined && (
+                      <Badge variant="secondary" className="font-bold text-xs">
+                        {item.points} pts
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* History of Rounds */}
       {outcomes.length > 1 && (
-        <div className="card">
-          <h4 style={{ margin: "0 0 12px 0" }}>Round History ({outcomes.length} rounds)</h4>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <Card className="border-border bg-card shadow-xs">
+          <CardHeader>
+            <h4 className="text-sm font-semibold leading-none tracking-tight flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <span>{`Round History (${outcomes.length} rounds)`}</span>
+            </h4>
+          </CardHeader>
+          <CardContent className="space-y-2">
             {outcomes.map((out) => (
               <div
                 key={out.id || out.at}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "8px 12px",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  fontSize: 13,
-                }}
+                className="flex items-center justify-between p-2.5 rounded-md border border-border text-xs bg-muted/20"
               >
-                <span>
+                <span className="text-foreground">
                   Round {out.round ?? 1}: Winner{" "}
                   <strong>{optionMap.get(out.result.winner)?.title || out.result.winner}</strong>
                 </span>
-                <span style={{ color: "var(--text-muted)" }}>
+                <span className="text-muted-foreground">
                   {new Date(out.at).toLocaleDateString()}
                 </span>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 };
+
+export default ResultsView;

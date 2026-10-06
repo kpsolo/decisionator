@@ -1,4 +1,7 @@
+import { Star } from "lucide-react";
 import type React from "react";
+import { useState } from "react";
+import { cn } from "../../lib/utils.js";
 
 export interface GradeInputProps {
   value?: number;
@@ -6,6 +9,11 @@ export interface GradeInputProps {
   authorName?: string;
   updatedAt?: string;
   disabled?: boolean;
+  /** Accessible name for the star group, e.g. "Your rating for Picnic". */
+  label?: string;
+  /** Show the "by author • time" caption under the stars (default true). */
+  showMeta?: boolean;
+  size?: "sm" | "md";
   onChange: (newValue: number) => void;
 }
 
@@ -15,35 +23,33 @@ export const GradeInput: React.FC<GradeInputProps> = ({
   authorName,
   updatedAt,
   disabled = false,
+  label = "Grade option 1 to 5",
+  showMeta = true,
+  size = "md",
   onChange,
 }) => {
+  // Previewing a rating while pointing makes the 1–5 scale obvious before committing.
+  const [hovered, setHovered] = useState<number | null>(null);
+  const shown = !disabled && hovered !== null ? hovered : (value ?? 0);
+
   return (
-    <div
-      className="grade-input"
-      style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}
-    >
+    <div className="inline-flex flex-col gap-1 items-end">
       <fieldset
-        style={{
-          display: "flex",
-          gap: 6,
-          border: "none",
-          padding: 0,
-          margin: 0,
-        }}
-        aria-label="Grade option 1 to 5"
+        className="flex items-center border-0 p-0 m-0"
+        aria-label={label}
+        onPointerLeave={() => setHovered(null)}
       >
         {[1, 2, 3, 4, 5].map((star) => {
-          const isSelected = value !== undefined && value >= star;
+          const isLit = shown >= star;
           return (
             <label
               key={star}
-              style={{
-                cursor: disabled ? "default" : "pointer",
-                fontSize: 20,
-                color: isSelected ? "var(--color-warning, #b45309)" : "var(--text-muted)",
-                display: "inline-flex",
-                alignItems: "center",
-              }}
+              onPointerEnter={() => setHovered(star)}
+              className={cn(
+                "rounded select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                size === "sm" ? "p-0.5 pointer-coarse:p-2" : "p-1 pointer-coarse:p-2",
+                disabled ? "cursor-default opacity-60" : "cursor-pointer"
+              )}
             >
               <input
                 type="radio"
@@ -52,22 +58,25 @@ export const GradeInput: React.FC<GradeInputProps> = ({
                 checked={value === star}
                 disabled={disabled}
                 onChange={() => onChange(star)}
-                style={{
-                  position: "absolute",
-                  opacity: 0,
-                  width: 1,
-                  height: 1,
-                  margin: -1,
-                }}
+                className="sr-only"
                 aria-label={`${star} star${star > 1 ? "s" : ""}`}
               />
-              ★
+              <Star
+                aria-hidden="true"
+                className={cn(
+                  "transition-colors",
+                  size === "sm" ? "h-4 w-4" : "h-5 w-5",
+                  isLit ? "fill-rating text-rating" : "text-muted-foreground/70",
+                  // Hover preview reads lighter than a committed rating.
+                  isLit && hovered !== null && !disabled && "opacity-80"
+                )}
+              />
             </label>
           );
         })}
       </fieldset>
-      {(authorName || updatedAt) && (
-        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+      {showMeta && (authorName || updatedAt) && (
+        <span className="text-[11px] text-muted-foreground font-medium">
           {authorName ? `by ${authorName}` : ""}
           {authorName && updatedAt ? " • " : ""}
           {updatedAt ? new Date(updatedAt).toLocaleTimeString() : ""}
@@ -76,3 +85,5 @@ export const GradeInput: React.FC<GradeInputProps> = ({
     </div>
   );
 };
+
+export default GradeInput;

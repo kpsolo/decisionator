@@ -1,6 +1,8 @@
 import type { QuotaBudget, WriteQueue } from "@decisionator/store-google-sheets";
+import { Clock, RefreshCw } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
+import { Badge } from "../components/ui/badge.js";
 
 export interface SyncBannerProps {
   budget?: QuotaBudget;
@@ -61,21 +63,25 @@ export const SyncBanner: React.FC<SyncBannerProps> = ({ budget, queue, spreadshe
   return (
     <output
       aria-live="polite"
-      style={{
-        width: "100%",
-        padding: "8px 16px",
-        background: isPaused ? "rgba(234, 179, 8, 0.15)" : "rgba(59, 130, 246, 0.15)",
-        borderBottom: `1px solid ${isPaused ? "rgba(234, 179, 8, 0.3)" : "rgba(59, 130, 246, 0.3)"}`,
-        color: isPaused ? "var(--color-warning, #eab308)" : "var(--color-info, #60a5fa)",
-        fontSize: 13,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
+      className={`w-full px-4 py-2 text-xs flex justify-between items-center transition-colors border-b ${
+        isPaused
+          ? "bg-warning/15 border-warning/30 text-warning"
+          : "bg-primary/10 border-primary/20 text-primary"
+      }`}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 16 }}>{isPaused ? "⏳" : "🔄"}</span>
-        <span>
+      <div className="flex items-center gap-2">
+        {isPaused ? (
+          <Clock
+            className="h-4 w-4 shrink-0 animate-pulse motion-reduce:animate-none text-warning"
+            aria-hidden="true"
+          />
+        ) : (
+          <RefreshCw
+            className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none text-primary"
+            aria-hidden="true"
+          />
+        )}
+        <span className="font-medium text-foreground">
           {isPaused
             ? `Syncing paused due to rate limits. Retrying in ${retryCountdown} s...`
             : "Syncing changes to Google Sheets..."}
@@ -83,17 +89,9 @@ export const SyncBanner: React.FC<SyncBannerProps> = ({ budget, queue, spreadshe
       </div>
 
       {queuedCount > 0 && (
-        <span
-          style={{
-            fontSize: 12,
-            padding: "2px 8px",
-            borderRadius: 12,
-            background: "rgba(0,0,0,0.2)",
-            border: "1px solid var(--border)",
-          }}
-        >
+        <Badge variant={isPaused ? "warning" : "secondary"} className="text-[11px] font-mono">
           {queuedCount} {queuedCount === 1 ? "write" : "writes"} queued
-        </span>
+        </Badge>
       )}
     </output>
   );

@@ -1,5 +1,8 @@
+import { Bot, Check, Clock, Copy, ShieldAlert, Terminal } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 
 export interface AgentBriefProps {
   projectTitle: string;
@@ -85,142 +88,107 @@ export const AgentBrief: React.FC<AgentBriefProps> = ({
   };
 
   return (
-    <div
-      className="card"
-      style={{
-        border: "1px solid var(--accent, #6366f1)",
-        borderRadius: 8,
-        padding: 16,
-        background: "var(--card-bg, #ffffff)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: 16, color: "var(--accent, #6366f1)" }}>
-          📋 Agent Brief (FR-042, FR-043)
-        </h3>
-        {onRevoke && (
-          <button
-            type="button"
-            onClick={onRevoke}
-            className="btn btn-outline"
-            style={{ fontSize: 12, color: "var(--error, #ef4444)" }}
-          >
-            Revoke Access
-          </button>
-        )}
-      </div>
-
-      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 12px 0" }}>
-        Copy this brief and provide it to your agent (Claude Code, Claude Desktop, Cursor, or
-        script). The bearer token expires automatically on{" "}
-        {new Date(expiresAt).toLocaleTimeString()}.
-      </p>
-
-      {/* Full brief preview */}
-      <div style={{ position: "relative", marginBottom: 16 }}>
-        <pre
-          style={{
-            background: "var(--bg, #f8fafc)",
-            padding: 12,
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            fontSize: 12,
-            fontFamily: "monospace",
-            whiteSpace: "pre-wrap",
-            maxHeight: 220,
-            overflowY: "auto",
-            margin: 0,
-          }}
-        >
-          {fullBrief}
-        </pre>
-        <button
-          type="button"
-          onClick={() => copyToClipboard(fullBrief, setCopiedBrief)}
-          className="btn btn-primary"
-          style={{ position: "absolute", top: 8, right: 8, fontSize: 12, padding: "4px 8px" }}
-        >
-          {copiedBrief ? "Copied!" : "Copy Full Brief"}
-        </button>
-      </div>
-
-      {/* Ready-made MCP Snippets */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 4,
-            }}
-          >
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Claude CLI command:</span>
-            <button
-              type="button"
-              onClick={() => copyToClipboard(claudeCliCommand, setCopiedCli)}
-              className="btn btn-outline"
-              style={{ fontSize: 11, padding: "2px 6px" }}
-            >
-              {copiedCli ? "Copied!" : "Copy"}
-            </button>
+    <Card className="border-agent-border/60 bg-agent/5">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-agent/15 text-agent">
+              <Bot className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <div>
+              <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+                Agent Brief (FR-042, FR-043)
+              </CardTitle>
+            </div>
           </div>
-          <code
-            style={{
-              display: "block",
-              background: "var(--bg, #f8fafc)",
-              padding: "6px 8px",
-              borderRadius: 4,
-              border: "1px solid var(--border)",
-              fontSize: 12,
-              wordBreak: "break-all",
-            }}
-          >
-            {claudeCliCommand}
-          </code>
+          {onRevoke && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRevoke}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+              leftIcon={<ShieldAlert className="h-3.5 w-3.5" />}
+            >
+              Revoke Access
+            </Button>
+          )}
         </div>
+      </CardHeader>
 
-        <div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 4,
-            }}
-          >
-            <span style={{ fontSize: 12, fontWeight: 600 }}>MCP Client JSON config:</span>
-            <button
-              type="button"
-              onClick={() => copyToClipboard(claudeJsonSnippet, setCopiedJson)}
-              className="btn btn-outline"
-              style={{ fontSize: 11, padding: "2px 6px" }}
-            >
-              {copiedJson ? "Copied!" : "Copy"}
-            </button>
-          </div>
-          <pre
-            style={{
-              background: "var(--bg, #f8fafc)",
-              padding: "6px 8px",
-              borderRadius: 4,
-              border: "1px solid var(--border)",
-              fontSize: 11,
-              fontFamily: "monospace",
-              margin: 0,
-            }}
-          >
-            {claudeJsonSnippet}
+      <CardContent className="space-y-4">
+        <p className="flex items-start gap-2 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5 mt-0.5 shrink-0 text-agent" aria-hidden="true" />
+          <span>
+            Copy this brief and provide it to your agent (Claude Code, Claude Desktop, Cursor, or
+            script). The bearer token expires automatically on{" "}
+            <strong className="text-foreground">{new Date(expiresAt).toLocaleTimeString()}</strong>.
+          </span>
+        </p>
+
+        {/* Full brief preview */}
+        <div className="relative">
+          <pre className="rounded-lg border border-border bg-muted/50 p-3 text-xs font-mono text-foreground overflow-y-auto max-h-48 leading-relaxed whitespace-pre-wrap">
+            {fullBrief}
           </pre>
+          <Button
+            type="button"
+            size="sm"
+            variant="agent"
+            onClick={() => copyToClipboard(fullBrief, setCopiedBrief)}
+            className="absolute top-2.5 right-2.5 text-xs h-7 px-2.5"
+            leftIcon={
+              copiedBrief ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />
+            }
+          >
+            {copiedBrief ? "Copied!" : "Copy Full Brief"}
+          </Button>
         </div>
-      </div>
-    </div>
+
+        {/* Ready-made MCP Snippets */}
+        <div className="space-y-3 pt-1">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Terminal className="h-3.5 w-3.5 text-agent" aria-hidden="true" />
+                Claude CLI command:
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(claudeCliCommand, setCopiedCli)}
+                className="h-6 px-2 text-[11px]"
+                leftIcon={copiedCli ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              >
+                {copiedCli ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+            <code className="block rounded-md border border-border bg-muted/40 p-2 font-mono text-xs text-foreground break-all">
+              {claudeCliCommand}
+            </code>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">MCP Client JSON config:</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(claudeJsonSnippet, setCopiedJson)}
+                className="h-6 px-2 text-[11px]"
+                leftIcon={copiedJson ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              >
+                {copiedJson ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+            <pre className="rounded-md border border-border bg-muted/40 p-2 font-mono text-[11px] text-foreground overflow-x-auto">
+              {claudeJsonSnippet}
+            </pre>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };

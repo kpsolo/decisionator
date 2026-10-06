@@ -1,7 +1,20 @@
 import type { ProjectRef, ProjectStore } from "@decisionator/plugin-sdk";
 import { InPageHostServer } from "@decisionator/share-inpage";
+import { Check, Copy, Info, Radio, Users } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog.js";
+import { Input } from "../../components/ui/input.js";
+import { toast } from "../../components/ui/use-toast.js";
 
 interface InPageShareModalProps {
   projectRef: ProjectRef;
@@ -39,128 +52,119 @@ export const InPageShareModal: React.FC<InPageShareModalProps> = ({
 
   const joinUrl = `${window.location.origin}${window.location.pathname}#/join/${sessionId}`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(joinUrl);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+    } catch (err: unknown) {
+      toast({
+        title: "Could not copy link",
+        description: err instanceof Error ? err.message : "Clipboard access was denied.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCopied(true);
+    toast({
+      title: "Join link copied!",
+      description: "Direct in-page join link copied to clipboard.",
+      variant: "success",
+    });
     setTimeout(() => setCopied(false), 2500);
   };
 
+  // Closing this dialog unmounts it, which ends the live session (see effect cleanup).
+  // Like the original non-modal dialog, it only closes through an explicit control
+  // (the X or "End Session"), never by Esc or an accidental click outside.
   return (
-    <dialog
+    <Dialog
       open
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        border: "none",
-        width: "100%",
-        height: "100%",
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
     >
-      <div
-        className="card"
-        style={{
-          background: "var(--bg, #fff)",
-          padding: 24,
-          borderRadius: 10,
-          maxWidth: 480,
-          width: "90%",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
+      <DialogContent
+        className="sm:max-w-md"
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h3 style={{ margin: 0 }}>📡 In-Page Live Session</h3>
-            <p style={{ margin: "4px 0 0", color: "var(--text-muted)", fontSize: 13 }}>
-              Your browser tab is hosting this live voting session directly.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-outline"
-            style={{ padding: "4px 8px" }}
-          >
-            ✕
-          </button>
-        </div>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Radio className="h-5 w-5 text-primary" aria-hidden />
+            <span>In-Page Live Session</span>
+          </DialogTitle>
+          <DialogDescription>
+            Your browser tab is hosting this live voting session directly.
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Live status badge */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 14px",
-            borderRadius: 6,
-            background: "rgba(16, 185, 129, 0.1)",
-            border: "1px solid rgba(16, 185, 129, 0.3)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background: "#10b981",
-                boxShadow: "0 0 8px #10b981",
-              }}
-            />
-            <strong style={{ fontSize: 13, color: "#065f46" }}>Live Host Active</strong>
+        <div className="space-y-4">
+          {/* Live status */}
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-success/30 bg-success/10 px-3.5 py-2.5">
+            <Badge variant="success" className="gap-1.5">
+              <span
+                className="inline-block h-2 w-2 rounded-full bg-success-foreground motion-safe:animate-pulse"
+                aria-hidden
+              />
+              <span>Live Host Active</span>
+            </Badge>
+            <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
+              <Users className="h-3.5 w-3.5 text-primary" aria-hidden />
+              <span>Connected Peers: {peerCount}</span>
+            </span>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#065f46" }}>
-            👥 Connected Peers: {peerCount}
-          </span>
-        </div>
 
-        {/* Share Link */}
-        <div>
-          <label
-            htmlFor="join-link-input"
-            style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}
-          >
-            Temporary Direct Join Link
-          </label>
-          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-            <input
-              id="join-link-input"
-              type="text"
-              readOnly
-              value={joinUrl}
-              className="input"
-              style={{ width: "100%", fontSize: 12 }}
-            />
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="btn btn-primary"
-              style={{ whiteSpace: "nowrap" }}
+          {/* Share Link */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="join-link-input"
+              className="text-xs font-semibold text-muted-foreground"
             >
-              {copied ? "Copied!" : "Copy Link"}
-            </button>
+              Temporary Direct Join Link
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="join-link-input"
+                type="text"
+                readOnly
+                value={joinUrl}
+                className="h-9 bg-background font-mono text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleCopy}
+                leftIcon={
+                  copied ? (
+                    <Check className="h-3.5 w-3.5" aria-hidden />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                  )
+                }
+                className="h-9 shrink-0 text-xs"
+              >
+                {copied ? "Copied!" : "Copy Link"}
+              </Button>
+            </div>
           </div>
+
+          <p className="m-0 flex gap-2 text-xs leading-relaxed text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>
+              Collaborators connecting with this link will stream votes and grades directly into
+              this open browser tab. When you close this tab or this dialog, the live session will
+              end.
+            </span>
+          </p>
         </div>
 
-        <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
-          ℹ️ Collaborators connecting with this link will stream votes and grades directly into this
-          open browser tab. When you close this tab, the live session will end.
-        </p>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-          <button type="button" onClick={onClose} className="btn btn-outline">
-            Done
-          </button>
-        </div>
-      </div>
-    </dialog>
+        <DialogFooter className="border-t border-border pt-3">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            End Session
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
+
+export default InPageShareModal;

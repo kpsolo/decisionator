@@ -19,6 +19,8 @@ export async function saveDraftState(draft: DraftState): Promise<void> {
     id: "current",
     pastedText: draft.pastedText,
     aiAnswer: draft.aiAnswer,
+    title: draft.title,
+    description: draft.description,
     preview: draft.options,
     warnings: [],
     updatedAt: new Date().toISOString(),
@@ -30,8 +32,8 @@ export async function loadDraftState(): Promise<DraftState | undefined> {
   const record = await dbGetDraft("current");
   if (!record) return undefined;
   return {
-    title: "Untitled Decision",
-    description: "",
+    title: record.title || "Untitled Decision",
+    description: record.description || "",
     pastedText: record.pastedText,
     aiAnswer: record.aiAnswer || "",
     options: record.preview,

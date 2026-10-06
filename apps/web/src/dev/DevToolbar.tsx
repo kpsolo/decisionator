@@ -1,6 +1,9 @@
 import type { QuotaBudget } from "@decisionator/store-google-sheets";
+import { X } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card.js";
 
 export interface DevToolbarProps {
   budget?: QuotaBudget;
@@ -32,92 +35,57 @@ export const DevToolbar: React.FC<DevToolbarProps> = ({ budget, onForce429, onTo
 
   if (collapsed) {
     return (
-      <button
+      <Button
         type="button"
+        size="sm"
+        variant="secondary"
         onClick={() => setCollapsed(false)}
-        style={{
-          position: "fixed",
-          bottom: 12,
-          right: 12,
-          zIndex: 9999,
-          background: "#3f3f46",
-          color: "#fff",
-          border: "1px solid #71717a",
-          borderRadius: 16,
-          padding: "4px 10px",
-          fontSize: 11,
-          cursor: "pointer",
-          opacity: 0.8,
-        }}
+        className="fixed bottom-3 right-3 z-[9999] h-8 px-2.5 rounded-full shadow-lg border border-border text-xs opacity-85 hover:opacity-100"
       >
         🛠️ Dev
-      </button>
+      </Button>
     );
   }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 12,
-        right: 12,
-        zIndex: 9999,
-        background: "#18181b",
-        border: "1px solid #3f3f46",
-        borderRadius: 8,
-        padding: "10px 14px",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        fontSize: 12,
-        color: "#f4f4f5",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          borderBottom: "1px solid #27272a",
-          paddingBottom: 4,
-        }}
-      >
-        <span style={{ fontWeight: 600 }}>🛠️ Dev Toolbar (T072)</span>
+    <Card className="fixed bottom-3 right-3 z-[9999] shadow-2xl border-border bg-card/95 backdrop-blur-sm max-w-xs">
+      <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-xs font-semibold text-foreground">
+          🛠️ Dev Toolbar (T072)
+        </CardTitle>
         <button
           type="button"
           onClick={() => setCollapsed(true)}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#a1a1aa",
-            cursor: "pointer",
-            fontSize: 14,
-          }}
+          className="text-muted-foreground hover:text-foreground cursor-pointer"
+          aria-label="Close Dev Toolbar"
         >
-          ×
+          <X className="h-4 w-4" />
         </button>
-      </div>
+      </CardHeader>
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          type="button"
-          onClick={handleForce429}
-          className="btn btn-outline"
-          style={{ fontSize: 11, padding: "4px 8px" }}
-        >
-          ⚡ Force 429 Rate Limit
-        </button>
+      <CardContent className="p-3 pt-0 space-y-2">
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleForce429}
+            className="h-7 text-[11px] px-2"
+          >
+            ⚡ Force 429 Rate Limit
+          </Button>
 
-        <button
-          type="button"
-          onClick={handleToggleOffline}
-          className={`btn ${isOffline ? "btn-primary" : "btn-outline"}`}
-          style={{ fontSize: 11, padding: "4px 8px" }}
-        >
-          {isOffline ? "🌐 Go Online" : "🔌 Go Offline"}
-        </button>
-      </div>
-    </div>
+          <Button
+            type="button"
+            variant={isOffline ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggleOffline}
+            className="h-7 text-[11px] px-2"
+          >
+            {isOffline ? "🌐 Go Online" : "🔌 Go Offline"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 };

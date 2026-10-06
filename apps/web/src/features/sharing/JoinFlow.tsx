@@ -1,6 +1,15 @@
 import { GoogleAuthService } from "@decisionator/store-google-sheets";
+import { AlertCircle, CheckCircle, ExternalLink, KeyRound, LogIn } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
 import { getGoogleConfig } from "../../config/google.js";
 
 interface WindowWithGoogle extends Window {
@@ -72,7 +81,7 @@ export const JoinFlow: React.FC<JoinFlowProps> = ({ fileId, onJoined }) => {
 
         const picker = pickerBuilder.build();
         picker.setVisible(true);
-      } catch (err) {
+      } catch (_err) {
         // Fallback recorded in R21: prompt user to open sheet URL once in Drive then confirm
         setNeedFallback(true);
         setLoading(false);
@@ -85,122 +94,102 @@ export const JoinFlow: React.FC<JoinFlowProps> = ({ fileId, onJoined }) => {
   };
 
   return (
-    <div
-      className="card"
-      style={{ maxWidth: 480, margin: "40px auto", textAlign: "center", padding: 24 }}
-    >
-      <h3 style={{ marginBottom: 12 }}>Join Decision Project</h3>
-      <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 20 }}>
-        You were invited to view or contribute to this decision. Sign in with Google to confirm read
-        or write access to this Sheet.
-      </p>
-
-      {currentUserEmail && (
-        <div
-          style={{
-            padding: "8px 12px",
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            marginBottom: 16,
-            fontSize: 13,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span>
-            Signed in as: <strong>{currentUserEmail}</strong>
-          </span>
-          <button
-            type="button"
-            onClick={() => handleSignIn(true)}
-            className="btn btn-outline"
-            style={{ fontSize: 11, padding: "2px 8px" }}
-          >
-            Switch account
-          </button>
+    <Card className="max-w-md mx-auto my-10 text-center">
+      <CardHeader>
+        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <KeyRound className="h-6 w-6" aria-hidden />
         </div>
-      )}
-
-      {error && (
-        <div
-          role="alert"
-          style={{
-            padding: "8px 12px",
-            background: "rgba(220, 38, 38, 0.1)",
-            color: "var(--color-danger, #ef4444)",
-            borderRadius: 6,
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {needFallback && (
-        <div
-          style={{
-            padding: 12,
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            marginBottom: 16,
-            textAlign: "left",
-            fontSize: 13,
-          }}
-        >
-          <p style={{ marginBottom: 8, fontWeight: 500 }}>Access Confirmation Fallback (R21):</p>
-          <p style={{ marginBottom: 12, color: "var(--text-muted)" }}>
-            Google Picker could not automatically add this public sheet. Click below to view it once
-            in Google Sheets (which registers it in your Drive), then click Confirm.
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <a
-              href={`https://docs.google.com/spreadsheets/d/${fileId}/edit`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline"
-              style={{ fontSize: 12 }}
-            >
-              Open in Google Sheets ↗
-            </a>
-            <button
+        <CardTitle>Join Decision Project</CardTitle>
+        <CardDescription>
+          You were invited to view or contribute to this decision. Sign in with Google to confirm
+          read or write access to this Sheet.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {currentUserEmail && (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+            <span className="truncate mr-2">
+              Signed in as: <strong className="text-foreground">{currentUserEmail}</strong>
+            </span>
+            <Button
               type="button"
-              onClick={handleManualConfirm}
-              className="btn btn-primary"
-              style={{ fontSize: 12 }}
+              variant="outline"
+              size="sm"
+              onClick={() => handleSignIn(true)}
+              className="h-7 px-2 text-xs"
             >
-              Confirm Access
-            </button>
+              Switch account
+            </Button>
           </div>
-        </div>
-      )}
+        )}
 
-      {!currentUserEmail ? (
-        <button
-          type="button"
-          onClick={() => handleSignIn(false)}
-          className="btn btn-primary"
-          disabled={loading}
-          style={{ width: "100%", justifyContent: "center" }}
-        >
-          {loading ? "Signing in..." : "Sign in with Google"}
-        </button>
-      ) : (
-        !needFallback && (
-          <button
-            type="button"
-            onClick={() => openPickerForFile(currentUserEmail)}
-            className="btn btn-primary"
-            disabled={loading}
-            style={{ width: "100%", justifyContent: "center" }}
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-left text-xs text-destructive"
           >
-            {loading ? "Opening Picker..." : "Confirm Access in Google Picker"}
-          </button>
-        )
-      )}
-    </div>
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {needFallback && (
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-left text-xs space-y-2">
+            <div className="font-semibold text-foreground flex items-center gap-1.5">
+              <AlertCircle className="h-4 w-4 text-warning" aria-hidden />
+              Access Confirmation Fallback (R21):
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              Google Picker could not automatically add this public sheet. Click below to view it
+              once in Google Sheets (which registers it in your Drive), then click Confirm.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <a
+                href={`https://docs.google.com/spreadsheets/d/${fileId}/edit`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
+              >
+                Open in Google Sheets
+                <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleManualConfirm}
+                leftIcon={<CheckCircle className="h-3.5 w-3.5" />}
+              >
+                Confirm Access
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!currentUserEmail ? (
+          <Button
+            type="button"
+            className="w-full"
+            disabled={loading}
+            isLoading={loading}
+            onClick={() => handleSignIn(false)}
+            leftIcon={<LogIn className="h-4 w-4" />}
+          >
+            {loading ? "Signing in..." : "Sign in with Google"}
+          </Button>
+        ) : (
+          !needFallback && (
+            <Button
+              type="button"
+              className="w-full"
+              disabled={loading}
+              isLoading={loading}
+              onClick={() => openPickerForFile(currentUserEmail)}
+            >
+              {loading ? "Opening Picker..." : "Confirm Access in Google Picker"}
+            </Button>
+          )
+        )}
+      </CardContent>
+    </Card>
   );
 };

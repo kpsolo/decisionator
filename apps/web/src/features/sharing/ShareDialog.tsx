@@ -1,21 +1,27 @@
-import type { ShareState } from "@decisionator/plugin-sdk";
-import {
-  GoogleAuthService,
-  GoogleSheetsProjectStore,
-  getProjectShareState,
-  removeProjectCollaborator,
-  updateProjectSharing,
-} from "@decisionator/store-google-sheets";
+import type { ProjectRef, ProjectStore, ShareState } from "@decisionator/plugin-sdk";
+import { Copy, Globe, Users } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { getGoogleConfig } from "../../config/google.js";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog.js";
+import { Input } from "../../components/ui/input.js";
+import { NativeSelect } from "../../components/ui/native-select.js";
+import { toast } from "../../components/ui/use-toast.js";
 
 export interface ShareDialogProps {
-  fileId: string;
+  store: ProjectStore;
+  projectRef: ProjectRef;
   onClose: () => void;
 }
 
-export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => {
+export const ShareDialog: React.FC<ShareDialogProps> = ({ store, projectRef, onClose }) => {
   const [shareState, setShareState] = useState<ShareState | null>(null);
   const [copied, setCopied] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -23,20 +29,11 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getStore = () => {
-    const cfg = getGoogleConfig();
-    const googleAuth = new GoogleAuthService({ clientId: cfg.clientId });
-    return new GoogleSheetsProjectStore(googleAuth);
-  };
-
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
-        const cfg = getGoogleConfig();
-        const googleAuth = new GoogleAuthService({ clientId: cfg.clientId });
-        const projectStore = new GoogleSheetsProjectStore(googleAuth);
-        const state = await projectStore.getShareState({ store: "google-sheets", id: fileId });
+        const state = await store.getShareState(projectRef);
         setShareState(state);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
@@ -45,28 +42,38 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
       }
     }
     load();
-  }, [fileId]);
+  }, [store, projectRef]);
 
   const handleCopyLink = async () => {
     if (!shareState?.linkSharing.url) return;
-    await navigator.clipboard.writeText(shareState.linkSharing.url);
+    try {
+      await navigator.clipboard.writeText(shareState.linkSharing.url);
+    } catch (err: unknown) {
+      toast({
+        title: "Could not copy link",
+        description: err instanceof Error ? err.message : "Clipboard access was denied.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCopied(true);
+    toast({
+      title: "Link copied!",
+      description: "Shareable project link copied to clipboard.",
+      variant: "success",
+    });
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleToggleLinkSharing = async (enabled: boolean) => {
     try {
       setLoading(true);
-      const store = getStore();
-      const updated = await store.share(
-        { store: "google-sheets", id: fileId },
-        {
-          linkSharing: {
-            enabled,
-            role: shareState?.linkSharing.role ?? "contribute",
-          },
-        }
-      );
+      const updated = await store.share(projectRef, {
+        linkSharing: {
+          enabled,
+          role: shareState?.linkSharing.role ?? "contribute",
+        },
+      });
       setShareState(updated);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -78,16 +85,12 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
   const handleChangeLinkRole = async (newRole: "contribute" | "view") => {
     try {
       setLoading(true);
-      const store = getStore();
-      const updated = await store.share(
-        { store: "google-sheets", id: fileId },
-        {
-          linkSharing: {
-            enabled: true,
-            role: newRole,
-          },
-        }
-      );
+      const updated = await store.share(projectRef, {
+        linkSharing: {
+          enabled: true,
+          role: newRole,
+        },
+      });
       setShareState(updated);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -101,13 +104,9 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
     if (!inviteEmail.trim()) return;
     try {
       setLoading(true);
-      const store = getStore();
-      const updated = await store.share(
-        { store: "google-sheets", id: fileId },
-        {
-          inviteUsers: [{ email: inviteEmail.trim(), role: inviteRole }],
-        }
-      );
+      const updated = await store.share(projectRef, {
+        inviteUsers: [{ email: inviteEmail.trim(), role: inviteRole }],
+      });
       setShareState(updated);
       setInviteEmail("");
     } catch (err: unknown) {
@@ -118,222 +117,158 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
   };
 
   return (
-    <dialog
+    <Dialog
       open
-      aria-labelledby="share-dialog-title"
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: 20,
-        background: "var(--card-bg)",
-        color: "var(--text)",
-        maxWidth: 520,
-        width: "100%",
-        boxSizing: "border-box",
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <h3 id="share-dialog-title" style={{ margin: 0 }}>
-          Share Decision Project
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="btn btn-outline"
-          style={{ padding: "2px 8px" }}
-        >
-          ✕
-        </button>
-      </div>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" aria-hidden />
+            <span>Share Decision Project</span>
+          </DialogTitle>
+          <DialogDescription>
+            Manage collaborator access and link sharing options for this project.
+          </DialogDescription>
+        </DialogHeader>
 
-      {error && (
-        <div
-          role="alert"
-          style={{ color: "var(--color-danger, #ef4444)", fontSize: 13, marginBottom: 12 }}
-        >
-          {error}
-        </div>
-      )}
-
-      {loading && !shareState ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading sharing settings...</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Link Sharing Section */}
+        {error && (
           <div
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              padding: 12,
-              background: "var(--bg)",
-            }}
+            role="alert"
+            className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive"
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <strong>Link Sharing</strong>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={shareState?.linkSharing.enabled}
-                  onChange={(e) => handleToggleLinkSharing(e.target.checked)}
-                />
-                {shareState?.linkSharing.enabled ? "Enabled" : "Off"}
-              </label>
+            {error}
+          </div>
+        )}
+
+        {loading && !shareState ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Loading sharing settings...
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {/* Link Sharing Section */}
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-primary" aria-hidden />
+                  <strong className="text-sm font-semibold text-foreground">Link Sharing</strong>
+                </div>
+                <label className="flex cursor-pointer select-none items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={shareState?.linkSharing.enabled}
+                    onChange={(e) => handleToggleLinkSharing(e.target.checked)}
+                    className="h-4 w-4 cursor-pointer rounded border-input accent-primary"
+                  />
+                  <span className="font-medium">
+                    {shareState?.linkSharing.enabled ? "Enabled" : "Off"}
+                  </span>
+                </label>
+              </div>
+
+              {shareState?.linkSharing.enabled && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      readOnly
+                      aria-label="Shareable project link"
+                      value={shareState.linkSharing.url}
+                      className="h-8 bg-background font-mono text-xs"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleCopyLink}
+                      leftIcon={<Copy className="h-3.5 w-3.5" aria-hidden />}
+                      className="h-8 shrink-0 text-xs"
+                    >
+                      {copied ? "Copied!" : "Copy Link"}
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>Access level:</span>
+                    <NativeSelect
+                      aria-label="Link sharing access level"
+                      value={shareState.linkSharing.role}
+                      onChange={(e) =>
+                        handleChangeLinkRole(e.target.value as "contribute" | "view")
+                      }
+                      wrapperClassName="min-w-0 flex-1"
+                      className="h-8 text-xs sm:text-xs"
+                    >
+                      <option value="contribute">
+                        Anyone with link can Contribute (Grade, Comment, Vote)
+                      </option>
+                      <option value="view">Anyone with link can View Only</option>
+                    </NativeSelect>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {shareState?.linkSharing.enabled && (
-              <div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input
-                    type="text"
-                    readOnly
-                    aria-label="Shareable project link"
-                    value={shareState.linkSharing.url}
-                    style={{
-                      flex: 1,
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                      border: "1px solid var(--border)",
-                      background: "var(--card-bg)",
-                      color: "var(--text)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="btn btn-primary"
-                    style={{ fontSize: 12 }}
-                  >
-                    {copied ? "Copied!" : "Copy Link"}
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 12,
-                    color: "var(--text-muted)",
-                  }}
+            {/* Email Invite Section */}
+            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3.5">
+              <strong className="block text-sm font-semibold text-foreground">
+                Invite by Email
+              </strong>
+              <form onSubmit={handleInvite} className="flex items-center gap-2">
+                <Input
+                  type="email"
+                  aria-label="Invite email address"
+                  placeholder="colleague@example.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="h-9 text-xs"
+                />
+                <NativeSelect
+                  aria-label="Invite role"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as "contribute" | "view")}
+                  className="h-9 text-xs sm:text-xs"
                 >
-                  <span>Access level:</span>
-                  <select
-                    aria-label="Link sharing access level"
-                    value={shareState.linkSharing.role}
-                    onChange={(e) => handleChangeLinkRole(e.target.value as "contribute" | "view")}
-                    style={{
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      border: "1px solid var(--border)",
-                      background: "var(--bg)",
-                      color: "var(--text)",
-                    }}
-                  >
-                    <option value="contribute">
-                      Anyone with link can Contribute (Grade, Comment, Vote)
-                    </option>
-                    <option value="view">Anyone with link can View Only</option>
-                  </select>
+                  <option value="contribute">Contribute</option>
+                  <option value="view">View</option>
+                </NativeSelect>
+                <Button type="submit" variant="outline" size="sm" className="h-9 shrink-0 text-xs">
+                  Invite
+                </Button>
+              </form>
+              <p className="m-0 text-[11px] text-muted-foreground">
+                Note: Only collaborators invited by email can be removed individually.
+              </p>
+            </div>
+
+            {/* Collaborators List */}
+            {shareState && shareState.collaborators.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <strong className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Collaborators ({shareState.collaborators.length})
+                </strong>
+                <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                  {shareState.collaborators.map((c) => (
+                    <div
+                      key={c.email}
+                      className="flex items-center justify-between rounded-md border border-border bg-card/60 p-2 text-xs"
+                    >
+                      <span className="truncate font-medium">{c.email}</span>
+                      <Badge variant="outline" className="py-0 text-[10px]">
+                        {c.role}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
           </div>
-
-          {/* Email Invite Section */}
-          <div
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              padding: 12,
-              background: "var(--bg)",
-            }}
-          >
-            <strong style={{ display: "block", marginBottom: 8 }}>Invite by Email</strong>
-            <form onSubmit={handleInvite} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input
-                type="email"
-                aria-label="Invite email address"
-                placeholder="colleague@example.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: "4px 8px",
-                  borderRadius: 4,
-                  border: "1px solid var(--border)",
-                  background: "var(--card-bg)",
-                  color: "var(--text)",
-                  fontSize: 13,
-                }}
-              />
-              <select
-                aria-label="Invite role"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as "contribute" | "view")}
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 4,
-                  border: "1px solid var(--border)",
-                  background: "var(--card-bg)",
-                  color: "var(--text)",
-                  fontSize: 12,
-                }}
-              >
-                <option value="contribute">Contribute</option>
-                <option value="view">View</option>
-              </select>
-              <button type="submit" className="btn btn-outline" style={{ fontSize: 12 }}>
-                Invite
-              </button>
-            </form>
-            <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>
-              Note: Only collaborators invited by email can be removed individually.
-            </p>
-          </div>
-
-          {/* Collaborators List */}
-          {shareState && shareState.collaborators.length > 0 && (
-            <div>
-              <strong style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-                Collaborators ({shareState.collaborators.length})
-              </strong>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {shareState.collaborators.map((c) => (
-                  <div
-                    key={c.email}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 12,
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                      background: "var(--bg)",
-                    }}
-                  >
-                    <span>{c.email}</span>
-                    <span style={{ color: "var(--text-muted)" }}>{c.role}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </dialog>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 };
+
+export default ShareDialog;

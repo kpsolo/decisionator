@@ -8,14 +8,20 @@ import {
   extractOptionsJson,
   validateOptionsPayload,
 } from "@decisionator/core";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Sparkles } from "lucide-react";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { Input } from "../../components/ui/input.js";
+import { Textarea } from "../../components/ui/textarea.js";
 import { ConnectAgent } from "../agents/ConnectAgent.js";
+import { type ProjectMeta, toOptions } from "./options-json.js";
 
 export interface FormatStepProps {
   pastedText: string;
   initialAiAnswer?: string;
-  onValidOptions: (options: Option[], rawAnswer: string) => void;
+  onValidOptions: (options: Option[], rawAnswer: string, project?: ProjectMeta) => void;
   onBack: () => void;
 }
 
@@ -29,6 +35,8 @@ export const FormatStep: React.FC<FormatStepProps> = ({
   const [copiedCorrection, setCopiedCorrection] = useState(false);
   const [aiAnswer, setAiAnswer] = useState(initialAiAnswer);
   const [chosenBlockIndex, setChosenBlockIndex] = useState<number>(0);
+  const localeInputId = useId();
+  const answerInputId = useId();
 
   const detectedLang = useMemo(() => detectLanguage(pastedText), [pastedText]);
   const [localeHint, setLocaleHint] = useState(detectedLang);
@@ -75,219 +83,182 @@ export const FormatStep: React.FC<FormatStepProps> = ({
 
   const handleProceed = () => {
     if (validationReport?.ok && validationReport.options) {
-      const normalizedOptions: Option[] = validationReport.options.map((opt, idx) => ({
-        id: opt.id || `opt_${Date.now()}_${idx}`,
-        order: idx + 1,
-        status: "active" as const,
-        title: opt.title,
-        description: opt.description,
-        category: opt.category,
-        tags: opt.tags,
-        pros: opt.pros,
-        cons: opt.cons,
-        effort: opt.effort,
-        links: opt.links,
-      }));
-      onValidOptions(normalizedOptions, aiAnswer);
+      onValidOptions(toOptions(validationReport.options), aiAnswer, validationReport.project);
     }
   };
 
   return (
-    <div className="format-step card">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <h3 style={{ margin: 0 }}>Step 2: AI Round-Trip & Validation</h3>
-        <button
-          type="button"
-          onClick={onBack}
-          className="btn btn-outline"
-          style={{ padding: "4px 8px" }}
-        >
-          &larr; Back to Paste
-        </button>
-      </div>
+    <Card className="border-border bg-card shadow-xs">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-xl font-bold">Step 2: AI Round-Trip & Validation</CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
+          >
+            Back to Paste
+          </Button>
+        </div>
+      </CardHeader>
 
-      <ConnectAgent pastedText={pastedText} localeHint={localeHint} onFormatted={onValidOptions} />
+      <CardContent className="space-y-6">
+        <ConnectAgent
+          pastedText={pastedText}
+          localeHint={localeHint}
+          onFormatted={onValidOptions}
+        />
 
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
-          Or manually: 1. Copy the formatting instructions below and paste them into ChatGPT,
-          Claude, Gemini, or any LLM.
-        </p>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
-          <label style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            Language hint:{" "}
-            <input
+        {/* Manual round-trip */}
+        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+          <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Or manually: 1. Copy the formatting instructions below and paste them into ChatGPT,
+              Claude, Gemini, or any LLM.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label
+              htmlFor={localeInputId}
+              className="flex items-center gap-2 text-xs text-muted-foreground"
+            >
+              Language hint:
+            </label>
+            <Input
+              id={localeInputId}
               type="text"
               value={localeHint}
               onChange={(e) => setLocaleHint(e.target.value)}
-              style={{
-                padding: "2px 6px",
-                borderRadius: 4,
-                border: "1px solid var(--border)",
-                background: "var(--bg)",
-                color: "var(--text)",
-                width: 60,
-              }}
+              className="h-8 w-16 text-center font-mono text-xs"
             />
-          </label>
-          <button
-            type="button"
-            onClick={handleCopyInstruction}
-            className="btn btn-primary"
-            style={{ fontSize: 13 }}
-          >
-            {copied ? "Copied!" : "Copy instructions for AI"}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 8 }}>
-          2. Paste the AI's response here:
-        </p>
-        <textarea
-          value={aiAnswer}
-          onChange={(e) => setAiAnswer(e.target.value)}
-          placeholder="Paste AI response here..."
-          rows={10}
-          style={{
-            width: "100%",
-            padding: 12,
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            fontFamily: "monospace",
-            fontSize: 13,
-            boxSizing: "border-box",
-          }}
-        />
-      </div>
-
-      {/* Multiple blocks choice */}
-      {extraction?.kind === "choose" && (
-        <section
-          aria-label="Choose JSON block"
-          style={{
-            padding: 12,
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            marginBottom: 16,
-            background: "var(--card-bg)",
-          }}
-        >
-          <h4 style={{ margin: "0 0 8px 0" }}>Multiple JSON blocks found</h4>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 8px 0" }}>
-            The AI provided multiple code blocks. Please select which block to import:
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            {extraction.candidates.map((candStr, idx) => (
-              <button
-                key={candStr}
-                type="button"
-                onClick={() => setChosenBlockIndex(idx)}
-                className={`btn ${chosenBlockIndex === idx ? "btn-primary" : "btn-outline"}`}
-                style={{ fontSize: 12 }}
-              >
-                Block {idx + 1} ({candStr.slice(0, 30)}...)
-              </button>
-            ))}
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handleCopyInstruction}
+              leftIcon={<Copy className="h-3.5 w-3.5" />}
+            >
+              {copied ? "Copied!" : "Copy instructions for AI"}
+            </Button>
           </div>
-        </section>
-      )}
-
-      {/* Warnings & Errors */}
-      {validationReport && (
-        <div style={{ marginBottom: 16 }}>
-          {validationReport.warnings.length > 0 && (
-            <div
-              role="alert"
-              style={{
-                padding: "8px 12px",
-                borderRadius: 6,
-                background: "rgba(234, 179, 8, 0.1)",
-                color: "#ca8a04",
-                marginBottom: 8,
-                fontSize: 13,
-              }}
-            >
-              <strong>Warnings:</strong>
-              <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
-                {validationReport.warnings.map((w) => (
-                  <li key={w}>{w}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {!validationReport.ok && validationReport.errors.length > 0 && (
-            <div
-              role="alert"
-              style={{
-                padding: "8px 12px",
-                borderRadius: 6,
-                background: "rgba(220, 38, 38, 0.1)",
-                color: "var(--color-danger, #ef4444)",
-                marginBottom: 8,
-                fontSize: 13,
-              }}
-            >
-              <div
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-              >
-                <strong>Validation Errors:</strong>
-                <button
-                  type="button"
-                  onClick={handleCopyCorrection}
-                  className="btn btn-outline"
-                  style={{ fontSize: 12, padding: "2px 8px" }}
-                >
-                  {copiedCorrection ? "Copied!" : "Copy correction for AI"}
-                </button>
-              </div>
-              <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
-                {validationReport.errors.map((err) => (
-                  <li key={err}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {validationReport.ok && (
-            <output
-              style={{
-                display: "block",
-                padding: "8px 12px",
-                borderRadius: 6,
-                background: "rgba(34, 197, 94, 0.1)",
-                color: "#16a34a",
-                marginBottom: 8,
-                fontSize: 13,
-              }}
-            >
-              Successfully parsed and validated {validationReport.options.length} options!
-            </output>
-          )}
         </div>
-      )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button
+        {/* Paste AI response */}
+        <div className="space-y-2">
+          <label htmlFor={answerInputId} className="text-sm font-medium text-foreground">
+            2. Paste the AI's response here:
+          </label>
+          <Textarea
+            id={answerInputId}
+            value={aiAnswer}
+            onChange={(e) => setAiAnswer(e.target.value)}
+            placeholder="Paste AI response here..."
+            rows={10}
+            className="font-mono text-xs leading-relaxed bg-background"
+          />
+        </div>
+
+        {/* Multiple blocks choice */}
+        {extraction?.kind === "choose" && (
+          <section
+            aria-label="Choose JSON block"
+            className="rounded-lg border border-border bg-card p-4 space-y-2"
+          >
+            <h4 className="font-semibold text-sm">Multiple JSON blocks found</h4>
+            <p className="text-xs text-muted-foreground">
+              The AI provided multiple code blocks. Please select which block to import:
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {extraction.candidates.map((candStr, idx) => (
+                <Button
+                  key={candStr}
+                  type="button"
+                  size="sm"
+                  variant={chosenBlockIndex === idx ? "default" : "outline"}
+                  aria-pressed={chosenBlockIndex === idx}
+                  onClick={() => setChosenBlockIndex(idx)}
+                  className="font-mono text-xs"
+                >
+                  Block {idx + 1} ({candStr.slice(0, 30)}...)
+                </Button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Warnings & Errors */}
+        {validationReport && (
+          <div className="space-y-3">
+            {validationReport.warnings.length > 0 && (
+              <div
+                role="alert"
+                className="rounded-lg border border-warning/30 bg-warning/10 p-3.5 text-xs text-warning space-y-1"
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  <strong>Warnings:</strong>
+                </div>
+                <ul className="list-disc pl-5 space-y-0.5">
+                  {validationReport.warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {!validationReport.ok && validationReport.errors.length > 0 && (
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/20 bg-destructive/10 p-3.5 text-xs text-destructive space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    <strong>Validation Errors:</strong>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyCorrection}
+                    className="h-7 text-xs"
+                  >
+                    {copiedCorrection ? "Copied!" : "Copy correction for AI"}
+                  </Button>
+                </div>
+                <ul className="list-disc pl-5 space-y-0.5">
+                  {validationReport.errors.map((err) => (
+                    <li key={err}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {validationReport.ok && (
+              <output className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3.5 py-2.5 text-xs text-success font-medium">
+                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  Successfully parsed and validated {validationReport.options.length} options!
+                </span>
+              </output>
+            )}
+          </div>
+        )}
+      </CardContent>
+
+      <CardFooter className="flex items-center justify-end border-t border-border pt-4">
+        <Button
           type="button"
+          variant="default"
           onClick={handleProceed}
-          className="btn btn-primary"
           disabled={!validationReport?.ok}
         >
           Proceed to Preview &rarr;
-        </button>
-      </div>
-    </div>
+        </Button>
+      </CardFooter>
+    </Card>
   );
 };

@@ -1,8 +1,12 @@
 import type { Comment } from "@decisionator/core";
 import DOMPurify from "dompurify";
+import { MessageSquare, Send } from "lucide-react";
 import MarkdownIt from "markdown-it";
 import type React from "react";
 import { useMemo, useState } from "react";
+import { Badge } from "../../components/ui/badge.js";
+import { Button } from "../../components/ui/button.js";
+import { Textarea } from "../../components/ui/textarea.js";
 
 export interface CommentThreadProps {
   comments: Comment[];
@@ -14,6 +18,8 @@ export interface CommentThreadProps {
   onAddComment: (body: string) => void;
   onEditComment: (commentId: string, newBody: string) => void;
   onToggleHide: (commentId: string, hidden: boolean) => void;
+  /** Embedded under an option row: no heading (the toggle shows the count) and a lighter form. */
+  compact?: boolean;
 }
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
@@ -28,6 +34,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
   onAddComment,
   onEditComment,
   onToggleHide,
+  compact = false,
 }) => {
   const [newBody, setNewBody] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,23 +68,25 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
   };
 
   return (
-    <div className="comment-thread" style={{ marginTop: 16 }}>
-      <h5 style={{ margin: "0 0 12px 0" }}>Comments ({optionComments.length})</h5>
+    <div className={compact ? "space-y-2.5" : "space-y-3 pt-3"}>
+      {!compact && (
+        <h5 className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{`Comments (${optionComments.length})`}</span>
+        </h5>
+      )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+      {compact && optionComments.length === 0 && (
+        <p className="text-xs text-muted-foreground">No comments yet.</p>
+      )}
+
+      <div className="space-y-2.5">
         {optionComments.map((comment) => {
           if (comment.hidden && !isOwner) {
             return (
               <div
                 key={comment.id}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  background: "var(--card-bg)",
-                  fontStyle: "italic",
-                  fontSize: 12,
-                  color: "var(--text-muted)",
-                }}
+                className="p-2.5 rounded-md bg-muted/30 italic text-xs text-muted-foreground"
               >
                 (This comment was hidden by the owner)
               </div>
@@ -90,98 +99,87 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
           return (
             <div
               key={comment.id}
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: "10px 12px",
-                background: comment.hidden ? "rgba(220, 38, 38, 0.05)" : "var(--bg)",
-                opacity: comment.hidden ? 0.75 : 1,
-              }}
+              className={`rounded-lg border p-3 text-sm transition-colors ${
+                comment.hidden
+                  ? "border-destructive/30 bg-destructive/5 opacity-75"
+                  : "border-border bg-card/40 hover:bg-card"
+              }`}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  fontSize: 12,
-                  color: "var(--text-muted)",
-                  marginBottom: 6,
-                }}
-              >
-                <span>
-                  <strong>{comment.by}</strong> • {new Date(comment.at).toLocaleString()}
-                  {comment.replaces && " (edited)"}
-                  {comment.hidden && " [HIDDEN]"}
-                </span>
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-semibold text-foreground">{comment.by}</span>
+                  <span aria-hidden="true">•</span>
+                  <span>{new Date(comment.at).toLocaleString()}</span>
+                  {comment.replaces && <span className="italic text-[11px]">(edited)</span>}
+                  {comment.hidden && (
+                    <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
+                      HIDDEN
+                    </Badge>
+                  )}
+                </div>
 
-                <div style={{ display: "flex", gap: 6 }}>
+                <div className="flex items-center gap-1">
                   {isAuthor && !isEditing && (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleStartEdit(comment)}
-                      className="btn btn-outline"
-                      style={{ fontSize: 11, padding: "2px 6px" }}
+                      className="h-6 px-2 text-xs"
                     >
                       Edit
-                    </button>
+                    </Button>
                   )}
                   {isOwner && (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => onToggleHide(comment.id, !comment.hidden)}
-                      className="btn btn-outline"
-                      style={{ fontSize: 11, padding: "2px 6px" }}
+                      className="h-6 px-2 text-xs"
                     >
                       {comment.hidden ? "Unhide" : "Hide"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
 
               {isEditing ? (
-                <div>
-                  <textarea
+                <div className="space-y-2 pt-1">
+                  <Textarea
                     value={editBody}
                     onChange={(e) => setEditBody(e.target.value)}
+                    aria-label="Edit comment"
+                    maxLength={10000}
                     rows={3}
-                    style={{
-                      width: "100%",
-                      padding: 6,
-                      borderRadius: 4,
-                      border: "1px solid var(--border)",
-                      background: "var(--card-bg)",
-                      color: "var(--text)",
-                      boxSizing: "border-box",
-                      fontSize: 13,
-                    }}
+                    className="text-xs bg-background"
                   />
-                  <div
-                    style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 4 }}
-                  >
-                    <button
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={() => setEditingId(null)}
-                      className="btn btn-outline"
-                      style={{ fontSize: 11, padding: "2px 6px" }}
+                      className="h-7 text-xs"
                     >
                       Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="default"
+                      size="sm"
                       onClick={() => handleSaveEdit(comment.id)}
-                      className="btn btn-primary"
-                      style={{ fontSize: 11, padding: "2px 6px" }}
+                      className="h-7 text-xs"
                     >
                       Save
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <div
-                  className="comment-body"
+                  className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-foreground [&>p]:m-0"
                   // biome-ignore lint/security/noDangerouslySetInnerHtml: Sanitized via DOMPurify
                   dangerouslySetInnerHTML={renderMarkdown(comment.body)}
-                  style={{ fontSize: 13, lineHeight: 1.5 }}
                 />
               )}
             </div>
@@ -190,49 +188,40 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
       </div>
 
       {disabled && disabledReason && (
-        <div
-          style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic", marginBottom: 8 }}
-        >
-          {disabledReason}
-        </div>
+        <p className="text-xs text-muted-foreground italic pt-1">{disabledReason}</p>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <textarea
+      {/* Add comment form */}
+      <form onSubmit={handleSubmit} className="space-y-2 pt-1">
+        <Textarea
           value={newBody}
           onChange={(e) => setNewBody(e.target.value)}
+          aria-label="Add a comment"
           placeholder={
             disabled
               ? "Commenting disabled for view-only access"
               : "Add a comment (Markdown supported)..."
           }
-          rows={3}
+          rows={compact ? 2 : 3}
           maxLength={10000}
           disabled={disabled}
-          style={{
-            width: "100%",
-            padding: 8,
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            boxSizing: "border-box",
-            fontSize: 13,
-            marginBottom: 8,
-            opacity: disabled ? 0.6 : 1,
-          }}
+          className="text-xs bg-background"
         />
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
+        <div className="flex items-center justify-end">
+          <Button
             type="submit"
-            className="btn btn-primary"
-            style={{ fontSize: 13 }}
+            variant="default"
+            size="sm"
             disabled={disabled || !newBody.trim() || newBody.length > 10000}
+            leftIcon={<Send className="h-3.5 w-3.5" aria-hidden="true" />}
+            className="h-8 text-xs"
           >
             Post Comment
-          </button>
+          </Button>
         </div>
       </form>
     </div>
   );
 };
+
+export default CommentThread;

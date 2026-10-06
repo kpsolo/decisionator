@@ -1,5 +1,16 @@
+import { Lock, Unlock } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "../../components/ui/button.js";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card.js";
+import { Input } from "../../components/ui/input.js";
 
 export interface PasswordPromptProps {
   onUnlock: (password: string) => Promise<boolean>;
@@ -41,56 +52,64 @@ export const PasswordPrompt: React.FC<PasswordPromptProps> = ({ onUnlock, error 
   };
 
   return (
-    <div
-      className="card"
-      style={{ maxWidth: 440, margin: "40px auto", textAlign: "center", padding: 24 }}
-    >
-      <h3 style={{ marginBottom: 8 }}>Password-Protected Decision</h3>
-      <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
-        This project is encrypted. Enter the project password to decrypt options and comments.
-      </p>
-
-      {(error || localError) && (
-        <div
-          role="alert"
-          style={{
-            padding: "8px 12px",
-            borderRadius: 6,
-            background: "rgba(220, 38, 38, 0.1)",
-            color: "var(--color-danger, #ef4444)",
-            marginBottom: 16,
-            fontSize: 13,
-          }}
-        >
-          {localError || error}
+    <Card className="mx-auto my-10 max-w-md text-center">
+      <CardHeader>
+        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Lock className="h-6 w-6" aria-hidden />
         </div>
-      )}
+        <CardTitle className="text-xl font-bold">Password-Protected Decision</CardTitle>
+        <CardDescription className="mt-1 text-xs">
+          This project is encrypted. Enter the project password to decrypt options and comments.
+        </CardDescription>
+      </CardHeader>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <input
-          type="password"
-          placeholder="Enter password..."
-          value={password}
-          disabled={isLocked || loading}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            fontSize: 14,
-          }}
-        />
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-4">
+          {(error || localError) && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive"
+            >
+              {localError || error}
+            </div>
+          )}
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={isLocked || loading || !password}
-        >
-          {loading ? "Decrypting..." : isLocked ? "Locked (30s)" : "Unlock Project"}
-        </button>
+          <div className="space-y-1.5 text-left">
+            <label htmlFor="unlock-password" className="text-xs font-semibold text-foreground">
+              Project password
+            </label>
+            <Input
+              id="unlock-password"
+              type="password"
+              placeholder="Enter password..."
+              value={password}
+              disabled={isLocked || loading}
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-background text-sm"
+            />
+          </div>
+        </CardContent>
+
+        <CardFooter className="flex justify-end border-t border-border pt-4">
+          <Button
+            type="submit"
+            disabled={isLocked || loading || !password}
+            isLoading={loading}
+            leftIcon={
+              isLocked ? (
+                <Lock className="h-4 w-4" aria-hidden />
+              ) : (
+                <Unlock className="h-4 w-4" aria-hidden />
+              )
+            }
+            className="w-full sm:w-auto"
+          >
+            {loading ? "Decrypting..." : isLocked ? "Locked (30s)" : "Unlock Project"}
+          </Button>
+        </CardFooter>
       </form>
-    </div>
+    </Card>
   );
 };
+
+export default PasswordPrompt;

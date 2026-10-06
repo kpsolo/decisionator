@@ -1,88 +1,138 @@
 import { runTally } from "@decisionator/core";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { GoogleAuthService, GoogleSheetsProjectStore } from "@decisionator/store-google-sheets";
 import { bordaStrategy } from "@decisionator/strategy-borda";
+import { ArrowLeft, BarChart3, Lock, Radio, Share2, Trophy, Vote } from "lucide-react";
 import React from "react";
-import { Link, useParams } from "react-router-dom";
-import { getGoogleConfig } from "../config/google.js";
+import { Link } from "react-router-dom";
+import { Button } from "../components/ui/button.js";
+import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card.js";
+import { Skeleton } from "../components/ui/skeleton.js";
 import { StrategyChooser } from "../features/decide/StrategyChooser.js";
+import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
+import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
+import { StorageSettings } from "../features/settings/StorageSettings.js";
+import { InPageShareModal } from "../features/sharing/InPageShareModal.js";
 import { PasswordSetup } from "../features/sharing/PasswordSetup.js";
 import { ShareDialog } from "../features/sharing/ShareDialog.js";
 import { RankBallot } from "../features/voting/RankBallot.js";
 import { ResultsView } from "../features/voting/ResultsView.js";
 import { VotingControls } from "../features/voting/VotingControls.js";
 
+/** Shared page heading: title, subtitle and right-aligned actions that wrap on narrow screens. */
+function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 space-y-1">
+        <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+        {description && (
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{description}</p>
+        )}
+      </div>
+      {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+function PageLoading({ label }: { label: string }) {
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4" aria-busy="true">
+      <span className="sr-only">{label}</span>
+      <Skeleton className="h-8 w-2/3" />
+      <Skeleton className="h-4 w-1/3" />
+      <Skeleton className="h-48 w-full rounded-xl" />
+    </div>
+  );
+}
+
 export function HomePage() {
   return (
-    <div className="card">
-      <h2>Welcome to Decisionator</h2>
-      <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-        Collaborative Decision Engine for Teams. Pure client-side, encrypted, with deterministic
-        strategies.
-      </p>
-      <div style={{ marginTop: 16 }}>
-        <Link to="/new" className="btn btn-primary">
-          Create New Decision Project
-        </Link>
-      </div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-2xl">Welcome to Decisionator</CardTitle>
+        <CardDescription>
+          Collaborative Decision Engine for Teams. Pure client-side, encrypted, with deterministic
+          strategies.
+        </CardDescription>
+        <div className="pt-3">
+          <Button asChild>
+            <Link to="/new">Create New Decision Project</Link>
+          </Button>
+        </div>
+      </CardHeader>
+    </Card>
   );
 }
 
 export function NewProjectPage() {
   return (
-    <div className="card">
-      <h2>Create New Decision Project</h2>
-      <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-        Paste ideas, select voting format, and choose your preferred backend.
-      </p>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-2xl">Create New Decision Project</CardTitle>
+        <CardDescription>
+          Paste ideas, select voting format, and choose your preferred backend.
+        </CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 
 export function ProjectOverviewPage() {
-  const { fileId } = useParams();
+  const { projectId: fileId, projectRef, store, baseUrl } = useProjectStore();
   return (
-    <div className="card">
-      <h2>Project Overview</h2>
-      <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-        Viewing project <code>{fileId}</code>
-      </p>
-      <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Link to={`/p/${fileId}/vote`} className="btn btn-primary">
-          Vote
-        </Link>
-        <Link to={`/p/${fileId}/stats`} className="btn btn-outline">
-          Stats
-        </Link>
-        <Link to={`/p/${fileId}/results`} className="btn btn-outline">
-          Results
-        </Link>
-        <Link to={`/p/${fileId}/share`} className="btn btn-outline">
-          Share
-        </Link>
-      </div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-2xl">Project Overview</CardTitle>
+        <CardDescription>
+          Viewing project <code className="font-mono text-xs">{fileId}</code>
+        </CardDescription>
+        <div className="flex flex-wrap gap-2 pt-3">
+          <Button asChild leftIcon={<Vote className="h-4 w-4" />}>
+            <Link to={`${baseUrl}/vote`}>Vote</Link>
+          </Button>
+          <Button variant="outline" asChild leftIcon={<BarChart3 className="h-4 w-4" />}>
+            <Link to={`${baseUrl}/stats`}>Stats</Link>
+          </Button>
+          <Button variant="outline" asChild leftIcon={<Trophy className="h-4 w-4" />}>
+            <Link to={`${baseUrl}/results`}>Results</Link>
+          </Button>
+          <Button variant="outline" asChild leftIcon={<Share2 className="h-4 w-4" />}>
+            <Link to={`${baseUrl}/share`}>Share</Link>
+          </Button>
+        </div>
+      </CardHeader>
+    </Card>
   );
 }
 
 export function ProjectStatsPage() {
-  const { fileId } = useParams();
+  const { projectId: fileId, projectRef, store, baseUrl } = useProjectStore();
   return (
-    <div className="card">
-      <h2>Project Statistics</h2>
-      <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-        Real-time metrics and grade distributions for <code>{fileId}</code>
-      </p>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-2xl">Project Statistics</CardTitle>
+        <CardDescription>
+          Real-time metrics and grade distributions for{" "}
+          <code className="font-mono text-xs">{fileId}</code>
+        </CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 
 export function ProjectVotePage() {
-  const { fileId } = useParams();
+  const { projectId: fileId, projectRef, store, baseUrl } = useProjectStore();
   const [snapshot, setSnapshot] = React.useState<ProjectSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [currentUser, setCurrentUser] = React.useState("");
 
   React.useEffect(() => {
@@ -90,25 +140,27 @@ export function ProjectVotePage() {
     async function load() {
       try {
         setLoading(true);
-        const cfg = getGoogleConfig();
-        const auth = new GoogleAuthService({ clientId: cfg.clientId });
-        const store = new GoogleSheetsProjectStore(auth);
         const identity = await store.signIn({ interactive: false });
         setCurrentUser(identity.participantId);
-        const validFileId = fileId as string;
-        const snap = await store.openProject({ store: "google-sheets", id: validFileId });
+        const snap = await store.openProject(projectRef);
         setSnapshot(snap);
+      } catch (err: unknown) {
+        setLoadError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [fileId]);
+  }, [fileId, store, projectRef]);
 
+  if (loadError) {
+    return <ProjectUnavailable reason="not_found" details={loadError} />;
+  }
   if (!fileId || loading || !snapshot) {
-    return <div className="card">Loading voting...</div>;
+    return <PageLoading label="Loading voting..." />;
   }
 
+  // useRole is a pure function (no React hooks), so calling it after the early return is safe.
   const roleCaps = useRole(snapshot.role);
   const currentRound = snapshot.project.voting?.round ?? 1;
   const topN = snapshot.project.voting?.topN ?? 3;
@@ -119,30 +171,18 @@ export function ProjectVotePage() {
   );
 
   const handleSubmitBallot = async (ranking: string[]) => {
-    const cfg = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: cfg.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-    await store.append({ store: "google-sheets", id: fileId }, [
-      { kind: "ranking", ranking, round: currentRound },
-    ]);
-    const updated = await store.openProject({ store: "google-sheets", id: fileId });
+    await store.append(projectRef, [{ kind: "ranking", ranking, round: currentRound }]);
+    const updated = await store.openProject(projectRef);
     setSnapshot(updated);
   };
 
   const handleUpdateVoting = async (voting: NonNullable<ProjectSnapshot["project"]["voting"]>) => {
-    const cfg = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: cfg.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-    await store.updateMeta({ store: "google-sheets", id: fileId }, { voting });
-    const updated = await store.openProject({ store: "google-sheets", id: fileId });
+    await store.updateMeta(projectRef, { voting });
+    const updated = await store.openProject(projectRef);
     setSnapshot(updated);
   };
 
   const handleCloseAndTally = async () => {
-    const cfg = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: cfg.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
     // Run tally
     const outcome = await runTally({
       snapshot,
@@ -163,33 +203,29 @@ export function ProjectVotePage() {
       state: "closed" as const,
     };
 
-    await store.updateMeta({ store: "google-sheets", id: fileId }, { voting: nextVoting });
-    await store.append({ store: "google-sheets", id: fileId }, [{ kind: "outcome", outcome }]);
+    await store.updateMeta(projectRef, { voting: nextVoting });
+    await store.append(projectRef, [{ kind: "outcome", outcome }]);
 
-    const updated = await store.openProject({ store: "google-sheets", id: fileId });
+    const updated = await store.openProject(projectRef);
     setSnapshot(updated);
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="card" style={{ maxWidth: 640, margin: "0 auto", width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h2 style={{ margin: "0 0 4px 0" }}>Ballot / Voting</h2>
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
-              {snapshot.project.title} — Round {currentRound}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Link to={`/p/${fileId}/results`} className="btn btn-outline" style={{ fontSize: 12 }}>
-              Results
-            </Link>
-            <Link to={`/p/${fileId}`} className="btn btn-outline" style={{ fontSize: 12 }}>
-              ← Project
-            </Link>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+      <PageHeader
+        title="Ballot / Voting"
+        description={`${snapshot.project.title} — Round ${currentRound}`}
+        actions={
+          <>
+            <Button variant="outline" size="sm" asChild leftIcon={<Trophy className="h-4 w-4" />}>
+              <Link to={`${baseUrl}/results`}>Results</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild leftIcon={<ArrowLeft className="h-4 w-4" />}>
+              <Link to={baseUrl}>Project</Link>
+            </Button>
+          </>
+        }
+      />
 
       {isOwner && (
         <VotingControls
@@ -216,30 +252,32 @@ export function ProjectVotePage() {
 }
 
 export function ProjectResultsPage() {
-  const { fileId } = useParams();
+  const { projectId: fileId, projectRef, store, baseUrl } = useProjectStore();
   const [snapshot, setSnapshot] = React.useState<ProjectSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!fileId) return;
     async function load() {
       try {
         setLoading(true);
-        const cfg = getGoogleConfig();
-        const auth = new GoogleAuthService({ clientId: cfg.clientId });
-        const store = new GoogleSheetsProjectStore(auth);
-        const validFileId = fileId as string;
-        const snap = await store.openProject({ store: "google-sheets", id: validFileId });
+        const snap = await store.openProject(projectRef);
         setSnapshot(snap);
+      } catch (err: unknown) {
+        setLoadError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [fileId]);
+  }, [fileId, store, projectRef]);
 
+  if (loadError) {
+    return <ProjectUnavailable reason="not_found" details={loadError} />;
+  }
   if (!fileId || loading || !snapshot) {
-    return <div className="card">Loading results...</div>;
+    return <PageLoading label="Loading results..." />;
   }
 
   const currentRound = snapshot.project.voting?.round ?? 1;
@@ -247,25 +285,21 @@ export function ProjectResultsPage() {
   const isOpen = snapshot.project.voting?.state === "open";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="card" style={{ maxWidth: 640, margin: "0 auto", width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h2 style={{ margin: "0 0 4px 0" }}>Decision Outcome & Results</h2>
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
-              {snapshot.project.title}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Link to={`/p/${fileId}/vote`} className="btn btn-outline" style={{ fontSize: 12 }}>
-              Ballot
-            </Link>
-            <Link to={`/p/${fileId}`} className="btn btn-outline" style={{ fontSize: 12 }}>
-              ← Project
-            </Link>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+      <PageHeader
+        title="Decision Outcome & Results"
+        description={snapshot.project.title}
+        actions={
+          <>
+            <Button variant="outline" size="sm" asChild leftIcon={<Vote className="h-4 w-4" />}>
+              <Link to={`${baseUrl}/vote`}>Ballot</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild leftIcon={<ArrowLeft className="h-4 w-4" />}>
+              <Link to={baseUrl}>Project</Link>
+            </Button>
+          </>
+        }
+      />
 
       <ResultsView
         outcomes={snapshot.outcomes}
@@ -279,7 +313,8 @@ export function ProjectResultsPage() {
       {snapshot.role === "owner" && (
         <StrategyChooser
           snapshot={snapshot}
-          fileId={fileId}
+          store={store}
+          projectRef={projectRef}
           currentUser={snapshot.project.title}
           isOwner={true}
           onOutcomeCreated={(newOutcome) => {
@@ -295,74 +330,135 @@ export function ProjectResultsPage() {
 }
 
 export function ProjectSharePage() {
-  const { fileId } = useParams();
+  const { projectId: fileId, storeId, projectRef, store, baseUrl } = useProjectStore();
   const [showPasswordSetup, setShowPasswordSetup] = React.useState(false);
+  // Projects stored on this device have no link to hand out; they're shared as a live session.
+  const isLocal = storeId === "file";
+  // ShareDialog is modal; open it on arrival and let closing it reveal the rest of the page.
+  const [shareOpen, setShareOpen] = React.useState(!isLocal);
+  const [liveOpen, setLiveOpen] = React.useState(false);
+  const [projectTitle, setProjectTitle] = React.useState("");
+
+  React.useEffect(() => {
+    if (!isLocal || !fileId) return;
+    store
+      .openProject(projectRef)
+      .then((snap) => setProjectTitle(snap.project.title))
+      .catch(() => setProjectTitle(""));
+  }, [isLocal, fileId, store, projectRef]);
 
   if (!fileId) return <div>Project ID missing</div>;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h2>Share Decision Project</h2>
-            <p style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 13 }}>
-              Manage link access, invite collaborators, and configure encryption for{" "}
-              <code>{fileId}</code>.
-            </p>
-          </div>
-          <Link to={`/p/${fileId}`} className="btn btn-outline" style={{ fontSize: 13 }}>
-            ← Back to Project
-          </Link>
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+      <PageHeader
+        title="Share Decision Project"
+        description={
+          <>
+            {isLocal
+              ? "Invite people to grade and vote on "
+              : "Manage link access, invite collaborators, and configure encryption for "}
+            <code className="font-mono text-xs">{projectTitle || fileId}</code>.
+          </>
+        }
+        actions={
+          <>
+            {!isLocal && (
+              <Button
+                size="sm"
+                onClick={() => setShareOpen(true)}
+                leftIcon={<Share2 className="h-4 w-4" />}
+              >
+                Sharing settings
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" asChild leftIcon={<ArrowLeft className="h-4 w-4" />}>
+              <Link to={baseUrl}>Back to Project</Link>
+            </Button>
+          </>
+        }
+      />
 
-      <ShareDialog fileId={fileId} onClose={() => {}} />
-
-      {!showPasswordSetup ? (
-        <div
-          className="card"
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        >
-          <div>
-            <h4 style={{ margin: "0 0 4px 0" }}>Client-Side Encryption</h4>
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
-              Protect options and discussions with AES-256-GCM encryption before sending to Google
-              Sheets.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowPasswordSetup(true)}
-            className="btn btn-outline"
-            style={{ fontSize: 13 }}
-          >
-            🔒 Enable Password Protection
-          </button>
-        </div>
+      {isLocal ? (
+        <Card>
+          <CardHeader className="gap-3">
+            <CardTitle className="text-base">This project is stored on this device</CardTitle>
+            <CardDescription className="leading-relaxed">
+              There is no shareable link for a local project. Start a live session to let others
+              join from their browsers while this tab stays open, or move the project to Google
+              Sheets or Firestore in Settings to share it by link.
+            </CardDescription>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={() => setLiveOpen(true)}
+                leftIcon={<Radio className="h-4 w-4" />}
+              >
+                Start live session
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/settings">Storage settings</Link>
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
       ) : (
-        <PasswordSetup
-          onEnablePassword={async (_password) => {
-            setShowPasswordSetup(false);
-          }}
-          onCancel={() => setShowPasswordSetup(false)}
+        shareOpen && (
+          <ShareDialog store={store} projectRef={projectRef} onClose={() => setShareOpen(false)} />
+        )
+      )}
+
+      {liveOpen && (
+        <InPageShareModal
+          projectRef={projectRef}
+          projectTitle={projectTitle}
+          store={store}
+          onClose={() => setLiveOpen(false)}
         />
       )}
+
+      {!isLocal &&
+        (!showPasswordSetup ? (
+          <Card>
+            <CardHeader className="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-base">Client-Side Encryption</CardTitle>
+                <CardDescription>
+                  Protect options and discussions with AES-256-GCM encryption before sending to
+                  Google Sheets.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPasswordSetup(true)}
+                leftIcon={<Lock className="h-4 w-4" />}
+                className="shrink-0"
+              >
+                Enable Password Protection
+              </Button>
+            </CardHeader>
+          </Card>
+        ) : (
+          <PasswordSetup
+            onEnablePassword={async (_password) => {
+              setShowPasswordSetup(false);
+            }}
+            onCancel={() => setShowPasswordSetup(false)}
+          />
+        ))}
     </div>
   );
 }
 
-import { StorageSettings } from "../features/settings/StorageSettings.js";
-
 export function SettingsPage() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="card">
-        <h2>Application Settings</h2>
-        <p style={{ marginTop: 8, color: "var(--text-muted)" }}>
-          Storage provider settings, active persistence target, and credentials management.
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Application Settings"
+        description="Storage provider settings, active persistence target, and credentials management."
+      />
       <StorageSettings />
     </div>
   );
