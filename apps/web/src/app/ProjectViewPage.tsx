@@ -250,77 +250,84 @@ export function ProjectViewPage() {
 
   return (
     <div className="space-y-6">
-      {/* Workspace header: title first, one primary action, the rest in a menu */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1.5">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
-            {snapshot.project.title}
-          </h2>
-          {snapshot.project.description && (
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {snapshot.project.description}
+      {/* Workspace header: sticky at top with backdrop blur */}
+      <header className="sticky top-14 md:top-0 z-30 -mt-6 sm:-mt-8 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 border-b border-border shadow-xs transition-shadow">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1.5">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
+              {snapshot.project.title}
+            </h2>
+            {snapshot.project.description && (
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground line-clamp-2">
+                {snapshot.project.description}
+              </p>
+            )}
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>{storeLabel}</span>
+              <span aria-hidden="true">·</span>
+              <span>{`Role: ${snapshot.role}`}</span>
+              <span aria-hidden="true">·</span>
+              <span className="[overflow-wrap:anywhere]">{currentUser}</span>
             </p>
-          )}
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <span>{storeLabel}</span>
-            <span aria-hidden="true">·</span>
-            <span>{`Role: ${snapshot.role}`}</span>
-            <span aria-hidden="true">·</span>
-            <span className="[overflow-wrap:anywhere]">{currentUser}</span>
-          </p>
-        </div>
+          </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <Button size="sm" asChild leftIcon={<Vote className="h-3.5 w-3.5" />}>
-            <Link to={`${baseProjectUrl}/vote`}>Vote</Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            leftIcon={<BarChart3 className="h-3.5 w-3.5" />}
-          >
-            <Link to={`${baseProjectUrl}/results`}>Results</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild leftIcon={<Share2 className="h-3.5 w-3.5" />}>
-            <Link to={`${baseProjectUrl}/share`}>Share</Link>
-          </Button>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                aria-label="More project actions"
-              >
-                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              {isOwner && (
-                <DropdownMenuItem
-                  onSelect={() =>
-                    live.openFor({ store, projectRef, projectTitle: snapshot.project.title })
-                  }
+          <div className="flex shrink-0 items-center gap-2">
+            <Button size="sm" asChild leftIcon={<Vote className="h-3.5 w-3.5" />}>
+              <Link to={`${baseProjectUrl}/vote`}>Vote</Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              leftIcon={<BarChart3 className="h-3.5 w-3.5" />}
+            >
+              <Link to={`${baseProjectUrl}/results`}>Results</Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              leftIcon={<Share2 className="h-3.5 w-3.5" />}
+            >
+              <Link to={`${baseProjectUrl}/share`}>Share</Link>
+            </Button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="More project actions"
                 >
-                  <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  Live session…
+                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {isOwner && (
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      live.openFor({ store, projectRef, projectTitle: snapshot.project.title })
+                    }
+                  >
+                    <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    Live session…
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
+                  <Download className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Export Project (JSON)
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
-                <Download className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                Export Project (JSON)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => setShowDelete(true)}
-                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                {isOwner ? "Delete Project..." : "Remove from my list"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setShowDelete(true)}
+                  className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  {isOwner ? "Delete Project..." : "Remove from my list"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
@@ -363,48 +370,46 @@ export function ProjectViewPage() {
             </p>
           )}
 
-          <Card className="overflow-hidden p-0">
-            <ul className="divide-y divide-border" aria-label="Options">
-              {snapshot.options.map((opt, index) => {
-                const stat = statsMap.get(opt.id);
-                const myGrade = snapshot.grades.find(
-                  (g) => g.by === currentUser && g.optionId === opt.id
-                );
+          <ul className="space-y-3" aria-label="Options">
+            {snapshot.options.map((opt, index) => {
+              const stat = statsMap.get(opt.id);
+              const myGrade = snapshot.grades.find(
+                (g) => g.by === currentUser && g.optionId === opt.id
+              );
 
-                return (
-                  <OptionRow
-                    key={opt.id}
-                    option={opt}
-                    index={index}
-                    averageGrade={stat?.average}
-                    gradeCount={stat?.count}
-                    commentCount={stat?.commentsCount}
-                    myGrade={myGrade?.value}
-                    canGrade={roleCapabilities.canGrade}
-                    onGrade={(val) => handleGradeChange(opt.id, val)}
-                    comments={
-                      <CommentThread
-                        compact
-                        comments={snapshot.comments}
-                        optionId={opt.id}
-                        currentUserId={currentUser}
-                        isOwner={isOwner}
-                        disabled={!roleCapabilities.canComment}
-                        disabledReason={roleCapabilities.disabledReason}
-                        onAddComment={(body) => handleAddComment(body, opt.id)}
-                        onEditComment={(commentId, body) =>
-                          handleEditComment(commentId, body, opt.id)
-                        }
-                        onToggleHide={(commentId, hidden) =>
-                          handleToggleHide(commentId, hidden, opt.id)
-                        }
-                      />
-                    }
-                  />
-                );
-              })}
-            </ul>
-          </Card>
+              return (
+                <OptionRow
+                  key={opt.id}
+                  option={opt}
+                  index={index}
+                  averageGrade={stat?.average}
+                  gradeCount={stat?.count}
+                  commentCount={stat?.commentsCount}
+                  myGrade={myGrade?.value}
+                  canGrade={roleCapabilities.canGrade}
+                  onGrade={(val) => handleGradeChange(opt.id, val)}
+                  comments={
+                    <CommentThread
+                      compact
+                      comments={snapshot.comments}
+                      optionId={opt.id}
+                      currentUserId={currentUser}
+                      isOwner={isOwner}
+                      disabled={!roleCapabilities.canComment}
+                      disabledReason={roleCapabilities.disabledReason}
+                      onAddComment={(body) => handleAddComment(body, opt.id)}
+                      onEditComment={(commentId, body) =>
+                        handleEditComment(commentId, body, opt.id)
+                      }
+                      onToggleHide={(commentId, hidden) =>
+                        handleToggleHide(commentId, hidden, opt.id)
+                      }
+                    />
+                  }
+                />
+              );
+            })}
+          </ul>
         </TabsContent>
 
         <TabsContent value="stats" className="mt-0">

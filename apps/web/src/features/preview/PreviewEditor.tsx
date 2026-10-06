@@ -74,8 +74,8 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
   };
 
   return (
-    <Card className="border-border bg-card shadow-xs">
-      <CardHeader>
+    <Card className="border-border bg-card shadow-xs flex-1 min-h-0 flex flex-col overflow-hidden">
+      <CardHeader className="shrink-0 py-3.5 px-4 sm:px-6 border-b border-border/50">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-xl font-bold">Step 3: Review & Edit Project</CardTitle>
           <Button
@@ -90,11 +90,14 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        {/* Project Metadata */}
-        <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-          <div className="space-y-1.5">
-            <label htmlFor="project-title-input" className="text-sm font-semibold text-foreground">
+      <CardContent className="flex-1 min-h-0 flex flex-col space-y-3 sm:space-y-4 p-4 sm:p-6 overflow-hidden">
+        {/* Project Metadata - pinned at top of card content */}
+        <div className="shrink-0 space-y-2.5 rounded-lg border border-border bg-muted/20 p-3 sm:p-4">
+          <div className="space-y-1">
+            <label
+              htmlFor="project-title-input"
+              className="text-xs sm:text-sm font-semibold text-foreground"
+            >
               Project Title *
             </label>
             <Input
@@ -103,14 +106,14 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Choose team retrospectives tool"
-              className="bg-background text-base"
+              className="bg-background text-sm sm:text-base h-9 sm:h-10"
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <label
               htmlFor="project-description-input"
-              className="text-sm font-semibold text-foreground"
+              className="text-xs sm:text-sm font-semibold text-foreground"
             >
               Description (Optional)
             </label>
@@ -119,8 +122,8 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Context or decision criteria..."
-              rows={3}
-              className="bg-background text-sm resize-y"
+              rows={2}
+              className="bg-background text-xs sm:text-sm resize-none"
             />
           </div>
         </div>
@@ -128,7 +131,7 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
         {duplicateTitles.size > 0 && (
           <div
             role="alert"
-            className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3.5 text-xs text-warning font-medium"
+            className="shrink-0 flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-xs text-warning font-medium"
           >
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>
@@ -137,16 +140,19 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
           </div>
         )}
 
-        {/* Options List */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
+        {/* Options List with Inner Scroll */}
+        <div className="flex-1 min-h-0 flex flex-col space-y-2">
+          <div className="shrink-0 flex items-center justify-between">
             <h4 className="font-semibold text-sm">{`Options (${options.length})`}</h4>
             <Button type="button" variant="outline" size="sm" onClick={handleAddOption}>
               + Add Option
             </Button>
           </div>
 
-          <div className="space-y-2.5">
+          <div
+            className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1.5 focus:outline-none rounded-lg border border-border/60 bg-muted/10 p-2 sm:p-3"
+            aria-label="Options"
+          >
             {options.map((opt, index) => {
               const isDupe = duplicateTitles.has(opt.title.trim().toLowerCase());
               const isEditing = editingId === opt.id;
@@ -240,7 +246,7 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
         </div>
       </CardContent>
 
-      <CardFooter className="flex items-center justify-end border-t border-border pt-4">
+      <CardFooter className="shrink-0 flex items-center justify-end border-t border-border py-3 px-4 sm:px-6 bg-card">
         <Button
           type="button"
           variant="default"

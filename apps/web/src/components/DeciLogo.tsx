@@ -47,9 +47,9 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
             y2="64"
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0%" stopColor="#2563eb" />
-            <stop offset="55%" stopColor="#4f46e5" />
-            <stop offset="100%" stopColor="#7c3aed" />
+            <stop offset="0%" stopColor="#0B84FE" />
+            <stop offset="55%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#4f46e5" />
           </linearGradient>
           <linearGradient
             id="deci-badge-sheen"
@@ -59,7 +59,7 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
             y2="64"
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
             <stop offset="100%" stopColor="#000000" stopOpacity="0.08" />
           </linearGradient>
         </defs>
@@ -67,6 +67,15 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
         {/* Squircle base */}
         <rect width="64" height="64" rx="16" fill="url(#deci-badge-bg)" />
         <rect width="64" height="64" rx="16" fill="url(#deci-badge-sheen)" />
+        <rect
+          width="64"
+          height="64"
+          rx="16"
+          fill="none"
+          stroke="rgba(0,0,0,0.1)"
+          strokeWidth="1"
+          className="dark:stroke-white/15"
+        />
 
         {/* D Monogram with Integrated Chevron Counter */}
         <path

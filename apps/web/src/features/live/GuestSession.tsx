@@ -344,54 +344,52 @@ function GuestWorkspace({
         {disabledReason && live && (
           <p className="text-sm text-muted-foreground">{disabledReason}</p>
         )}
-        <Card className="overflow-hidden p-0">
-          <ul className="divide-y divide-border" aria-label="Options">
-            {options.map((opt, index) => {
-              const stat = stats.get(opt.id);
-              const saved = snapshot.grades.find((g) => g.by === me && g.optionId === opt.id);
-              return (
-                <OptionRow
-                  key={opt.id}
-                  option={opt}
-                  index={index}
-                  averageGrade={stat?.average}
-                  gradeCount={stat?.count}
-                  commentCount={stat?.commentsCount}
-                  myGrade={pendingGrades[opt.id] ?? saved?.value}
-                  canGrade={canContribute}
-                  onGrade={(value) => {
-                    setPendingGrades((p) => ({ ...p, [opt.id]: value }));
-                    submit([
-                      { kind: "grade", optionId: opt.id, value: value as 1 | 2 | 3 | 4 | 5 },
-                    ]).catch(() =>
-                      setPendingGrades((p) => {
-                        const { [opt.id]: _dropped, ...rest } = p;
-                        return rest;
-                      })
-                    );
-                  }}
-                  comments={
-                    <CommentThread
-                      compact
-                      comments={comments}
-                      pendingIds={pendingIds}
-                      optionId={opt.id}
-                      currentUserId={me}
-                      isOwner={false}
-                      disabled={!canContribute}
-                      disabledReason={disabledReason}
-                      onAddComment={(body) => addComment(opt.id, body)}
-                      onEditComment={(commentId, body) =>
-                        submit([{ kind: "comment", optionId: opt.id, body, replaces: commentId }])
-                      }
-                      onToggleHide={() => {}}
-                    />
-                  }
-                />
-              );
-            })}
-          </ul>
-        </Card>
+        <ul className="space-y-3" aria-label="Options">
+          {options.map((opt, index) => {
+            const stat = stats.get(opt.id);
+            const saved = snapshot.grades.find((g) => g.by === me && g.optionId === opt.id);
+            return (
+              <OptionRow
+                key={opt.id}
+                option={opt}
+                index={index}
+                averageGrade={stat?.average}
+                gradeCount={stat?.count}
+                commentCount={stat?.commentsCount}
+                myGrade={pendingGrades[opt.id] ?? saved?.value}
+                canGrade={canContribute}
+                onGrade={(value) => {
+                  setPendingGrades((p) => ({ ...p, [opt.id]: value }));
+                  submit([
+                    { kind: "grade", optionId: opt.id, value: value as 1 | 2 | 3 | 4 | 5 },
+                  ]).catch(() =>
+                    setPendingGrades((p) => {
+                      const { [opt.id]: _dropped, ...rest } = p;
+                      return rest;
+                    })
+                  );
+                }}
+                comments={
+                  <CommentThread
+                    compact
+                    comments={comments}
+                    pendingIds={pendingIds}
+                    optionId={opt.id}
+                    currentUserId={me}
+                    isOwner={false}
+                    disabled={!canContribute}
+                    disabledReason={disabledReason}
+                    onAddComment={(body) => addComment(opt.id, body)}
+                    onEditComment={(commentId, body) =>
+                      submit([{ kind: "comment", optionId: opt.id, body, replaces: commentId }])
+                    }
+                    onToggleHide={() => {}}
+                  />
+                }
+              />
+            );
+          })}
+        </ul>
       </section>
 
       {voting && (

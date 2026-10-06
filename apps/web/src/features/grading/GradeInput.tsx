@@ -13,7 +13,8 @@ export interface GradeInputProps {
   label?: string;
   /** Show the "by author • time" caption under the stars (default true). */
   showMeta?: boolean;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
+  className?: string;
   onChange: (newValue: number) => void;
 }
 
@@ -26,6 +27,7 @@ export const GradeInput: React.FC<GradeInputProps> = ({
   label = "Grade option 1 to 5",
   showMeta = true,
   size = "md",
+  className,
   onChange,
 }) => {
   // Previewing a rating while pointing makes the 1–5 scale obvious before committing.
@@ -33,7 +35,7 @@ export const GradeInput: React.FC<GradeInputProps> = ({
   const shown = !disabled && hovered !== null ? hovered : (value ?? 0);
 
   return (
-    <div className="inline-flex flex-col gap-1 items-end">
+    <div className={cn("inline-flex flex-col gap-1", className ?? "items-end")}>
       <fieldset
         className="flex items-center border-0 p-0 m-0"
         aria-label={label}
@@ -47,7 +49,11 @@ export const GradeInput: React.FC<GradeInputProps> = ({
               onPointerEnter={() => setHovered(star)}
               className={cn(
                 "rounded select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-                size === "sm" ? "p-0.5 pointer-coarse:p-2" : "p-1 pointer-coarse:p-2",
+                size === "sm"
+                  ? "p-0.5 pointer-coarse:p-2"
+                  : size === "lg"
+                    ? "p-1 sm:p-1.5 pointer-coarse:p-2"
+                    : "p-1 pointer-coarse:p-2",
                 disabled ? "cursor-default opacity-60" : "cursor-pointer"
               )}
             >
@@ -65,8 +71,10 @@ export const GradeInput: React.FC<GradeInputProps> = ({
                 aria-hidden="true"
                 className={cn(
                   "transition-colors",
-                  size === "sm" ? "h-4 w-4" : "h-5 w-5",
-                  isLit ? "fill-rating text-rating" : "text-muted-foreground/70",
+                  size === "sm" ? "h-4 w-4" : size === "lg" ? "h-6 w-6" : "h-5 w-5",
+                  isLit
+                    ? "fill-rating text-rating"
+                    : "text-muted-foreground/50 dark:text-[#A1A1AB]/70",
                   // Hover preview reads lighter than a committed rating.
                   isLit && hovered !== null && !disabled && "opacity-80"
                 )}

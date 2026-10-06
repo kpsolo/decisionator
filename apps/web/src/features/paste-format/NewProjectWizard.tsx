@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog.js";
 import { toast } from "../../components/ui/use-toast.js";
+import { cn } from "../../lib/utils.js";
 import { PreviewEditor } from "../preview/PreviewEditor.js";
 import { createProjectFlow } from "../project/createProject.js";
 import { FormatStep } from "./FormatStep.js";
@@ -167,8 +168,14 @@ export function NewProjectWizard() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div
+      className={cn(
+        "space-y-6",
+        step === "preview" &&
+          "flex flex-col h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-8.5rem)] min-h-[500px] space-y-3 sm:space-y-4 overflow-hidden"
+      )}
+    >
+      <div className="shrink-0 flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Wizard step progress (display only) */}
         <nav aria-label="Creation progress" className="min-w-0 flex-1">
           <ol className="flex items-center justify-between gap-2 overflow-x-auto p-2 rounded-lg bg-card border border-border shadow-xs">
