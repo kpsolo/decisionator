@@ -51,6 +51,26 @@ export type Entry =
   | { kind: "outcome"; outcome: OutcomeRecord }
   | { kind: "contribution"; contribution: Contribution };
 
+/**
+ * A participant whose entries the project owner records, e.g. a guest in a live session or the
+ * original author when a project is moved between stores (contract v1.2.0).
+ */
+export interface Delegate {
+  /** Stable id the entries are attributed to (`by`). Must not be empty; at most 200 characters. */
+  participantId: string;
+  /** Human-readable name stored alongside the entries (`byName`). At most 80 characters. */
+  displayName?: string;
+}
+
+export interface AppendOptions {
+  /**
+   * Record the entries for this participant instead of the signed-in user. Only the project owner
+   * may delegate, and only `grade`, `comment` and `ranking` entries; anything else is rejected
+   * with `PERMISSION_DENIED`.
+   */
+  onBehalfOf?: Delegate;
+}
+
 export interface AppendResult {
   queued: number;
   sent: number;
@@ -109,7 +129,7 @@ export interface ProjectStore {
   createProject(input: NewProject, opts?: { password?: string }): Promise<ProjectRef>;
   openProject(ref: ProjectRef, opts?: { password?: string }): Promise<ProjectSnapshot>;
   watch(ref: ProjectRef, onChange: (s: ProjectSnapshot) => void): Unsubscribe;
-  append(ref: ProjectRef, entries: Entry[]): Promise<AppendResult>;
+  append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult>;
   updateOptions(ref: ProjectRef, ops: OptionOp[]): Promise<void>;
   updateMeta(ref: ProjectRef, patch: MetaPatch): Promise<void>;
   share(ref: ProjectRef, req: ShareRequest): Promise<ShareState>;

@@ -13,24 +13,46 @@ import {
   generateSalt,
   makeVerifier,
 } from "@decisionator/core";
-import type {
-  AppendResult,
-  Entry,
-  ExportBundle,
-  Identity,
-  MetaPatch,
-  NewProject,
-  OptionOp,
-  ParticipantRole,
-  ProjectRef,
-  ProjectSnapshot,
-  ProjectStore,
-  ProjectSummary,
-  ShareRequest,
-  ShareState,
-  Unsubscribe,
+import {
+  type AppendOptions,
+  type AppendResult,
+  type Entry,
+  type ExportBundle,
+  type Identity,
+  type MetaPatch,
+  type NewProject,
+  type OptionOp,
+  type ParticipantRole,
+  type ProjectRef,
+  type ProjectSnapshot,
+  type ProjectStore,
+  type ProjectSummary,
+  type ShareRequest,
+  type ShareState,
+  type Unsubscribe,
+  resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
+
+const ENCRYPTED_PREFIX = "enc:v1:";
+
+/**
+ * Text fields of protected projects are stored encrypted. An empty value (e.g. the body of a
+ * hide/unhide toggle comment) is stored as-is, and values written in plaintext by older versions
+ * are read back unchanged instead of making the whole project unreadable.
+ */
+async function openSealed(value: string, key: CryptoKey): Promise<string> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return decrypt(value, key);
+}
+
+async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
+  return body === "" ? "" : encrypt(body, key);
+}
+
+function newId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
 
 interface StoredFileProject {
   id: string;
@@ -95,6 +117,10 @@ export class FileProjectStore implements ProjectStore {
   private dbPromise: Promise<IDBPDatabase>;
   private listeners = new Map<string, Set<(snapshot: ProjectSnapshot) => void>>();
   private handles = new Map<string, FileSystemFileHandle>();
+  /** Keys of protected projects unlocked in this session, by project id. Memory only. */
+  private keys = new Map<string, CryptoKey>();
+  /** Tail of the per-project mutation chain; serializes read-modify-write cycles. */
+  private locks = new Map<string, Promise<void>>();
 
   constructor(
     private currentUser = "local-user@device",
@@ -229,33 +255,22 @@ export class FileProjectStore implements ProjectStore {
     const role = this.resolveRole(doc, this.currentUser);
 
     if (doc.meta.protected) {
-      if (!opts?.password) {
-        throw new Error("Password required");
-      }
-      if (!doc.meta.salt || !doc.meta.iterations || !doc.meta.verifier) {
-        throw new Error("Invalid encryption parameters");
-      }
-      const saltBytes = base64ToBytes(doc.meta.salt);
-      const key = await deriveKey(opts.password, saltBytes, doc.meta.iterations);
-      const valid = await checkVerifier(doc.meta.verifier, key);
-      if (!valid) {
-        throw new Error("Incorrect password");
-      }
+      const key = await this.unlock(doc, opts?.password);
 
       // Decrypt
-      const decryptedTitle = await decrypt(doc.meta.title, key);
-      const decryptedDesc = await decrypt(doc.meta.description, key);
+      const decryptedTitle = await openSealed(doc.meta.title, key);
+      const decryptedDesc = await openSealed(doc.meta.description, key);
       const decryptedOptions = await Promise.all(
         doc.options.map(async (opt) => ({
           ...opt,
-          title: await decrypt(opt.title, key),
-          description: await decrypt(opt.description, key),
+          title: await openSealed(opt.title, key),
+          description: await openSealed(opt.description, key),
         }))
       );
       const decryptedComments = await Promise.all(
         doc.comments.map(async (c) => ({
           ...c,
-          body: await decrypt(c.body, key),
+          body: await openSealed(c.body, key),
         }))
       );
 
@@ -321,100 +336,127 @@ export class FileProjectStore implements ProjectStore {
     }
   }
 
-  async append(ref: ProjectRef, entries: Entry[]): Promise<AppendResult> {
-    const db = await this.dbPromise;
-    const doc: StoredFileProject | undefined = await db.get("projects", ref.id);
-    if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
-
-    const role = this.resolveRole(doc, this.currentUser);
-    if (role === "view") {
-      throw new Error("PERMISSION_DENIED: View role cannot append");
-    }
-
-    const now = new Date().toISOString();
-    let sentCount = 0;
-
-    for (const e of entries) {
-      if (e.kind === "grade") {
-        // Latest wins per (by, optionId)
-        doc.grades = doc.grades.filter(
-          (g) => !(g.by === this.currentUser && g.optionId === e.optionId)
-        );
-        doc.grades.push({
-          id: `grd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          optionId: e.optionId,
-          value: e.value,
-          by: this.currentUser,
-          at: now,
-        });
-        sentCount++;
-      } else if (e.kind === "comment") {
-        doc.comments.push({
-          id: `cmt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          optionId: e.optionId,
-          body: e.body,
-          by: this.currentUser,
-          at: now,
-          hidden: e.hidden ?? false,
-          replaces: e.replaces,
-        });
-        sentCount++;
-      } else if (e.kind === "ranking") {
-        const round = e.round ?? doc.meta.voting.round;
-        doc.rankings = doc.rankings.filter(
-          (r) => !(r.by === this.currentUser && r.round === round)
-        );
-        doc.rankings.push({
-          id: `rnk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          ranking: [...e.ranking],
-          by: this.currentUser,
-          round,
-          at: now,
-        });
-        sentCount++;
-      } else if (e.kind === "outcome") {
-        doc.outcomes.push(e.outcome);
-        sentCount++;
-      } else if (e.kind === "contribution") {
-        doc.contributions.push(e.contribution);
-        sentCount++;
+  async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
+    const sentCount = await this.mutate(ref.id, async (db, doc) => {
+      const role = this.resolveRole(doc, this.currentUser);
+      if (role === "view") {
+        throw new Error("PERMISSION_DENIED: View role cannot append");
       }
-    }
+      // Validates the whole call before anything is written.
+      const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+      const by = delegated?.by ?? this.currentUser;
+      const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
-    doc.meta.updatedAt = now;
-    await db.put("projects", doc);
-    await this.syncToHandleIfAvailable(doc);
+      let key: CryptoKey | undefined;
+      if (doc.meta.protected) {
+        key = this.keys.get(doc.id);
+        if (!key) throw new Error("Password required");
+      }
+
+      const now = new Date().toISOString();
+      let sent = 0;
+
+      for (const e of entries) {
+        if (e.kind === "grade") {
+          // Latest wins per (by, optionId)
+          doc.grades = doc.grades.filter((g) => !(g.by === by && g.optionId === e.optionId));
+          doc.grades.push({
+            id: newId("grd"),
+            optionId: e.optionId,
+            value: e.value,
+            by,
+            ...byName,
+            at: now,
+          });
+          sent++;
+        } else if (e.kind === "comment") {
+          doc.comments.push({
+            id: newId("cmt"),
+            optionId: e.optionId,
+            body: key ? await encryptCommentBody(e.body, key) : e.body,
+            by,
+            ...byName,
+            at: now,
+            hidden: e.hidden ?? false,
+            replaces: e.replaces,
+          });
+          sent++;
+        } else if (e.kind === "ranking") {
+          const round = e.round ?? doc.meta.voting.round;
+          // Latest wins per (by, round)
+          doc.rankings = doc.rankings.filter((r) => !(r.by === by && r.round === round));
+          doc.rankings.push({
+            id: newId("rnk"),
+            ranking: [...e.ranking],
+            by,
+            ...byName,
+            round,
+            at: now,
+          });
+          sent++;
+        } else if (e.kind === "outcome") {
+          doc.outcomes.push(e.outcome);
+          sent++;
+        } else if (e.kind === "contribution") {
+          doc.contributions.push(e.contribution);
+          sent++;
+        }
+      }
+
+      doc.meta.updatedAt = now;
+      await db.put("projects", doc);
+      await this.syncToHandleIfAvailable(doc);
+      return sent;
+    });
+
     await this.notifyListeners(ref);
-
     return { queued: 0, sent: sentCount };
   }
 
   async updateOptions(ref: ProjectRef, ops: OptionOp[]): Promise<void> {
-    const db = await this.dbPromise;
-    const doc: StoredFileProject | undefined = await db.get("projects", ref.id);
-    if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
+    await this.mutate(ref.id, (db, doc) => this.applyOptionOps(db, doc, ops));
+    await this.notifyListeners(ref);
+  }
 
+  private async applyOptionOps(
+    db: IDBPDatabase,
+    doc: StoredFileProject,
+    ops: OptionOp[]
+  ): Promise<void> {
     const role = this.resolveRole(doc, this.currentUser);
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update options");
+
+    // Protected projects keep option text encrypted, so edits need the session key.
+    const key = doc.meta.protected ? this.requireKey(doc.id) : undefined;
+    const seal = async <T extends Partial<Option>>(o: T): Promise<T> => {
+      if (!key) return o;
+      const sealed = { ...o };
+      if (typeof o.title === "string") sealed.title = await encrypt(o.title, key);
+      if (typeof o.description === "string") {
+        sealed.description = await encrypt(o.description, key);
+      }
+      return sealed;
+    };
 
     const now = new Date().toISOString();
 
     for (const op of ops) {
       if (op.op === "add") {
         doc.options.push({
-          ...op.option,
+          ...(await seal(op.option)),
           by: this.currentUser,
           at: now,
         });
       } else if (op.op === "update") {
         const idx = doc.options.findIndex((o) => o.id === op.option.id);
-        if (idx >= 0 && doc.options[idx]) {
-          doc.options[idx] = { ...doc.options[idx], ...op.option };
+        const current = doc.options[idx];
+        if (idx >= 0 && current) {
+          doc.options[idx] = { ...current, ...(await seal(op.option)) };
         }
       } else if (op.op === "remove") {
-        const idx = doc.options.findIndex((o) => o.id === op.id);
-        if (idx >= 0 && doc.options[idx]) {
-          doc.options[idx].status = "removed";
+        const current = doc.options.find((o) => o.id === op.id);
+        if (current) {
+          current.status = "removed";
         }
       }
     }
@@ -422,48 +464,48 @@ export class FileProjectStore implements ProjectStore {
     doc.meta.updatedAt = now;
     await db.put("projects", doc);
     await this.syncToHandleIfAvailable(doc);
-    await this.notifyListeners(ref);
   }
 
   async updateMeta(ref: ProjectRef, patch: MetaPatch): Promise<void> {
-    const db = await this.dbPromise;
-    const doc: StoredFileProject | undefined = await db.get("projects", ref.id);
-    if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
+    await this.mutate(ref.id, async (db, doc) => {
+      const role = this.resolveRole(doc, this.currentUser);
+      if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update meta");
 
-    const role = this.resolveRole(doc, this.currentUser);
-    if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update meta");
+      const key = doc.meta.protected ? this.requireKey(doc.id) : undefined;
+      if (patch.title !== undefined) {
+        doc.meta.title = key ? await encrypt(patch.title, key) : patch.title;
+      }
+      if (patch.description !== undefined) {
+        doc.meta.description = key ? await encrypt(patch.description, key) : patch.description;
+      }
+      if (patch.voting) doc.meta.voting = { ...doc.meta.voting, ...patch.voting };
 
-    if (patch.title !== undefined) doc.meta.title = patch.title;
-    if (patch.description !== undefined) doc.meta.description = patch.description;
-    if (patch.voting) doc.meta.voting = { ...doc.meta.voting, ...patch.voting };
-
-    doc.meta.updatedAt = new Date().toISOString();
-    await db.put("projects", doc);
-    await this.syncToHandleIfAvailable(doc);
+      doc.meta.updatedAt = new Date().toISOString();
+      await db.put("projects", doc);
+      await this.syncToHandleIfAvailable(doc);
+    });
     await this.notifyListeners(ref);
   }
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
-    const db = await this.dbPromise;
-    const doc: StoredFileProject | undefined = await db.get("projects", ref.id);
-    if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
-
-    if (req.inviteUsers) {
-      for (const invite of req.inviteUsers) {
-        const existing = doc.collaborators.find((c) => c.email === invite.email);
-        if (existing) {
-          existing.role = invite.role;
-        } else {
-          doc.collaborators.push({ email: invite.email, role: invite.role });
+    await this.mutate(ref.id, async (db, doc) => {
+      if (req.inviteUsers) {
+        for (const invite of req.inviteUsers) {
+          const existing = doc.collaborators.find((c) => c.email === invite.email);
+          if (existing) {
+            existing.role = invite.role;
+          } else {
+            doc.collaborators.push({ email: invite.email, role: invite.role });
+          }
         }
       }
-    }
 
-    if (req.removeUsers) {
-      doc.collaborators = doc.collaborators.filter((c) => !req.removeUsers?.includes(c.email));
-    }
+      if (req.removeUsers) {
+        doc.collaborators = doc.collaborators.filter((c) => !req.removeUsers?.includes(c.email));
+      }
 
-    await db.put("projects", doc);
+      await db.put("projects", doc);
+    });
     return this.getShareState(ref);
   }
 
@@ -491,23 +533,81 @@ export class FileProjectStore implements ProjectStore {
   }
 
   async deleteProject(ref: ProjectRef): Promise<void> {
-    const db = await this.dbPromise;
-    const doc: StoredFileProject | undefined = await db.get("projects", ref.id);
-    if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
+    await this.mutate(ref.id, async (db, doc) => {
+      const role = this.resolveRole(doc, this.currentUser);
+      if (role !== "owner") {
+        throw new Error("PERMISSION_DENIED: Only owner can delete project");
+      }
 
-    const role = this.resolveRole(doc, this.currentUser);
-    if (role !== "owner") {
-      throw new Error("PERMISSION_DENIED: Only owner can delete project");
-    }
-
-    doc.trashed = true;
-    await db.put("projects", doc);
+      doc.trashed = true;
+      await db.put("projects", doc);
+    });
+    this.keys.delete(ref.id);
   }
 
   async forgetProject(ref: ProjectRef): Promise<void> {
-    const db = await this.dbPromise;
-    await db.delete("projects", ref.id);
+    await this.withLock(ref.id, async () => {
+      const db = await this.dbPromise;
+      await db.delete("projects", ref.id);
+    });
     this.handles.delete(ref.id);
+    this.keys.delete(ref.id);
+  }
+
+  /**
+   * Returns the key for a protected project: derived from `password` (and remembered for the
+   * session) when given, otherwise the key remembered from an earlier unlock.
+   */
+  private async unlock(doc: StoredFileProject, password?: string): Promise<CryptoKey> {
+    if (!doc.meta.salt || !doc.meta.iterations || !doc.meta.verifier) {
+      throw new Error("Invalid encryption parameters");
+    }
+    if (!password) {
+      const cached = this.keys.get(doc.id);
+      if (cached && (await checkVerifier(doc.meta.verifier, cached))) return cached;
+      this.keys.delete(doc.id);
+      throw new Error("Password required");
+    }
+    const key = await deriveKey(password, base64ToBytes(doc.meta.salt), doc.meta.iterations);
+    if (!(await checkVerifier(doc.meta.verifier, key))) {
+      throw new Error("Incorrect password");
+    }
+    this.keys.set(doc.id, key);
+    return key;
+  }
+
+  private requireKey(projectId: string): CryptoKey {
+    const key = this.keys.get(projectId);
+    if (!key) throw new Error("Password required");
+    return key;
+  }
+
+  /** Runs `fn` after every earlier mutation of the same project has settled. */
+  private withLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(projectId) ?? Promise.resolve();
+    const run = previous.then(fn);
+    const tail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    this.locks.set(projectId, tail);
+    void tail.then(() => {
+      if (this.locks.get(projectId) === tail) this.locks.delete(projectId);
+    });
+    return run;
+  }
+
+  /** Serialized read-modify-write of one live (not trashed) project document. */
+  private mutate<T>(
+    projectId: string,
+    fn: (db: IDBPDatabase, doc: StoredFileProject) => Promise<T>
+  ): Promise<T> {
+    return this.withLock(projectId, async () => {
+      const db = await this.dbPromise;
+      const doc: StoredFileProject | undefined = await db.get("projects", projectId);
+      if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
+      return fn(db, doc);
+    });
   }
 
   private resolveRole(doc: StoredFileProject, user: string): ParticipantRole {

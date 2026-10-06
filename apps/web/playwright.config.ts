@@ -36,6 +36,8 @@ export default defineConfig({
         process.env.VITE_GOOGLE_CLIENT_ID || "mock-client-id.apps.googleusercontent.com",
       VITE_GOOGLE_API_KEY: process.env.VITE_GOOGLE_API_KEY || "mock-api-key",
       MSYS_NO_PATHCONV: "1",
+      // Live sessions rendezvous through BroadcastChannel only; tests never contact public relays.
+      VITE_LIVE_RELAYS: "",
     },
   },
 });

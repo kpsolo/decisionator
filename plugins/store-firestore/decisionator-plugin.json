@@ -6,7 +6,7 @@
   "description": "Store decision projects in Google Cloud Firebase Firestore with real-time sync and client-side encryption",
   "platform": {
     "runtime": "^1.0.0",
-    "projectStore": "^1.0.0"
+    "projectStore": "^1.2.0"
   },
   "main": "dist/index.js",
   "provides": {

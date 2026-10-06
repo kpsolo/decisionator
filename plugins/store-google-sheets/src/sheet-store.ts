@@ -13,26 +13,29 @@ import {
   generateSalt,
   makeVerifier,
 } from "@decisionator/core";
-import type {
-  AppendResult,
-  Entry,
-  ExportBundle,
-  Identity,
-  MetaPatch,
-  NewProject,
-  OptionOp,
-  ParticipantRole,
-  ProjectRef,
-  ProjectSnapshot,
-  ProjectStore,
-  ProjectSummary,
-  ShareRequest,
-  ShareState,
-  Unsubscribe,
+import {
+  type AppendOptions,
+  type AppendResult,
+  type Entry,
+  type ExportBundle,
+  type Identity,
+  type MetaPatch,
+  type NewProject,
+  type OptionOp,
+  type ParticipantRole,
+  type ProjectRef,
+  type ProjectSnapshot,
+  type ProjectStore,
+  type ProjectSummary,
+  type ShareRequest,
+  type ShareState,
+  type Unsubscribe,
+  resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import type { GoogleAuthService } from "./auth.js";
 import { GoogleApiClient } from "./google-api.js";
 import { WriteQueue } from "./queue.js";
+import { byNameField } from "./rows.js";
 
 function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
@@ -63,6 +66,12 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.google-sheets";
   private client: GoogleApiClient;
   private queue: WriteQueue;
+  /** Keys of protected projects unlocked in this session, by spreadsheet id. Memory only. */
+  private keys = new Map<string, CryptoKey>();
+  /** Last known protection flag per spreadsheet, so `append` knows whether to encrypt. */
+  private protection = new Map<string, boolean>();
+  /** Last known role per spreadsheet, used when the permission lookup is rate limited. */
+  private roles = new Map<string, ParticipantRole>();
 
   constructor(
     private auth: GoogleAuthService,
@@ -185,6 +194,8 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       },
     ]);
 
+    this.protection.set(spreadsheetId, Boolean(opts?.password));
+    this.roles.set(spreadsheetId, "owner");
     return { store: "google-sheets", id: spreadsheetId };
   }
 
@@ -195,15 +206,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       throw new Error("Project is unavailable (trashed)");
     }
 
-    const perms = await this.client.listPermissions(ref.id);
-    const isOwner = perms.permissions.some(
-      (p) => p.role === "owner" && p.emailAddress === identity.participantId
-    );
-    const isWriter = perms.permissions.some(
-      (p) =>
-        p.role === "writer" && (p.emailAddress === identity.participantId || p.type === "anyone")
-    );
-    const role: ParticipantRole = isOwner ? "owner" : isWriter ? "contribute" : "view";
+    const role = await this.resolveRole(ref.id, identity.participantId);
 
     const data = await this.client.batchGetValues(ref.id, [
       "meta!A:B",
@@ -224,21 +227,30 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     }
 
     const isProtected = metaMap.get("protected") === "true";
+    this.protection.set(ref.id, isProtected);
     let cryptoKey: CryptoKey | undefined;
 
     if (isProtected) {
-      if (!opts?.password) {
-        throw new Error("Password required to decrypt project");
-      }
-      const saltStr = metaMap.get("salt") || "";
       const verifierStr = metaMap.get("verifier") || "";
-      const iterations = Number.parseInt(metaMap.get("kdfIterations") || "600000", 10);
-      const salt = base64ToBytes(saltStr);
+      if (opts?.password) {
+        const saltStr = metaMap.get("salt") || "";
+        const iterations = Number.parseInt(metaMap.get("kdfIterations") || "600000", 10);
+        const salt = base64ToBytes(saltStr);
 
-      cryptoKey = await deriveKey(opts.password, salt, iterations);
-      const valid = await checkVerifier(verifierStr, cryptoKey);
-      if (!valid) {
-        throw new Error("Incorrect password");
+        cryptoKey = await deriveKey(opts.password, salt, iterations);
+        const valid = await checkVerifier(verifierStr, cryptoKey);
+        if (!valid) {
+          throw new Error("Incorrect password");
+        }
+        this.keys.set(ref.id, cryptoKey);
+      } else {
+        // A project unlocked earlier in this session opens with the remembered key.
+        const cached = this.keys.get(ref.id);
+        if (!cached || !(await checkVerifier(verifierStr, cached))) {
+          this.keys.delete(ref.id);
+          throw new Error("Password required to decrypt project");
+        }
+        cryptoKey = cached;
       }
     }
 
@@ -318,8 +330,9 @@ export class GoogleSheetsProjectStore implements ProjectStore {
           by: by || "",
           optionId: optionId || "",
           value: parsed.value,
+          ...byNameField(parsed),
         };
-        gradesMap.set(`${by}:${optionId}`, grade);
+        gradesMap.set(JSON.stringify([by, optionId]), grade);
       }
     }
 
@@ -341,6 +354,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
           body: parsed.body,
           replaces: parsed.replaces,
           hidden: parsed.hidden,
+          ...byNameField(parsed),
         });
       }
     }
@@ -356,12 +370,13 @@ export class GoogleSheetsProjectStore implements ProjectStore {
           isProtected && cryptoKey ? await decrypt(payloadStr, cryptoKey) : payloadStr;
         const parsed = JSON.parse(decPayload);
         const round = parsed.round || 1;
-        rankingsMap.set(`${by}:${round}`, {
+        rankingsMap.set(JSON.stringify([by, round]), {
           id: id || "ranking",
           at: at || "",
           by: by || "",
           round,
           ranking: parsed.ranking,
+          ...byNameField(parsed),
         });
       }
     }
@@ -436,77 +451,101 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     };
   }
 
-  async append(ref: ProjectRef, entries: Entry[]): Promise<AppendResult> {
+  async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
     const identity = await this.auth.getIdentity();
+
+    let role: ParticipantRole | undefined;
     try {
-      const snap = await this.openProject(ref);
-      if (snap.role === "view") {
-        throw new Error("PERMISSION_DENIED: View role cannot append entries");
-      }
+      role = await this.resolveRole(ref.id, identity.participantId);
     } catch (err) {
-      if (err instanceof Error && err.message.includes("PERMISSION_DENIED")) {
-        throw err;
-      }
-      // If network/429 fails openProject, we still enqueue writes for later sync
+      // Rate limited or offline: fall back to the role seen earlier in this session and still
+      // enqueue the writes for later sync. Delegation is never granted on an unverified role.
+      role = this.roles.get(ref.id);
+      if (role === undefined && opts?.onBehalfOf !== undefined) throw err;
     }
+    if (role === "view") {
+      throw new Error("PERMISSION_DENIED: View role cannot append entries");
+    }
+    // Validates the whole call before anything is written.
+    const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+    const by = delegated?.by ?? identity.participantId;
+    const byName = delegated?.byName;
+
+    // Protected projects keep every payload encrypted; never write plaintext into them.
+    const isProtected = await this.isProtected(ref.id);
+    const key = isProtected ? this.keys.get(ref.id) : undefined;
+    if (isProtected && !key) {
+      throw new Error("Password required to append to a protected project");
+    }
+    const seal = async (payload: unknown): Promise<string> => {
+      const json = JSON.stringify(payload);
+      return key ? encrypt(json, key) : json;
+    };
 
     const now = new Date().toISOString();
+    const rows: { tab: string; row: string[] }[] = [];
 
     for (const entry of entries) {
-      const entryId = `entry_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      let tab = "";
-      let row: string[] = [];
+      const entryId = `entry_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       if (entry.kind === "grade") {
-        tab = "grades";
-        row = [
-          entryId,
-          now,
-          identity.participantId,
-          entry.optionId,
-          JSON.stringify({ value: entry.value }),
-        ];
+        rows.push({
+          tab: "grades",
+          row: [entryId, now, by, entry.optionId, await seal({ value: entry.value, byName })],
+        });
       } else if (entry.kind === "comment") {
-        tab = "comments";
-        row = [
-          entryId,
-          now,
-          identity.participantId,
-          entry.optionId,
-          JSON.stringify({ body: entry.body, hidden: entry.hidden, replaces: entry.replaces }),
-        ];
+        rows.push({
+          tab: "comments",
+          row: [
+            entryId,
+            now,
+            by,
+            entry.optionId,
+            await seal({
+              body: entry.body,
+              hidden: entry.hidden,
+              replaces: entry.replaces,
+              byName,
+            }),
+          ],
+        });
       } else if (entry.kind === "ranking") {
-        tab = "rankings";
-        row = [
-          entryId,
-          now,
-          identity.participantId,
-          JSON.stringify({ ranking: entry.ranking, round: entry.round ?? 1 }),
-        ];
+        rows.push({
+          tab: "rankings",
+          row: [
+            entryId,
+            now,
+            by,
+            await seal({ ranking: entry.ranking, round: entry.round ?? 1, byName }),
+          ],
+        });
       } else if (entry.kind === "outcome") {
-        tab = "outcomes";
-        row = [entryId, now, identity.participantId, JSON.stringify(entry.outcome)];
+        rows.push({ tab: "outcomes", row: [entryId, now, by, await seal(entry.outcome)] });
       } else if (entry.kind === "contribution") {
-        tab = "contributions";
         const c = entry.contribution;
-        row = [
-          c.id || entryId,
-          c.at || now,
-          c.by || identity.participantId,
-          c.targetKind,
-          c.targetId,
-          JSON.stringify({
-            type: c.type,
-            body: c.body,
-            pros: c.pros,
-            cons: c.cons,
-            sources: c.sources,
-            author: c.author,
-            reviewStatus: c.reviewStatus,
-          }),
-        ];
+        rows.push({
+          tab: "contributions",
+          row: [
+            c.id || entryId,
+            c.at || now,
+            c.by || identity.participantId,
+            c.targetKind,
+            c.targetId,
+            await seal({
+              type: c.type,
+              body: c.body,
+              pros: c.pros,
+              cons: c.cons,
+              sources: c.sources,
+              author: c.author,
+              reviewStatus: c.reviewStatus,
+            }),
+          ],
+        });
       }
+    }
 
+    for (const { tab, row } of rows) {
       await this.queue.enqueue(ref.id, tab, row);
     }
 
@@ -522,6 +561,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const snap = await this.openProject(ref);
     if (snap.role !== "owner") {
       throw new Error("PERMISSION_DENIED: Only owner may update options");
+    }
+    // openProject succeeded, so a protected project has its key in this session.
+    const key = snap.project.protected ? this.keys.get(ref.id) : undefined;
+    if (snap.project.protected && !key) {
+      throw new Error("Password required to decrypt project");
     }
 
     let updatedOptions = [...snap.options];
@@ -542,13 +586,14 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const rows: string[][] = [["id", "order", "status", "at", "by", "payload"]];
     const identity = await this.auth.getIdentity();
     for (const opt of updatedOptions) {
+      const json = JSON.stringify(opt);
       rows.push([
         opt.id,
         String(opt.order ?? 0),
         opt.status,
         opt.at || "",
         identity.participantId,
-        JSON.stringify(opt),
+        key ? await encrypt(json, key) : json,
       ]);
     }
 
@@ -560,17 +605,35 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     if (snap.role !== "owner") {
       throw new Error("PERMISSION_DENIED: Only owner may update meta");
     }
+    const key = snap.project.protected ? this.keys.get(ref.id) : undefined;
+    if (snap.project.protected && !key) {
+      throw new Error("Password required to decrypt project");
+    }
+    if (patch.title === undefined && patch.description === undefined && !patch.voting) return;
 
-    const updates: { range: string; values: string[][] }[] = [];
-    if (patch.title) {
-      updates.push({ range: "meta!B8", values: [[patch.title]] });
+    // Rows are addressed by key: their position differs between plain and protected projects.
+    const data = await this.client.batchGetValues(ref.id, ["meta!A:B"]);
+    const rows = (data.valueRanges[0]?.values ?? [["key", "value"]]).map((r) => [...r]);
+    const set = (name: string, value: string) => {
+      const row = rows.find((r, i) => i > 0 && r[0] === name);
+      if (row) {
+        row[1] = value;
+      } else {
+        rows.push([name, value]);
+      }
+    };
+
+    if (patch.title !== undefined) {
+      set("title", key ? await encrypt(patch.title, key) : patch.title);
+    }
+    if (patch.description !== undefined) {
+      set("description", key ? await encrypt(patch.description, key) : patch.description);
     }
     if (patch.voting) {
-      updates.push({ range: "meta!B6", values: [[JSON.stringify(patch.voting)]] });
+      set("voting", JSON.stringify({ ...snap.project.voting, ...patch.voting }));
     }
-    if (updates.length > 0) {
-      await this.client.batchUpdateValues(ref.id, updates);
-    }
+
+    await this.client.batchUpdateValues(ref.id, [{ range: "meta!A:B", values: rows }]);
   }
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
@@ -641,10 +704,14 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       throw new Error("PERMISSION_DENIED: Only owner may delete project");
     }
     await this.client.updateFile(ref.id, { trashed: true });
+    this.keys.delete(ref.id);
   }
 
-  async forgetProject(_ref: ProjectRef): Promise<void> {
+  async forgetProject(ref: ProjectRef): Promise<void> {
     // Participant side: drops local cache
+    this.keys.delete(ref.id);
+    this.protection.delete(ref.id);
+    this.roles.delete(ref.id);
   }
 
   /**
@@ -785,5 +852,35 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       { range: "rankings!A:D", values: rankingsRows },
       { range: "outcomes!A:D", values: outcomesRows },
     ]);
+    // The owner just chose the password, so later writes in this session encrypt with it.
+    this.protection.set(ref.id, true);
+    this.keys.set(ref.id, cryptoKey);
+  }
+
+  /** Role of `participantId` from the Drive permissions; remembered for rate-limited appends. */
+  private async resolveRole(
+    spreadsheetId: string,
+    participantId: string
+  ): Promise<ParticipantRole> {
+    const perms = await this.client.listPermissions(spreadsheetId);
+    const isOwner = perms.permissions.some(
+      (p) => p.role === "owner" && p.emailAddress === participantId
+    );
+    const isWriter = perms.permissions.some(
+      (p) => p.role === "writer" && (p.emailAddress === participantId || p.type === "anyone")
+    );
+    const role: ParticipantRole = isOwner ? "owner" : isWriter ? "contribute" : "view";
+    this.roles.set(spreadsheetId, role);
+    return role;
+  }
+
+  private async isProtected(spreadsheetId: string): Promise<boolean> {
+    const known = this.protection.get(spreadsheetId);
+    if (known !== undefined) return known;
+    const data = await this.client.batchGetValues(spreadsheetId, ["meta!A:B"]);
+    const row = data.valueRanges[0]?.values?.find((r) => r[0] === "protected");
+    const isProtected = row?.[1] === "true";
+    this.protection.set(spreadsheetId, isProtected);
+    return isProtected;
   }
 }

@@ -7,22 +7,25 @@ import type {
   Project,
   Ranking,
 } from "@decisionator/core";
-import type {
-  AppendResult,
-  Entry,
-  ExportBundle,
-  Identity,
-  MetaPatch,
-  NewProject,
-  OptionOp,
-  ParticipantRole,
-  ProjectRef,
-  ProjectSnapshot,
-  ProjectStore,
-  ProjectSummary,
-  ShareRequest,
-  ShareState,
-  Unsubscribe,
+import {
+  type AppendOptions,
+  type AppendResult,
+  type Entry,
+  type ExportBundle,
+  type Identity,
+  type MetaPatch,
+  type NewProject,
+  type OptionOp,
+  type ParticipantRole,
+  type ProjectRef,
+  type ProjectSnapshot,
+  type ProjectStore,
+  type ProjectSummary,
+  type ShareRequest,
+  type ShareState,
+  type Unsubscribe,
+  readStoredByName,
+  resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import type { FirestoreEntryDoc, FirestoreOptionDoc, FirestoreProjectDoc } from "./collections.js";
 import { decrypt, encrypt, setupPasswordProtection, verifyAndDerivePasswordKey } from "./crypto.js";
@@ -272,7 +275,7 @@ export class FirestoreProjectStore implements ProjectStore {
     }
   }
 
-  async append(ref: ProjectRef, entries: Entry[]): Promise<AppendResult> {
+  async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
     const doc = this.projects.get(ref.id);
     if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
 
@@ -280,6 +283,10 @@ export class FirestoreProjectStore implements ProjectStore {
     if (role === "view") {
       throw new Error("PERMISSION_DENIED: View role cannot append");
     }
+    // Validates the whole call before anything is written.
+    const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+    const by = delegated?.by ?? this.currentUser;
+    const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
     const now = new Date().toISOString();
     const entryList = this.entries.get(ref.id) || [];
@@ -293,7 +300,8 @@ export class FirestoreProjectStore implements ProjectStore {
           kind: "grade",
           optionId: e.optionId,
           value: e.value,
-          by: this.currentUser,
+          by,
+          ...byName,
           at: now,
         });
         sentCount++;
@@ -303,7 +311,8 @@ export class FirestoreProjectStore implements ProjectStore {
           kind: "comment",
           optionId: e.optionId,
           body: e.body,
-          by: this.currentUser,
+          by,
+          ...byName,
           at: now,
           hidden: e.hidden,
           replaces: e.replaces,
@@ -315,7 +324,8 @@ export class FirestoreProjectStore implements ProjectStore {
           kind: "ranking",
           ranking: [...e.ranking],
           round: e.round ?? doc.voting.round,
-          by: this.currentUser,
+          by,
+          ...byName,
           at: now,
         });
         sentCount++;
@@ -469,18 +479,24 @@ export class FirestoreProjectStore implements ProjectStore {
     const outcomes: OutcomeRecord[] = [];
     const contributions: Contribution[] = [];
 
-    // Latest-wins map for grades: key = `${by}:${optionId}`
+    // Latest-wins map for grades, keyed on (by, optionId). JSON keys keep ids that contain ':'
+    // (e.g. "peer:a") from colliding.
     const latestGrades = new Map<string, Grade>();
-    // Latest-wins map for rankings: key = `${by}:${round}`
+    // Latest-wins map for rankings, keyed on (by, round)
     const latestRankings = new Map<string, Ranking>();
+    const nameOf = (value: unknown) => {
+      const byName = readStoredByName(value);
+      return byName === undefined ? {} : { byName };
+    };
 
     for (const e of entryList) {
       if (e.kind === "grade") {
-        latestGrades.set(`${e.by}:${e.optionId}`, {
+        latestGrades.set(JSON.stringify([e.by, e.optionId]), {
           id: e.id,
           optionId: e.optionId,
           value: e.value,
           by: e.by,
+          ...nameOf(e.byName),
           at: e.at,
         });
       } else if (e.kind === "comment") {
@@ -489,15 +505,17 @@ export class FirestoreProjectStore implements ProjectStore {
           optionId: e.optionId,
           body: e.body,
           by: e.by,
+          ...nameOf(e.byName),
           at: e.at,
           hidden: e.hidden ?? false,
           replaces: e.replaces,
         });
       } else if (e.kind === "ranking") {
-        latestRankings.set(`${e.by}:${e.round}`, {
+        latestRankings.set(JSON.stringify([e.by, e.round]), {
           id: e.id,
           ranking: e.ranking,
           by: e.by,
+          ...nameOf(e.byName),
           round: e.round,
           at: e.at,
         });

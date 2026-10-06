@@ -107,7 +107,10 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-semibold text-foreground">{comment.by}</span>
+                  <span className="font-semibold text-foreground">
+                    {comment.byName ?? comment.by}
+                  </span>
+                  {comment.byName && <span className="text-[11px]">(live guest)</span>}
                   <span aria-hidden="true">•</span>
                   <span>{new Date(comment.at).toLocaleString()}</span>
                   {comment.replaces && <span className="italic text-[11px]">(edited)</span>}

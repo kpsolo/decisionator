@@ -31,12 +31,12 @@ import { AgentBrief } from "../features/agents/AgentBrief.js";
 import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
 import { OptionRow } from "../features/grading/OptionRow.js";
+import { useLiveShare } from "../features/live/LiveShareContext.js";
 import { DeleteProject } from "../features/project/DeleteProject.js";
 import { downloadProjectExport } from "../features/project/ExportButton.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
 import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
-import { InPageShareModal } from "../features/sharing/InPageShareModal.js";
 import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
 import { StatsView } from "../features/stats/StatsView.js";
 
@@ -58,7 +58,7 @@ export function ProjectViewPage() {
     details?: string;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<string>("options");
-  const [showInPageShare, setShowInPageShare] = useState(false);
+  const live = useLiveShare();
   const [showDelete, setShowDelete] = useState(false);
 
   const [needsPassword, setNeedsPassword] = useState(false);
@@ -296,10 +296,16 @@ export function ProjectViewPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={() => setShowInPageShare(true)}>
-                <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                In-Page Live Share
-              </DropdownMenuItem>
+              {isOwner && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    live.openFor({ store, projectRef, projectTitle: snapshot.project.title })
+                  }
+                >
+                  <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Live session…
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
                 <Download className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 Export Project (JSON)
@@ -328,15 +334,6 @@ export function ProjectViewPage() {
         isOwner={isOwner}
         onDeleted={() => navigate("/")}
       />
-
-      {showInPageShare && (
-        <InPageShareModal
-          projectRef={projectRef}
-          projectTitle={snapshot.project.title}
-          store={store}
-          onClose={() => setShowInPageShare(false)}
-        />
-      )}
 
       {/* Tabs Navigation & Views */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

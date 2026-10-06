@@ -127,7 +127,7 @@ packages/
 ├── node/                            # Companion local daemon with MCP & REST agent API
 └── relay/                           # E2E encrypted sync relay & agent WebSocket tunnel
 plugins/
-├── share-inpage/                    # In-page browser host & guest peer coordination
+├── share-inpage/                    # Live sessions: tab-hosted WebRTC voting across devices
 ├── source-paste/                    # Paste & plain-list / AI JSON candidate source
 ├── source-google-docs/              # Google Docs idea source with Google Picker integration
 ├── store-file/                      # Local-first direct file storage (.decisionator.json)

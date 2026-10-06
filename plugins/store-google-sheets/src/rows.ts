@@ -10,6 +10,7 @@ import {
   type Ranking,
   RankingSchema,
 } from "@decisionator/core";
+import { readStoredByName } from "@decisionator/plugin-sdk";
 
 export interface RowDecodeResult<T> {
   entity?: T;
@@ -18,6 +19,12 @@ export interface RowDecodeResult<T> {
 }
 
 export type PayloadHook = (payloadStr: string) => Promise<string> | string;
+
+/** `byName` lives inside the JSON payload so the sheet layout stays unchanged. Read leniently. */
+export function byNameField(parsed: unknown): { byName?: string } {
+  const byName = readStoredByName((parsed as { byName?: unknown } | null)?.byName);
+  return byName === undefined ? {} : { byName };
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -124,6 +131,7 @@ export async function decodeGradeRow(
       by: by || "",
       optionId: optionId || "",
       value: parsed.value,
+      ...byNameField(parsed),
     };
     const parseRes = GradeSchema.safeParse(candidate);
     if (!parseRes.success) {
@@ -140,7 +148,7 @@ export async function decodeGradeRow(
 }
 
 export async function encodeGradeRow(grade: Grade, payloadHook?: PayloadHook): Promise<string[]> {
-  let payloadStr = JSON.stringify({ value: grade.value });
+  let payloadStr = JSON.stringify({ value: grade.value, byName: grade.byName });
   if (payloadHook) {
     payloadStr = await payloadHook(payloadStr);
   }
@@ -180,6 +188,7 @@ export async function decodeCommentRow(
       at: at || "",
       by: by || "",
       optionId: optionId || "",
+      ...byNameField(parsed),
       body: parsed.body,
       replaces: parsed.replaces,
       hidden: parsed.hidden,
@@ -206,6 +215,7 @@ export async function encodeCommentRow(
     body: comment.body,
     replaces: comment.replaces,
     hidden: comment.hidden,
+    byName: comment.byName,
   });
   if (payloadHook) {
     payloadStr = await payloadHook(payloadStr);
@@ -247,6 +257,7 @@ export async function decodeRankingRow(
       by: by || "",
       round: parsed.round ?? 1,
       ranking: parsed.ranking,
+      ...byNameField(parsed),
     };
     const parseRes = RankingSchema.safeParse(candidate);
     if (!parseRes.success) {
@@ -269,6 +280,7 @@ export async function encodeRankingRow(
   let payloadStr = JSON.stringify({
     ranking: ranking.ranking,
     round: ranking.round,
+    byName: ranking.byName,
   });
   if (payloadHook) {
     payloadStr = await payloadHook(payloadStr);

@@ -20,6 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog.js";
+import { copyEntriesAsAuthors } from "./copy-entries.js";
 
 export interface MoveProjectProps {
   currentStore: ProjectStore;
@@ -79,33 +80,8 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
         options: validated.options,
       });
 
-      // Append entries
-      const entriesToAppend = [
-        ...validated.grades.map((g) => ({
-          kind: "grade" as const,
-          optionId: g.optionId,
-          value: g.value,
-        })),
-        ...validated.comments.map((c) => ({
-          kind: "comment" as const,
-          optionId: c.optionId,
-          body: c.body,
-          hidden: c.hidden,
-        })),
-        ...validated.rankings.map((r) => ({
-          kind: "ranking" as const,
-          ranking: r.ranking,
-          round: r.round,
-        })),
-        ...validated.outcomes.map((o) => ({
-          kind: "outcome" as const,
-          outcome: o,
-        })),
-      ];
-
-      if (entriesToAppend.length > 0) {
-        await targetStore.append(newRef, entriesToAppend);
-      }
+      // Keep every collaborator's votes and comments under their own name.
+      await copyEntriesAsAuthors(targetStore, newRef, validated);
 
       setSuccess(`Project migrated to ${targetStore.id} successfully!`);
       if (onMoved) {
@@ -142,32 +118,7 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
         options: currentSnapshot.options,
       });
 
-      const entries = [
-        ...currentSnapshot.grades.map((g) => ({
-          kind: "grade" as const,
-          optionId: g.optionId,
-          value: g.value,
-        })),
-        ...currentSnapshot.comments.map((c) => ({
-          kind: "comment" as const,
-          optionId: c.optionId,
-          body: c.body,
-          hidden: c.hidden,
-        })),
-        ...currentSnapshot.rankings.map((r) => ({
-          kind: "ranking" as const,
-          ranking: r.ranking,
-          round: r.round,
-        })),
-        ...currentSnapshot.outcomes.map((o) => ({
-          kind: "outcome" as const,
-          outcome: o,
-        })),
-      ];
-
-      if (entries.length > 0) {
-        await targetStore.append(newRef, entries);
-      }
+      await copyEntriesAsAuthors(targetStore, newRef, currentSnapshot);
 
       setSuccess(`Project transferred directly from ${currentStore.id} to ${targetStore.id}`);
       if (onMoved) {

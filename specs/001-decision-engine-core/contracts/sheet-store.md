@@ -23,9 +23,9 @@ account email, stamped by the store.
 |-----|---------|-----------|-----------|
 | `meta` | `key`, `value` | owner | Key/value rows, listed below. |
 | `options` | `id`, `order`, `status`, `at`, `by`, `payload` | owner | One row per option. `payload` = option fields from [options-format.schema.json](./options-format.schema.json). `status` is `active` or `removed`. The owner updates rows in place (`values.batchUpdate`). |
-| `grades` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"value": 1..5}`. The latest row per (`by`, `optionId`) counts. |
-| `comments` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"body": markdown, "replaces"?: id, "hidden"?: bool}`. Edits and hides are new rows that reference `replaces`. Only the owner may hide others' comments. |
-| `rankings` | `id`, `at`, `by`, `payload` | contributors | **Append-only.** `payload` = `{"ranking": [optionId…], "round": n}`. The latest row per (`by`, `round`) counts. |
+| `grades` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"value": 1..5, "byName"?: string}`. The latest row per (`by`, `optionId`) counts. |
+| `comments` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"body": markdown, "replaces"?: id, "hidden"?: bool, "byName"?: string}`. Edits and hides are new rows that reference `replaces`. Only the owner may hide others' comments. |
+| `rankings` | `id`, `at`, `by`, `payload` | contributors | **Append-only.** `payload` = `{"ranking": [optionId…], "round": n, "byName"?: string}`. The latest row per (`by`, `round`) counts. |
 | `outcomes` | `id`, `at`, `by`, `payload` | owner | **Append-only.** `payload` = an OutcomeRecord ([data-model.md](../data-model.md)). |
 | `contributions` | `id`, `at`, `by`, `targetKind`, `targetId`, `payload` | agents & contributors | **Append-only.** Added in format v2 (US5). `payload` = `{type, body, pros?, cons?, sources[], author, reviewStatus: "pending" | "accepted" | "edited" | "dismissed"}`. |
 
@@ -84,6 +84,7 @@ used to import into local mode in US7.
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.1.0 | 2026-10-06 | `grades`, `comments` and `rankings` payloads may carry `byName`, the display name of a delegated author (project-store contract v1.2.0). The column layout is unchanged; readers ignore a missing or malformed `byName` |
 | 2.0.0 | 2026-10-05 | Add `contributions` tab and automatic migration from v1 for agent and research contributions (US5) |
 | 1.1.0 | 2026-10-05 | Add delete project operation (`files.update {trashed: true}`) per FR-025; disclose readable metadata fields (`by`, `optionId`, `at`) in password mode per FR-017 and SC-007 |
 | 1.0.0 | 2026-10-05 | Initial Google Sheets store format specification |

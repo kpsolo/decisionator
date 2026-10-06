@@ -1,5 +1,7 @@
 # Contract: In-Page Sharing & Local Peer Coordinator — v1.0.0
 
+> **Superseded** by [live-share v2.0.0](../../004-live-share-network/contracts/live-share.md). v1 shipped with a BroadcastChannel transport only.
+
 Plugin ID: `org.decisionator.share.inpage`
 
 ## Capabilities & Constraints

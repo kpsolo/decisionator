@@ -6,7 +6,7 @@
   "version": "0.1.0",
   "platform": {
     "runtime": "^1.0.0",
-    "projectStore": "^1.1.0"
+    "projectStore": "^1.2.0"
   },
   "main": "dist/index.js",
   "provides": {
