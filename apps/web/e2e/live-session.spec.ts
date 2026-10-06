@@ -91,6 +91,10 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
     await host.getByRole("button", { name: /^1 comment$/ }).click();
     await expect(host.getByText("Ramen please")).toBeVisible({ timeout: 10000 });
     await expect(host.getByText("Gina", { exact: true })).toBeVisible();
+    // Cleared only once the host confirmed it, and shown right away.
+    await expect(guest.getByRole("textbox", { name: "Add a comment" })).toHaveValue("");
+    await expect(guest.getByText("Ramen please")).toBeVisible();
+    await expect(guest.getByRole("button", { name: "Edit" })).toBeVisible();
   });
 
   await test.step("a guest who reloads keeps their identity and their grade", async () => {
@@ -119,6 +123,13 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
     await expect(guest.getByText(/The host ended the session/)).toBeVisible({ timeout: 10000 });
     await expect(guest.getByRole("button", { name: "Save a copy" })).toBeVisible();
     await expect(guest.locator('input[aria-label="4 stars"]').first()).toBeDisabled();
+    await guest.getByRole("button", { name: /^1 comment$/ }).click();
+    await expect(guest.getByText("Ramen please")).toBeVisible();
+    await expect(guest.getByRole("button", { name: "Edit" })).toHaveCount(0);
+    await expect(guest.getByRole("textbox", { name: "Add a comment" })).toHaveAttribute(
+      "placeholder",
+      "Commenting unavailable"
+    );
   });
 
   expect(errors).toEqual([]);

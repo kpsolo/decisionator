@@ -1,4 +1,4 @@
-import { computeOptionStats } from "@decisionator/core";
+import { type Comment, computeOptionStats } from "@decisionator/core";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import {
   type GuestEntry,
@@ -234,6 +234,40 @@ function GuestWorkspace({
     });
   }, [snapshot, me]);
 
+  // New comments show at once, marked as sending, until the host's update includes them.
+  const [pendingComments, setPendingComments] = useState<Comment[]>([]);
+  useEffect(() => {
+    setPendingComments((pending) =>
+      pending.filter(
+        (p) =>
+          !snapshot.comments.some(
+            (c) => c.by === me && c.optionId === p.optionId && c.body === p.body
+          )
+      )
+    );
+  }, [snapshot, me]);
+  const comments = useMemo(
+    () => [...snapshot.comments, ...pendingComments],
+    [snapshot.comments, pendingComments]
+  );
+  const pendingIds = useMemo(() => new Set(pendingComments.map((c) => c.id)), [pendingComments]);
+
+  const addComment = (optionId: string, body: string) => {
+    const pending: Comment = {
+      id: `pending:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
+      at: new Date().toISOString(),
+      by: me,
+      byName: displayName,
+      optionId,
+      body,
+    };
+    setPendingComments((p) => [...p, pending]);
+    return submit([{ kind: "comment", optionId, body }]).catch((err) => {
+      setPendingComments((p) => p.filter((c) => c.id !== pending.id));
+      throw err;
+    });
+  };
+
   const submit = async (entries: GuestEntry[]) => {
     try {
       await guest.submit(entries);
@@ -249,8 +283,8 @@ function GuestWorkspace({
 
   const options = useMemo(() => snapshot.options.filter((o) => o.status === "active"), [snapshot]);
   const stats = useMemo(
-    () => computeOptionStats(snapshot.options, snapshot.grades, snapshot.comments),
-    [snapshot]
+    () => computeOptionStats(snapshot.options, snapshot.grades, comments),
+    [snapshot, comments]
   );
   const voting = snapshot.project.voting;
   const round = voting?.round ?? 1;
@@ -339,19 +373,16 @@ function GuestWorkspace({
                   comments={
                     <CommentThread
                       compact
-                      comments={snapshot.comments}
+                      comments={comments}
+                      pendingIds={pendingIds}
                       optionId={opt.id}
                       currentUserId={me}
                       isOwner={false}
                       disabled={!canContribute}
                       disabledReason={disabledReason}
-                      onAddComment={(body) =>
-                        void submit([{ kind: "comment", optionId: opt.id, body }]).catch(() => {})
-                      }
+                      onAddComment={(body) => addComment(opt.id, body)}
                       onEditComment={(commentId, body) =>
-                        void submit([
-                          { kind: "comment", optionId: opt.id, body, replaces: commentId },
-                        ]).catch(() => {})
+                        submit([{ kind: "comment", optionId: opt.id, body, replaces: commentId }])
                       }
                       onToggleHide={() => {}}
                     />

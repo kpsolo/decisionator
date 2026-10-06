@@ -15,8 +15,12 @@ export interface CommentThreadProps {
   isOwner: boolean;
   disabled?: boolean;
   disabledReason?: string;
-  onAddComment: (body: string) => void;
-  onEditComment: (commentId: string, newBody: string) => void;
+  /** May return a promise; if it rejects, the text is put back in the form. */
+  onAddComment: (body: string) => unknown;
+  /** May return a promise; if it rejects, the editor reopens with the text. */
+  onEditComment: (commentId: string, newBody: string) => unknown;
+  /** Comments shown before their author's store confirmed them. */
+  pendingIds?: ReadonlySet<string>;
   onToggleHide: (commentId: string, hidden: boolean) => void;
   /** Embedded under an option row: no heading (the toggle shows the count) and a lighter form. */
   compact?: boolean;
@@ -34,6 +38,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
   onAddComment,
   onEditComment,
   onToggleHide,
+  pendingIds,
   compact = false,
 }) => {
   const [newBody, setNewBody] = useState("");
@@ -46,9 +51,11 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBody.trim() || newBody.length > 10000) return;
-    onAddComment(newBody.trim());
+    const body = newBody.trim();
+    if (!body || body.length > 10000) return;
     setNewBody("");
+    // If saving fails, give the text back (unless something new was typed meanwhile).
+    Promise.resolve(onAddComment(body)).catch(() => setNewBody((current) => current || body));
   };
 
   const handleStartEdit = (comment: Comment) => {
@@ -57,9 +64,13 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
   };
 
   const handleSaveEdit = (commentId: string) => {
-    if (!editBody.trim() || editBody.length > 10000) return;
-    onEditComment(commentId, editBody.trim());
+    const body = editBody.trim();
+    if (!body || body.length > 10000) return;
     setEditingId(null);
+    Promise.resolve(onEditComment(commentId, body)).catch(() => {
+      setEditingId(commentId);
+      setEditBody(body);
+    });
   };
 
   const renderMarkdown = (text: string) => {
@@ -93,7 +104,8 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
             );
           }
 
-          const isAuthor = comment.by === currentUserId;
+          const isPending = pendingIds?.has(comment.id) ?? false;
+          const isAuthor = comment.by === currentUserId && !isPending;
           const isEditing = editingId === comment.id;
 
           return (
@@ -114,6 +126,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
                   <span aria-hidden="true">•</span>
                   <span>{new Date(comment.at).toLocaleString()}</span>
                   {comment.replaces && <span className="italic text-[11px]">(edited)</span>}
+                  {isPending && <span className="italic text-[11px]">Sending…</span>}
                   {comment.hidden && (
                     <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
                       HIDDEN
@@ -122,7 +135,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1">
-                  {isAuthor && !isEditing && (
+                  {isAuthor && !isEditing && !disabled && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -172,6 +185,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
                       variant="default"
                       size="sm"
                       onClick={() => handleSaveEdit(comment.id)}
+                      disabled={disabled}
                       className="h-7 text-xs"
                     >
                       Save
@@ -201,9 +215,7 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
           onChange={(e) => setNewBody(e.target.value)}
           aria-label="Add a comment"
           placeholder={
-            disabled
-              ? "Commenting disabled for view-only access"
-              : "Add a comment (Markdown supported)..."
+            disabled ? "Commenting unavailable" : "Add a comment (Markdown supported)..."
           }
           rows={compact ? 2 : 3}
           maxLength={10000}
