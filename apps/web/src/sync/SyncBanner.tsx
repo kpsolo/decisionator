@@ -16,7 +16,7 @@ export const SyncBanner: React.FC<SyncBannerProps> = ({ budget, queue, spreadshe
   useEffect(() => {
     if (!budget && !queue) return;
 
-    const interval = setInterval(async () => {
+    const checkState = () => {
       const now = Date.now();
       const pausedUntil = budget?.getPausedUntil() ?? 0;
       const paused = pausedUntil > now;
@@ -28,6 +28,15 @@ export const SyncBanner: React.FC<SyncBannerProps> = ({ budget, queue, spreadshe
       } else {
         setRetryCountdown(0);
       }
+    };
+
+    checkState();
+    const unsub = budget?.on("pausedUntil", () => {
+      checkState();
+    });
+
+    const interval = setInterval(async () => {
+      checkState();
 
       if (queue) {
         try {
@@ -39,7 +48,10 @@ export const SyncBanner: React.FC<SyncBannerProps> = ({ budget, queue, spreadshe
       }
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      unsub?.();
+      clearInterval(interval);
+    };
   }, [budget, queue, spreadsheetId]);
 
   if (!isPaused && queuedCount === 0) {

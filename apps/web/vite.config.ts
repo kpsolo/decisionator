@@ -45,6 +45,12 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    base: env.VITE_BASE_URL || "/decisionator/",
+    base: (() => {
+      const raw = env.VITE_BASE_URL || "/decisionator/";
+      if (raw.includes("decisionator")) {
+        return "/decisionator/";
+      }
+      return raw.startsWith("/") ? raw : `/${raw}`;
+    })(),
   };
 });

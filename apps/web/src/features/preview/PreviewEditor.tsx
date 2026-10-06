@@ -262,7 +262,7 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
                     style={{
                       fontSize: 12,
                       padding: "2px 6px",
-                      color: "var(--color-danger, #ef4444)",
+                      color: "var(--color-danger, #dc2626)",
                     }}
                   >
                     Remove

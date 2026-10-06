@@ -8,7 +8,7 @@ test.describe("US3: Ranked Vote and Results (T074)", () => {
     const fileId = "sheet-us3-vote-789";
 
     // Setup mocks
-    await page.evaluate(() => {
+    await page.addInitScript(() => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock Google globals
       (window as any).google = {
         accounts: {
@@ -41,7 +41,7 @@ test.describe("US3: Ranked Vote and Results (T074)", () => {
 
     const outcomesList = [["id", "at", "by", "payload"]];
 
-    await page.route("https://www.googleapis.com/**", async (route) => {
+    await page.route("**/*googleapis.com/**", async (route) => {
       const url = route.request().url();
       const method = route.request().method();
 
@@ -193,9 +193,9 @@ test.describe("US3: Ranked Vote and Results (T074)", () => {
 
       if (url.includes(`/v4/spreadsheets/${fileId}/values/`)) {
         const postData = route.request().postDataJSON();
-        if (url.includes("rankings:append") && postData.values) {
+        if (url.includes("rankings") && url.includes(":append") && postData?.values) {
           rankingsList.push(...postData.values);
-        } else if (url.includes("outcomes:append") && postData.values) {
+        } else if (url.includes("outcomes") && url.includes(":append") && postData?.values) {
           outcomesList.push(...postData.values);
         }
         return route.fulfill({ status: 200, json: { updates: { updatedRows: 1 } } });
@@ -226,6 +226,7 @@ test.describe("US3: Ranked Vote and Results (T074)", () => {
     const closeVotingBtn = page.getByRole("button", { name: "Close Voting & Tally Results" });
     await expect(closeVotingBtn).toBeVisible();
     await closeVotingBtn.click();
+    await expect(page.getByText("Voting is CLOSED")).toBeVisible();
 
     // --- STEP 3: Navigate to Results screen ---
     await page.goto(`./#/p/${fileId}/results`);

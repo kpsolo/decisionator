@@ -9,6 +9,9 @@ dist/
 build/
 out/
 coverage/
+test-results/
+playwright-report/
+blob-report/
 *.tsbuildinfo
 
 # Environment & secrets (never commit API keys / OAuth credentials)

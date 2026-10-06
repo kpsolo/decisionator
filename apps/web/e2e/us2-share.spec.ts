@@ -15,7 +15,7 @@ test.describe("US2: Share and Collaborate (T062)", () => {
     const fileId = "sheet-us2-share-456";
 
     // Setup mocks for Owner
-    await ownerPage.evaluate(() => {
+    await ownerPage.addInitScript(() => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock Google globals
       (window as any).google = {
         accounts: {
@@ -37,7 +37,7 @@ test.describe("US2: Share and Collaborate (T062)", () => {
     });
 
     // Setup mocks for Collaborator
-    await collabPage.evaluate(() => {
+    await collabPage.addInitScript(() => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock Google globals
       (window as any).google = {
         accounts: {
@@ -64,7 +64,7 @@ test.describe("US2: Share and Collaborate (T062)", () => {
     const gradesList = [["id", "at", "by", "optionId", "payload"]];
 
     const setupRoutes = async (page: typeof ownerPage, userEmail: string) => {
-      await page.route("https://www.googleapis.com/**", async (route) => {
+      await page.route("**/*googleapis.com/**", async (route) => {
         const url = route.request().url();
         const method = route.request().method();
 
@@ -193,9 +193,9 @@ test.describe("US2: Share and Collaborate (T062)", () => {
         if (url.includes(`/v4/spreadsheets/${fileId}/values/`)) {
           // append
           const postData = route.request().postDataJSON();
-          if (url.includes("grades:append") && postData.values) {
+          if (url.includes("grades") && url.includes(":append") && postData?.values) {
             gradesList.push(...postData.values);
-          } else if (url.includes("comments:append") && postData.values) {
+          } else if (url.includes("comments") && url.includes(":append") && postData?.values) {
             commentsList.push(...postData.values);
           }
           return route.fulfill({
@@ -214,7 +214,9 @@ test.describe("US2: Share and Collaborate (T062)", () => {
 
     // --- STEP 1: Owner opens Share page & copies link ---
     await ownerPage.goto(`./#/p/${fileId}/share`);
-    await expect(ownerPage.getByText("Share Decision Project")).toBeVisible();
+    await expect(
+      ownerPage.getByRole("heading", { name: "Share Decision Project" }).first()
+    ).toBeVisible();
     await checkA11y(ownerPage, "Share Dialog Page");
 
     const copyBtn = ownerPage.getByRole("button", { name: "Copy Link" });
@@ -261,9 +263,11 @@ test.describe("US2: Share and Collaborate (T062)", () => {
     await expect(disabledGrade).toBeDisabled();
     // Verify commenting explains view-only
     await expect(
-      collabPage.getByText(
-        "You have view-only access. To grade, comment, or vote, request contribute access from the project owner."
-      )
+      collabPage
+        .getByText(
+          "You have view-only access. To grade, comment, or vote, request contribute access from the project owner."
+        )
+        .first()
     ).toBeVisible();
 
     // --- STEP 6: Dev toolbar & Force 429 banner ---

@@ -11,14 +11,23 @@
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
   --text-main: #0f172a;
-  --text-muted: #64748b;
+  --text-muted: #475569;
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --primary-fg: #ffffff;
   --danger: #dc2626;
   --danger-fg: #ffffff;
   --success: #16a34a;
-  --warning: #d97706;
+  --warning: #b45309;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #b45309;
+  --color-primary: #2563eb;
+  --error: #dc2626;
+  --card-bg: var(--bg-surface);
+  --bg: var(--bg-app);
+  --border: var(--border-subtle);
+  --text: var(--text-main);
 }
 
 [data-theme="dark"] {
@@ -37,6 +46,15 @@
   --danger-fg: #ffffff;
   --success: #22c55e;
   --warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-primary: #3b82f6;
+  --error: #ef4444;
+  --card-bg: var(--bg-surface);
+  --bg: var(--bg-app);
+  --border: var(--border-subtle);
+  --text: var(--text-main);
 }
 
 * {
@@ -145,4 +163,15 @@ button {
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

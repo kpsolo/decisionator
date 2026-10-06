@@ -200,6 +200,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
                   <input
                     type="text"
                     readOnly
+                    aria-label="Shareable project link"
                     value={shareState.linkSharing.url}
                     style={{
                       flex: 1,
@@ -232,6 +233,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
                 >
                   <span>Access level:</span>
                   <select
+                    aria-label="Link sharing access level"
                     value={shareState.linkSharing.role}
                     onChange={(e) => handleChangeLinkRole(e.target.value as "contribute" | "view")}
                     style={{
@@ -265,6 +267,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
             <form onSubmit={handleInvite} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input
                 type="email"
+                aria-label="Invite email address"
                 placeholder="colleague@example.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -279,6 +282,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ fileId, onClose }) => 
                 }}
               />
               <select
+                aria-label="Invite role"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as "contribute" | "view")}
                 style={{

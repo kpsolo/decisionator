@@ -111,7 +111,13 @@ export const StatsView: React.FC<StatsViewProps> = ({ stats, showBordaSort = fal
                     <td style={{ padding: "8px 12px", color: "var(--text-muted)" }}>
                       {item.category || "—"}
                     </td>
-                    <td style={{ padding: "8px 12px", color: "#eab308", fontWeight: 600 }}>
+                    <td
+                      style={{
+                        padding: "8px 12px",
+                        color: "var(--color-warning, #b45309)",
+                        fontWeight: 600,
+                      }}
+                    >
                       ★ {item.average.toFixed(1)}
                     </td>
                     <td style={{ padding: "8px 12px" }}>{item.count}</td>
@@ -158,7 +164,13 @@ export const StatsView: React.FC<StatsViewProps> = ({ stats, showBordaSort = fal
                     >
                       <strong style={{ fontSize: 14 }}>{item.title}</strong>
                       <div>
-                        <span style={{ color: "#eab308", fontWeight: 600, fontSize: 15 }}>
+                        <span
+                          style={{
+                            color: "var(--color-warning, #b45309)",
+                            fontWeight: 600,
+                            fontSize: 15,
+                          }}
+                        >
                           ★ {item.average.toFixed(1)}
                         </span>{" "}
                         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>

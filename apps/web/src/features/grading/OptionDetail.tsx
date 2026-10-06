@@ -45,7 +45,7 @@ export const OptionDetail: React.FC<OptionDetailProps> = ({
         <div style={{ textAlign: "right", fontSize: 13 }}>
           {averageGrade !== undefined ? (
             <div>
-              <strong style={{ color: "#eab308", fontSize: 16 }}>
+              <strong style={{ color: "var(--color-warning, #b45309)", fontSize: 16 }}>
                 ★ {averageGrade.toFixed(1)}
               </strong>
               <div style={{ color: "var(--text-muted)", fontSize: 11 }}>({gradeCount} ratings)</div>
@@ -69,7 +69,9 @@ export const OptionDetail: React.FC<OptionDetailProps> = ({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
           {option.pros.length > 0 && (
             <div>
-              <strong style={{ fontSize: 13, color: "#16a34a" }}>Pros:</strong>
+              <strong style={{ fontSize: 13, color: "var(--color-success, #16a34a)" }}>
+                Pros:
+              </strong>
               <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 13 }}>
                 {option.pros.map((pro) => (
                   <li key={pro}>{pro}</li>
@@ -79,7 +81,7 @@ export const OptionDetail: React.FC<OptionDetailProps> = ({
           )}
           {option.cons.length > 0 && (
             <div>
-              <strong style={{ fontSize: 13, color: "#ef4444" }}>Cons:</strong>
+              <strong style={{ fontSize: 13, color: "var(--color-danger, #dc2626)" }}>Cons:</strong>
               <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 13 }}>
                 {option.cons.map((con) => (
                   <li key={con}>{con}</li>

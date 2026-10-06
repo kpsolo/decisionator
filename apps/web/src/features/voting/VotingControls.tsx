@@ -83,7 +83,7 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
               fontSize: 12,
               fontWeight: 600,
               background: isOpen ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)",
-              color: isOpen ? "var(--color-success, #22c55e)" : "var(--color-danger, #ef4444)",
+              color: isOpen ? "#166534" : "#991b1b",
             }}
           >
             ● {isOpen ? "Voting is OPEN" : "Voting is CLOSED"}

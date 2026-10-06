@@ -70,7 +70,7 @@ test.describe("US1: Create, Format, Grade, and Delete Project (T038)", () => {
     });
 
     // Mock API requests for Google Drive & Sheets
-    await page.route("https://www.googleapis.com/**", async (route) => {
+    await page.route("**/*googleapis.com/**", async (route) => {
       const url = route.request().url();
       if (url.includes("/drive/v3/about")) {
         return route.fulfill({

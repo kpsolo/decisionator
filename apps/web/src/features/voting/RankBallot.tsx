@@ -78,7 +78,7 @@ const SortableOptionItem: React.FC<SortableOptionItemProps> = ({
             height: 24,
             borderRadius: "50%",
             background: rank <= 3 ? "rgba(234, 179, 8, 0.2)" : "var(--bg)",
-            color: rank <= 3 ? "var(--color-warning, #eab308)" : "var(--text-muted)",
+            color: rank <= 3 ? "#92400e" : "var(--text-muted)",
             fontSize: 12,
             fontWeight: 700,
             border: "1px solid var(--border)",

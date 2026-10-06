@@ -1,9 +1,12 @@
+import { QuotaBudget } from "@decisionator/store-google-sheets";
 import React, { useEffect, useState } from "react";
 import { HashRouter, Link, useRoutes } from "react-router-dom";
 import { DevToolbar } from "../dev/DevToolbar.js";
 import { SyncBanner } from "../sync/SyncBanner.js";
 import { routes } from "./routes.js";
 import "./theme.css";
+
+const appBudget = new QuotaBudget();
 
 export function AppShell() {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -48,9 +51,9 @@ export function AppShell() {
           </button>
         </nav>
       </header>
-      <SyncBanner />
+      <SyncBanner budget={appBudget} />
       <main className="main-content">{routeElements}</main>
-      <DevToolbar />
+      <DevToolbar budget={appBudget} />
     </div>
   );
 }

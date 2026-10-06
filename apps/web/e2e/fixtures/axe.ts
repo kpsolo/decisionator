@@ -10,7 +10,7 @@ export async function checkA11y(page: Page, contextName = "page") {
     const violationsDesc = accessibilityScanResults.violations
       .map(
         (v: (typeof accessibilityScanResults.violations)[number]) =>
-          `[${v.id}] ${v.help} (${v.nodes.length} nodes)`
+          `[${v.id}] ${v.help} (${v.nodes.length} nodes):\n${v.nodes.map((n) => `  - ${n.target.join(" ")}: ${n.failureSummary}`).join("\n")}`
       )
       .join("\n");
     throw new Error(`Accessibility violations found in ${contextName}:\n${violationsDesc}`);

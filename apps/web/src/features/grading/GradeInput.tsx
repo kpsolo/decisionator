@@ -2,6 +2,7 @@ import type React from "react";
 
 export interface GradeInputProps {
   value?: number;
+  optionId?: string;
   authorName?: string;
   updatedAt?: string;
   disabled?: boolean;
@@ -10,6 +11,7 @@ export interface GradeInputProps {
 
 export const GradeInput: React.FC<GradeInputProps> = ({
   value,
+  optionId,
   authorName,
   updatedAt,
   disabled = false,
@@ -38,14 +40,14 @@ export const GradeInput: React.FC<GradeInputProps> = ({
               style={{
                 cursor: disabled ? "default" : "pointer",
                 fontSize: 20,
-                color: isSelected ? "#eab308" : "var(--text-muted)",
+                color: isSelected ? "var(--color-warning, #b45309)" : "var(--text-muted)",
                 display: "inline-flex",
                 alignItems: "center",
               }}
             >
               <input
                 type="radio"
-                name={`grade-${authorName || "default"}`}
+                name={`grade-${optionId || "default"}-${authorName || "default"}`}
                 value={star}
                 checked={value === star}
                 disabled={disabled}

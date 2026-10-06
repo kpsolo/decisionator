@@ -139,13 +139,6 @@ export function ProjectViewPage() {
   const handleGradeChange = async (optionId: string, val: number) => {
     if (!fileId) return;
     const gradeVal = val as 1 | 2 | 3 | 4 | 5;
-    const config = getGoogleConfig();
-    const auth = new GoogleAuthService({ clientId: config.clientId });
-    const store = new GoogleSheetsProjectStore(auth);
-
-    await store.append({ store: "google-sheets", id: fileId }, [
-      { kind: "grade", optionId, value: gradeVal },
-    ]);
 
     // Optimistic update
     const newGrades = [
@@ -159,17 +152,17 @@ export function ProjectViewPage() {
       },
     ];
     setSnapshot({ ...snapshot, grades: newGrades });
-  };
 
-  const handleAddComment = async (body: string, optionId: string) => {
     const config = getGoogleConfig();
     const auth = new GoogleAuthService({ clientId: config.clientId });
     const store = new GoogleSheetsProjectStore(auth);
 
     await store.append({ store: "google-sheets", id: fileId }, [
-      { kind: "comment", optionId, body },
+      { kind: "grade", optionId, value: gradeVal },
     ]);
+  };
 
+  const handleAddComment = async (body: string, optionId: string) => {
     // Optimistic update
     const newComments = [
       ...snapshot.comments,
@@ -182,6 +175,14 @@ export function ProjectViewPage() {
       },
     ];
     setSnapshot({ ...snapshot, comments: newComments });
+
+    const config = getGoogleConfig();
+    const auth = new GoogleAuthService({ clientId: config.clientId });
+    const store = new GoogleSheetsProjectStore(auth);
+
+    await store.append({ store: "google-sheets", id: fileId }, [
+      { kind: "comment", optionId, body },
+    ]);
   };
 
   const handleEditComment = async (commentId: string, newBody: string, optionId: string) => {
@@ -371,6 +372,7 @@ export function ProjectViewPage() {
                     <strong style={{ fontSize: 13 }}>My Rating:</strong>
                     <GradeInput
                       value={myGrade?.value}
+                      optionId={opt.id}
                       authorName={currentUser}
                       updatedAt={myGrade?.at}
                       disabled={!roleCapabilities.canGrade}

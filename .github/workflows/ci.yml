@@ -45,4 +45,15 @@ jobs:
         run: pnpm --filter @decisionator/web exec playwright install --with-deps chromium
 
       - name: E2E tests
+        env:
+          VITE_GOOGLE_CLIENT_ID: mock-client-id.apps.googleusercontent.com
+          VITE_GOOGLE_API_KEY: mock-api-key
         run: pnpm test:e2e -- --project=chromium
+
+      - name: Upload Playwright Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: apps/web/playwright-report/
+          retention-days: 7

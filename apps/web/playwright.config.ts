@@ -6,10 +6,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: "html",
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "html",
   use: {
     baseURL: "http://localhost:5173/decisionator/",
     trace: "on-first-retry",
+    reducedMotion: "reduce",
   },
   projects: [
     {
@@ -29,5 +30,12 @@ export default defineConfig({
     command: "pnpm run dev",
     url: "http://localhost:5173/decisionator/",
     reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000,
+    env: {
+      VITE_GOOGLE_CLIENT_ID:
+        process.env.VITE_GOOGLE_CLIENT_ID || "mock-client-id.apps.googleusercontent.com",
+      VITE_GOOGLE_API_KEY: process.env.VITE_GOOGLE_API_KEY || "mock-api-key",
+      MSYS_NO_PATHCONV: "1",
+    },
   },
 });
