@@ -13,6 +13,8 @@ All extension points are managed and validated via `@decisionator/plugin-sdk`.
 | **Project Store** | [contracts/project-store.md](../specs/001-decision-engine-core/contracts/project-store.md) | `ProjectStore` | Manages project storage, persistence, access roles, and append log. |
 | **Strategy** | [contracts/strategy.md](../specs/001-decision-engine-core/contracts/strategy.md) | `StrategyPlugin` | Runs deterministic tallies and decision algorithms. |
 | **Idea Source** | [contracts/idea-source.md](../specs/001-decision-engine-core/contracts/idea-source.md) | `IdeaSourcePlugin` | Imports candidate options from clipboard, documents, or external databases. |
+| **Option Properties** | [option-properties.md](../specs/005-option-status-properties/contracts/option-properties.md) | manifest `provides.optionProperties` | Typed extra values on options, shared or per person. |
+| **Option View** | [option-view.md](../specs/005-option-status-properties/contracts/option-view.md) | `PluginDefinition.optionView` and related hooks | Markers, badges, footer actions and sections on options; list summaries and filters; time-on-screen signals. |
 
 ---
 
@@ -149,3 +151,80 @@ describe("SimpleListIdeaSource Compliance", () => {
   runIdeaSourceContractTests(new SimpleListIdeaSource());
 });
 ```
+
+---
+
+## 4. Adding Option Properties
+
+Declare properties in your manifest. The host shows them, checks them, stores them as
+`property` entries, and exports and restores them. You write no storage code.
+
+```json
+"provides": {
+  "optionProperties": [
+    { "key": "cost", "label": "Cost per person", "type": "number", "scope": "shared", "cardBadge": true },
+    { "key": "shortlisted", "label": "Shortlisted", "type": "boolean", "scope": "person" }
+  ]
+}
+```
+
+- **Types**: `text` (1–500 characters), `number`, `boolean`, `choice` (with `choices`) and `date`
+  (`YYYY-MM-DD`). `null` clears a value.
+- **Scope**:
+  - `shared`: one value per option, set by the owner or an invited agent.
+  - `person`: one value per participant, set only by that participant and shown only to them.
+- **Keys**: they belong to your plugin, so another plugin may use the same key. When both are
+  shown, the host adds your plugin name to the label.
+- **Disabling your plugin**: hides your values but keeps them in the project.
+
+## 5. Changing How Options Look
+
+Return data, not markup. The host renders it with its own accessible components:
+
+```ts
+definePlugin({
+  optionView(ctx) {
+    // ctx.option, ctx.surface ("card" | "detail"), ctx.values (your own values), ctx.settings
+    return {
+      marker: { variant: "bar", label: "Not seen", tone: "info", replace: true },
+      badges: [{ text: "€420", icon: "coins", tone: "neutral" }],
+      footer: [{ action: { id: "shortlist", label: "Shortlist" } }],
+      sections: [{ title: "Budget", blocks: [{ fields: [["Per person", "€420"]] }] }],
+    };
+  },
+  onOptionAction(ctx, actionId) {
+    if (actionId === "shortlist") return ctx.setValue("shortlisted", true);
+  },
+  optionList(ctx) {
+    return { summary: { text: "3 shortlisted" },
+             filters: [{ id: "short", label: "Only shortlisted", where: { key: "shortlisted", in: [true] } }] };
+  },
+});
+```
+
+**Limits**:
+
+- at most 3 badges and 3 footer items per plugin;
+- sections appear in the detail view only, at most 2;
+- markers replace the default marker only when your manifest declares
+  `"optionView": { "replaces": ["marker"] }`. When several plugins do, the person picks one in
+  Settings → Options.
+
+**Protected parts**: the title, grade control, comments and ballot are not places, so you cannot
+change them.
+
+**Errors**: if a hook throws or returns invalid data, that place falls back to its default with a
+short notice, and the rest of the option keeps working.
+
+### Time on screen
+
+To learn when someone has looked at an option, implement `exposureMs(settings)` and
+`onOptionExposed(ctx, optionIds)`:
+
+- The host reports options that stayed at least half visible, without a break, for that many
+  milliseconds.
+- Time while the page is hidden or unfocused does not count.
+- Reports come at most once a second, and each option is reported once per page visit.
+
+The built-in `plugins/option-status` is a complete example. More examples:
+`examples/plugin-option-cost` and `examples/plugin-unread-bar`.
