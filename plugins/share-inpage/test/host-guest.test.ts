@@ -13,8 +13,12 @@ afterEach(() => {
   for (const c of cleanups.splice(0)) c();
 });
 
-async function startHost(project = new FakeProject(), role?: "contribute" | "view") {
-  const host = new LiveShareHost({ project, role });
+async function startHost(
+  project = new FakeProject(),
+  role?: "contribute" | "view",
+  maxLinks?: number
+) {
+  const host = new LiveShareHost({ project, role, maxLinks });
   await host.start();
   cleanups.push(() => host.close());
   return { host, project };
@@ -88,6 +92,43 @@ describe("LiveShareHost + LiveShareGuest", () => {
     );
   });
 
+  it("gives guests with the same name distinct names, kept across a reconnect", async () => {
+    const { host, project } = await startHost();
+    const first = await joined(makeGuest(host, "Gina", "device-1").guest);
+    const second = makeGuest(host, "gina ", "device-2");
+    await joined(second.guest);
+
+    expect(first.getState().name).toBe("Gina");
+    expect(second.guest.getState().name).toBe("gina 2");
+    expect(
+      host
+        .getState()
+        .guests.map((g) => g.name)
+        .sort()
+    ).toEqual(["Gina", "gina 2"]);
+
+    await second.guest.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    expect(project.appendCalls.at(-1)?.participant.displayName).toBe("gina 2");
+
+    second.links[0]?.close("network blip");
+    await until(() => second.links.length === 2 && second.guest.getState().status === "live");
+    expect(second.guest.getState().name).toBe("gina 2");
+  });
+
+  it("picks the lowest free number for a repeated name", async () => {
+    const { host } = await startHost();
+    await joined(makeGuest(host, "Gina", "device-1").guest);
+    const two = makeGuest(host, "Gina", "device-2");
+    await joined(two.guest);
+    const three = await joined(makeGuest(host, "Gina", "device-3").guest);
+    expect(three.getState().name).toBe("Gina 3");
+
+    two.guest.leave();
+    await until(() => host.getState().guests.length === 2);
+    const four = await joined(makeGuest(host, "Gina", "device-4").guest);
+    expect(four.getState().name).toBe("Gina 2");
+  });
+
   it("serializes concurrent submissions so none are lost", async () => {
     const { host, project } = await startHost();
     const guests = await Promise.all(
@@ -118,6 +159,34 @@ describe("LiveShareHost + LiveShareGuest", () => {
     ).rejects.toMatchObject({ code: "voting_closed" });
     await alice.submit([{ kind: "ranking", ranking: ["b", "a"], round: 2 }]);
     expect(project.state.rankings).toHaveLength(1);
+  });
+
+  it("accepts grades and comments while voting is closed", async () => {
+    const project = new FakeProject(
+      baseSnapshot({
+        project: {
+          ...baseSnapshot().project,
+          voting: { state: "closed", round: 1, topN: 3, liveResults: true },
+        },
+      })
+    );
+    const { host } = await startHost(project);
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    await alice.submit([{ kind: "comment", optionId: "a", body: "Still good" }]);
+    expect(project.state.grades).toHaveLength(1);
+    expect(project.state.comments.map((c) => c.body)).toEqual(["Still good"]);
+  });
+
+  it("turns away guests beyond the link limit", async () => {
+    const { host } = await startHost(new FakeProject(), "contribute", 2);
+    await joined(makeGuest(host, "Alice").guest);
+    await joined(makeGuest(host, "Bob").guest);
+    const carol = makeGuest(host, "Carol").guest;
+    carol.start();
+    await until(() => carol.getState().status === "failed");
+    expect(carol.getState().message).toBe("This session is full.");
+    expect(host.getState().guests).toHaveLength(2);
   });
 
   it("rejects removed options, over-long ballots and edits of someone else's comment", async () => {
@@ -265,6 +334,34 @@ describe("LiveShareHost + LiveShareGuest", () => {
     guest.start();
     await until(() => guest.getState().status === "failed");
     expect(guest.getState().message).toMatch(/Could not reach the host/);
+  });
+
+  it("says the host is no longer reachable when it vanishes mid-session", async () => {
+    const { host } = await startHost();
+    let reachable = true;
+    const links: Link[] = [];
+    const guest = new LiveShareGuest({
+      sessionId: SESSION,
+      deviceSecret: "d",
+      displayName: "Alice",
+      dial: async () => {
+        if (!reachable) throw new Error("unreachable");
+        const link = connectPair((l) => host.accept(l));
+        links.push(link);
+        return link;
+      },
+      maxRetryDelayMs: 10,
+      giveUpAfterMs: 60,
+    });
+    cleanups.push(() => guest.leave());
+    await joined(guest);
+
+    // The host tab disappears without sending `closing`.
+    reachable = false;
+    links[0]?.close("tab gone");
+    await until(() => guest.getState().status === "failed");
+    expect(guest.getState().message).toBe("The host is no longer reachable.");
+    expect(guest.getState().snapshot?.project.title).toBe("Lunch");
   });
 
   it("turns away a guest speaking another protocol version", async () => {

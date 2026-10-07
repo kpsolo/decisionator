@@ -143,7 +143,11 @@ function GuestSession({
     const off = joined.guest.subscribe(setState);
     joined.guest.start();
     setGuest(joined.guest);
+    // Say goodbye when the tab goes, so the host's list of connected people drops us at once.
+    const onPageHide = () => joined.dispose();
+    window.addEventListener("pagehide", onPageHide);
     return () => {
+      window.removeEventListener("pagehide", onPageHide);
       off();
       joined.dispose();
     };
@@ -213,6 +217,8 @@ function GuestWorkspace({
   displayName: string;
 }) {
   const me = state.participantId ?? "";
+  // The host may have numbered the name ("Gina 2") if someone else already uses it.
+  const myName = state.name ?? displayName;
   const live = state.status === "live";
   const canContribute = live && state.role === "contribute";
   const disabledReason = !live
@@ -257,7 +263,7 @@ function GuestWorkspace({
       id: `pending:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
       at: new Date().toISOString(),
       by: me,
-      byName: displayName,
+      byName: myName,
       optionId,
       body,
     };
@@ -295,7 +301,7 @@ function GuestWorkspace({
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={state.status} />
-          <span className="text-xs text-muted-foreground">{`You're ${displayName}`}</span>
+          <span className="text-xs text-muted-foreground">{`You're ${myName}`}</span>
         </div>
         <h2 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
           {snapshot.project.title}

@@ -1,4 +1,4 @@
-# Contract: Live Share (in-page session) — v2.0.0
+# Contract: Live Share (in-page session) — v2.1.0
 
 Plugin ID: `org.decisionator.share.inpage` · package `@decisionator/share-inpage`
 
@@ -131,7 +131,12 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
    - `contributions` removed; removed options dropped; hidden comments' bodies emptied;
    - `project.kdf` and `project.ref` removed;
    - while voting is open and `liveResults` is off, only the guest's own rankings.
-6. Ending the session sends `closing` to every guest. Closing or reloading the host tab ends the
+6. Display names are unique among connected participants: on `hello` the host compares the
+   trimmed name case-insensitively with the other participants that have open links and, on a
+   clash, appends the lowest free number (`"Gina"` → `"Gina 2"`). The result is sent as
+   `welcome.name`, used as `displayName` for that guest's entries and kept for the
+   `participantId` for the rest of the session, so a reconnect keeps `"Gina 2"`.
+7. Ending the session sends `closing` to every guest. Closing or reloading the host tab ends the
    session (best effort `closing` on `pagehide`; guests detect the dropped link otherwise).
 
 ### Guest rules
@@ -142,6 +147,7 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
   retry available).
 - Submissions are refused while not `live`; each waits up to 10 s for its `ack`.
 - After `ended`, the last snapshot stays visible and can be exported.
+- The guest shows itself under `welcome.name`, which may differ from the name it sent.
 
 ## Hosting lifecycle (web app)
 
@@ -153,8 +159,9 @@ another asks to end the first. A protected project must be unlocked in the tab b
 ## Test kit
 
 - `plugins/share-inpage/test/host-guest.test.ts`: host and guests over in-memory links —
-  attribution, identity stability, serialized concurrent writes, validation, view-only,
-  store failure, redaction, roster, closing, reconnect, give-up, protocol mismatch, rate limit.
+  attribution, identity stability, unique display names, serialized concurrent writes,
+  validation (including grades and comments while voting is closed), view-only, store failure,
+  redaction, roster, session full, closing, reconnect, give-up, protocol mismatch, rate limit.
 - `plugins/share-inpage/test/transport.test.ts`: sealing, topic derivation, framing and chunking,
   heartbeat timeout, signaling room authentication/dedupe/staleness, Nostr event signing,
   subscribe/publish/queue/reconnect.
@@ -164,5 +171,6 @@ another asks to end the first. A protected project must be unlocked in the tab b
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.1.0 | 2026-10-07 | Host assigns unique display names (`"Gina 2"`) and returns them in `welcome.name`; the guest shows that name. Wire `proto` stays 2: no message shape changes |
 | 2.0.0 | 2026-10-06 | Network transport (WebRTC star + encrypted Nostr/BroadcastChannel signaling), per-guest attribution through delegated append, acks, heartbeat and reconnect, host-side validation and redaction, app-level session lifecycle, stable join links with QR code |
 | 1.0.0 | 2026-10-06 | BroadcastChannel-only prototype (002) |

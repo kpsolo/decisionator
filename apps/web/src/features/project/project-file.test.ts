@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 import { createProjectWorkbook, runTally } from "@decisionator/core";
+import { redactSnapshotFor } from "@decisionator/share-inpage";
 import { FileProjectStore } from "@decisionator/store-file";
 import { bordaStrategy } from "@decisionator/strategy-borda";
 import { describe, expect, it } from "vitest";
@@ -98,6 +99,29 @@ describe("project export files", () => {
       expect(restored.rankings.find((r) => r.by === "guest:ana")?.byName).toBe("Ana");
     }
   );
+
+  it("lets a live-session guest save a copy that opens and holds only what they could see", async () => {
+    const seeded = await seededProject();
+    const owners = seeded.comments.find((c) => c.by === OWNER);
+    const snapshot = {
+      ...seeded,
+      project: {
+        ...seeded.project,
+        voting: { state: "open" as const, round: 1, topN: 3, liveResults: false },
+      },
+      comments: seeded.comments.map((c) => (c === owners ? { ...c, hidden: true } : c)),
+    };
+    const guestView = redactSnapshotFor(snapshot, "guest:ana", "contribute");
+
+    const bundle = await readProjectFile(new Blob([JSON.stringify(snapshotToExport(guestView))]));
+
+    expect(bundle.options.map((o) => o.title)).toEqual(["Lisbon", "Alps lodge", "Barcelona"]);
+    expect(bundle.grades.map((g) => [g.by, g.value])).toContainEqual(["guest:ana", 4]);
+    expect(bundle.comments.find((c) => c.id === owners?.id)?.body).toBe("");
+    expect(JSON.stringify(bundle)).not.toContain("Strong pick");
+    expect(bundle.rankings.map((r) => r.by)).toEqual(["guest:ana"]);
+    expect(bundle.contributions).toEqual([]);
+  });
 
   it("rejects files that are not project exports", async () => {
     await expect(readProjectFile(new Blob(["hello"]))).rejects.toThrow(/neither a project JSON/);

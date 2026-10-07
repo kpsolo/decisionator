@@ -24,6 +24,7 @@ app-level provider.
 | 9 | Snapshot leaked owner material (`role: "owner"`, agent drafts, hidden comment text, others' ballots with live results off) | Per-guest redaction |
 | 10 | Large snapshots exceed the 16 KiB cross-browser data-channel message limit | Chunked framing |
 | 11 | Protected local projects: comments stored in plaintext and then undecryptable; `watch` never fired | File store caches the unlocked key, encrypts comments, watch uses the key |
+| 12 | Guests with the same name were indistinguishable in the roster, comments and results (found in the 2026-10-07 spec revision) | Host assigns unique display names (`"Gina 2"`), returned in `welcome.name` (contract 2.1.0) |
 
 ## Technical Context
 

@@ -64,6 +64,8 @@ export class LiveShareHost {
   private broadcastTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: LiveHostState) => void>();
   private joinedAt = new Map<string, string>();
+  /** Name given to each participant, by the name they asked for, so a reconnect keeps it. */
+  private names = new Map<string, { asked: string; given: string }>();
 
   constructor(opts: LiveShareHostOptions) {
     this.project = opts.project;
@@ -176,7 +178,7 @@ export class LiveShareHost {
       clearTimeout(state.helloTimer);
       const participantId = participantIdFromKey(msg.key);
       state.participantId = participantId;
-      state.name = msg.name.trim();
+      state.name = this.uniqueName(participantId, msg.name.trim());
       if (!this.joinedAt.has(participantId)) {
         this.joinedAt.set(participantId, new Date().toISOString());
       }
@@ -228,6 +230,25 @@ export class LiveShareHost {
       this.ack(state, msg.id);
       this.scheduleBroadcast();
     });
+  }
+
+  /** `asked`, or `asked 2`, `asked 3` … — the first not used by another connected participant. */
+  private uniqueName(participantId: string, asked: string): string {
+    const taken = new Set<string>();
+    for (const s of this.links) {
+      if (s.participantId && s.participantId !== participantId && s.name) {
+        taken.add(s.name.toLowerCase());
+      }
+    }
+    const before = this.names.get(participantId);
+    let given = asked;
+    if (before?.asked === asked && !taken.has(before.given.toLowerCase())) {
+      given = before.given;
+    } else {
+      for (let n = 2; taken.has(given.toLowerCase()); n++) given = `${asked} ${n}`;
+    }
+    this.names.set(participantId, { asked, given });
+    return given;
   }
 
   private ack(state: LinkState, id: string, code?: AckErrorCode, message?: string): void {

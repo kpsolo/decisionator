@@ -78,6 +78,18 @@ describe("link framing", () => {
     expect(reasons).toEqual(["closed by peer"]);
   });
 
+  it("keeps messages that arrive before anyone listens, even if the link then closes", async () => {
+    const [a, b] = createPipePair();
+    const left = createLink(a);
+    const right = createLink(b);
+    left.send({ t: "error", code: "session_full" });
+    left.close();
+    await until(() => right.closed);
+    const got: unknown[] = [];
+    right.onMessage((m) => got.push(m));
+    expect(got).toEqual([{ t: "error", code: "session_full" }]);
+  });
+
   it("times out a link that stops answering pings", () => {
     vi.useFakeTimers();
     const silent = { send() {}, close() {}, onmessage: null, onclose: null };
