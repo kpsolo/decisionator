@@ -5,6 +5,26 @@ import type { Entry } from "../src/project-store.js";
 const grade: Entry = { kind: "grade", optionId: "o1", value: 3 };
 
 describe("resolveDelegatedAuthor", () => {
+  const property = (scope: "shared" | "person"): Entry => ({
+    kind: "property",
+    optionId: "o1",
+    plugin: "org.decisionator.option-status",
+    key: "seen",
+    scope,
+    value: "seen_auto",
+  });
+
+  it("delegates person-scoped properties but never shared ones", () => {
+    const onBehalfOf = { participantId: "peer:a", displayName: "Ann" };
+    expect(resolveDelegatedAuthor([property("person")], { onBehalfOf }, true)).toEqual({
+      by: "peer:a",
+      byName: "Ann",
+    });
+    expect(() => resolveDelegatedAuthor([property("shared")], { onBehalfOf }, true)).toThrow(
+      /^PERMISSION_DENIED: shared 'property'/
+    );
+  });
+
   it("returns undefined for an ordinary append", () => {
     expect(resolveDelegatedAuthor([grade], undefined, false)).toBeUndefined();
     expect(resolveDelegatedAuthor([grade], {}, true)).toBeUndefined();

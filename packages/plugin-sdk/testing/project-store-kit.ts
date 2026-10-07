@@ -521,5 +521,173 @@ export function runProjectStoreContractTests(factory: ProjectStoreFactory): void
         expect(own?.body).toBe("Owner note");
       });
     });
+
+    describe("option properties (v1.4.0)", () => {
+      const OPT_A = "01J00000000000000000000001";
+      const OPT_B = "01J00000000000000000000002";
+      const COST = "org.example.cost";
+      const STATUS = "org.decisionator.option-status";
+      const options = [OPT_A, OPT_B].map((id, idx) => ({
+        id,
+        order: idx + 1,
+        title: `Option ${idx + 1}`,
+        description: "",
+        status: "active" as const,
+        tags: [],
+        pros: [],
+        cons: [],
+        links: [],
+        at: "2026-10-05T00:00:00Z",
+        by: "alice@example.com",
+      }));
+      const cost = (value: number | null, optionId = OPT_A): Entry => ({
+        kind: "property",
+        optionId,
+        plugin: COST,
+        key: "cost",
+        scope: "shared",
+        value,
+      });
+      const seen = (value: string | null, optionId = OPT_A): Entry => ({
+        kind: "property",
+        optionId,
+        plugin: STATUS,
+        key: "seen",
+        scope: "person",
+        value,
+      });
+
+      async function ownerProject(password?: string) {
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const store = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await store.createProject(
+          { title: "Properties Project", options },
+          password ? { password } : undefined
+        );
+        return { store, ref };
+      }
+
+      it("keeps the latest shared value per (plugin, key, option) and lets null clear it", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [cost(400)]);
+        await store.append(ref, [cost(420), cost(90, OPT_B)]);
+
+        let snap = await store.openProject(ref);
+        const values = (snap.properties ?? []).filter((p) => p.plugin === COST);
+        expect(values.map((p) => [p.optionId, p.value]).sort()).toEqual([
+          [OPT_A, 420],
+          [OPT_B, 90],
+        ]);
+        const a = values.find((p) => p.optionId === OPT_A);
+        expect(a).toMatchObject({ key: "cost", scope: "shared", by: "alice@example.com" });
+        expect(a?.id).toBeTruthy();
+        expect(a?.at).toBeTruthy();
+
+        await store.append(ref, [cost(null)]);
+        snap = await store.openProject(ref);
+        const cleared = (snap.properties ?? []).filter(
+          (p) => p.plugin === COST && p.optionId === OPT_A
+        );
+        expect(cleared).toHaveLength(1);
+        expect(cleared[0]?.value).toBeNull();
+      });
+
+      it("keeps one person value per author and records delegates under their own id", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [seen("seen_auto")]);
+        await store.append(ref, [seen("seen_auto")], {
+          onBehalfOf: { participantId: "peer:a", displayName: "Ann" },
+        });
+        await store.append(ref, [seen("not_seen")], {
+          onBehalfOf: { participantId: "peer:a", displayName: "Ann" },
+        });
+
+        const snap = await store.openProject(ref);
+        const values = (snap.properties ?? []).filter((p) => p.plugin === STATUS);
+        expect(values.map((p) => [p.by, p.value]).sort()).toEqual([
+          ["alice@example.com", "seen_auto"],
+          ["peer:a", "not_seen"],
+        ]);
+        expect(values.find((p) => p.by === "peer:a")?.byName).toBe("Ann");
+      });
+
+      it("refuses delegated shared values and shared values from non-owners", async () => {
+        const { store: alice, ref } = await ownerProject();
+        await expect(
+          alice.append(ref, [cost(1)], { onBehalfOf: { participantId: "peer:a" } })
+        ).rejects.toThrow(/PERMISSION_DENIED/);
+
+        await alice.share(ref, { inviteUsers: [{ email: "bob@example.com", role: "contribute" }] });
+        fakeGoogleState.setCurrentUser("bob@example.com");
+        const bob = await factory({ currentUserEmail: "bob@example.com" });
+        await expect(bob.append(ref, [cost(2)])).rejects.toThrow(/PERMISSION_DENIED/);
+        // A collaborator may still record their own person-scoped value.
+        await bob.append(ref, [seen("seen")]);
+
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const snap = await alice.openProject(ref);
+        expect((snap.properties ?? []).filter((p) => p.plugin === COST)).toHaveLength(0);
+        expect(
+          (snap.properties ?? []).find((p) => p.plugin === STATUS && p.by === "bob@example.com")
+            ?.value
+        ).toBe("seen");
+      });
+
+      it("refuses malformed entries, unknown options and values over 2 KiB, writing nothing", async () => {
+        const { store, ref } = await ownerProject();
+        const bad: Entry[] = [
+          { ...(cost(1) as Extract<Entry, { kind: "property" }>), key: "Bad Key" },
+          { ...(cost(1) as Extract<Entry, { kind: "property" }>), optionId: "no-such-option" },
+          {
+            ...(seen(null) as Extract<Entry, { kind: "property" }>),
+            value: "x".repeat(2100),
+          },
+          {
+            ...(seen(null) as Extract<Entry, { kind: "property" }>),
+            value: { nested: true } as unknown as string,
+          },
+        ];
+        for (const entry of bad) {
+          await expect(store.append(ref, [cost(5, OPT_B), entry])).rejects.toThrow(
+            /^INVALID_ARGUMENT/
+          );
+        }
+        const snap = await store.openProject(ref);
+        expect(snap.properties ?? []).toHaveLength(0);
+      });
+
+      it("returns values of plugins it does not know unchanged", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [
+          {
+            kind: "property",
+            optionId: OPT_B,
+            plugin: "com.thirdparty.unknown",
+            key: "deadline",
+            scope: "shared",
+            value: "2026-12-31",
+          },
+        ]);
+        const snap = await store.openProject(ref);
+        expect(snap.properties?.[0]).toMatchObject({
+          plugin: "com.thirdparty.unknown",
+          key: "deadline",
+          value: "2026-12-31",
+        });
+      });
+
+      it("round-trips values on a password-protected project", async () => {
+        const password = "correct-horse-battery-staple";
+        const { store, ref } = await ownerProject(password);
+        await store.openProject(ref, { password });
+        await store.append(ref, [cost(420), seen("seen")]);
+
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const fresh = await factory({ currentUserEmail: "alice@example.com" });
+        const snap = await fresh.openProject(ref, { password });
+        expect(snap.properties?.find((p) => p.plugin === COST)?.value).toBe(420);
+        expect(snap.properties?.find((p) => p.plugin === STATUS)?.value).toBe("seen");
+      });
+    });
   });
 }

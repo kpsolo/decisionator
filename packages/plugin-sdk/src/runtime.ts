@@ -1,4 +1,11 @@
 import type { IdeaSourcePlugin } from "./idea-source.js";
+import type {
+  ExposureContext,
+  OptionListContext,
+  OptionListContribution,
+  OptionViewContext,
+  OptionViewContribution,
+} from "./option-view.js";
 import type { ProjectSnapshot } from "./project-store.js";
 import type { Rng, StrategyPlugin } from "./strategy.js";
 
@@ -95,6 +102,16 @@ export interface PluginDefinition {
   dispose?(): void | Promise<void>;
   strategy?: StrategyPlugin;
   ideaSource?: IdeaSourcePlugin;
+  /** Option view extension (contract `option-view` 1.0.0): what this plugin adds to an option. */
+  optionView?(ctx: OptionViewContext): OptionViewContribution | Promise<OptionViewContribution>;
+  /** Summary and filters for the option list. */
+  optionList?(ctx: OptionListContext): OptionListContribution | Promise<OptionListContribution>;
+  /** Called when the viewer presses one of this plugin's footer actions. */
+  onOptionAction?(ctx: OptionViewContext, actionId: string): void | Promise<void>;
+  /** How long an option must stay on screen before `onOptionExposed`; `null` turns it off. */
+  exposureMs?(settings: Record<string, unknown>): number | null;
+  /** Options that stayed on screen for `exposureMs`, reported once per page visit. */
+  onOptionExposed?(ctx: ExposureContext, optionIds: string[]): void | Promise<void>;
 }
 
 /**

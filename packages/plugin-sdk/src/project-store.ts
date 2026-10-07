@@ -5,6 +5,8 @@ import type {
   Option,
   OutcomeRecord,
   Project,
+  PropertyScalar,
+  PropertyValue,
   Ranking,
 } from "@decisionator/core";
 
@@ -41,6 +43,8 @@ export interface ProjectSnapshot {
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
   contributions?: Contribution[];
+  /** Effective plugin-defined option property values (contract v1.4.0). */
+  properties?: PropertyValue[];
   role: ParticipantRole;
   /**
    * Stored records the store skipped because they failed validation (contract v1.3.0), e.g.
@@ -54,7 +58,17 @@ export type Entry =
   | { kind: "comment"; optionId: string; body: string; hidden?: boolean; replaces?: string }
   | { kind: "ranking"; ranking: string[]; round?: number }
   | { kind: "outcome"; outcome: OutcomeRecord }
-  | { kind: "contribution"; contribution: Contribution };
+  | { kind: "contribution"; contribution: Contribution }
+  | {
+      kind: "property";
+      optionId: string;
+      /** Id of the plugin that declares the property. */
+      plugin: string;
+      key: string;
+      scope: "shared" | "person";
+      /** `null` clears the value. */
+      value: PropertyScalar;
+    };
 
 /**
  * A participant whose entries the project owner records, e.g. a guest in a live session or the
@@ -70,8 +84,8 @@ export interface Delegate {
 export interface AppendOptions {
   /**
    * Record the entries for this participant instead of the signed-in user. Only the project owner
-   * may delegate, and only `grade`, `comment` and `ranking` entries; anything else is rejected
-   * with `PERMISSION_DENIED`.
+   * may delegate, and only `grade`, `comment`, `ranking` and person-scoped `property` entries;
+   * anything else is rejected with `PERMISSION_DENIED`.
    */
   onBehalfOf?: Delegate;
 }
