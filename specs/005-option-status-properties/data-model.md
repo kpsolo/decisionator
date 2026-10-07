@@ -151,3 +151,82 @@ effective values (their own for `person`, the shared value otherwise).
 | store-google-sheets | tab `properties` with columns `id, at, by, optionId, payload`; `payload` = `{plugin,key,scope,value,byName?}` JSON (or `enc:v1:` in password mode) |
 | export JSON | `properties[]`, optional, default `[]` |
 | export xlsx | sheet "Properties": Option, Plugin, Key, Scope, Value, By, By name, At, Record (JSON) |
+
+---
+
+## Extension for User Stories 5–8
+
+### Reset (entry kind `reset`; `snapshot.history.resets[]`)
+
+| Field | Type | Rules |
+|---|---|---|
+| `id`, `at`, `by`, `byName?` | | store-stamped |
+| `scope` | `"all" \| "participant"` | |
+| `participantId` | string | required for `participant`, forbidden for `all` |
+| `targets` | `("grades" \| "ballots" \| "properties")[]` | 1–3, unique |
+| `round` | int ≥ 1 | optional; limits `ballots` to that round |
+| `plugin`, `key` | string | optional; limit `properties`; both or neither |
+
+An earlier entry E is cleared by a reset R when all of these hold:
+
+- R was appended after E;
+- E's kind (`grade` → `grades`, `ranking` → `ballots`, `property` → `properties`) is in
+  `R.targets`;
+- `R.scope === "all"` or `E.by === R.participantId`;
+- if `R.round` is set, E is a ballot of that round (grades are not round-scoped);
+- if `R.plugin`/`R.key` are set, E is a property with that plugin and key;
+- for `scope: "all"`, only `shared` property values are cleared. Per-person values are cleared
+  only by participant-scoped resets.
+
+**Who may append a reset**:
+
+- The owner may append any reset.
+- Anyone else, including a delegate, may append only
+  `{ scope: "participant", participantId: <self>, targets: ["properties"], plugin, key }`.
+  The host checks that the key is person-scoped; the store enforces self and
+  `targets: ["properties"]`.
+
+### Snapshot additions (ProjectStore 1.4.0, unreleased)
+
+```ts
+interface ProjectSnapshot {
+  grades; rankings; properties?;      // effective: latest wins, resets applied (unchanged meaning)
+  history?: {
+    grades: Grade[];                  // superseded or cleared, oldest first
+    rankings: Ranking[];
+    properties: PropertyValue[];
+    resets: Reset[];
+  };
+}
+```
+
+`effectiveEntries({ grades, rankings, properties, resets })` in `@decisionator/core` returns
+`{ effective, history }`. The input arrays must be in append order (array, row or sequence
+order).
+
+### Project strategy choice (`Project`, written through `updateMeta`)
+
+| Field | Type | Rules |
+|---|---|---|
+| `strategy` | `{ id, version, settings, at, by }` | optional; absent = Borda count with `{ topN: voting.topN }` |
+| `strategyChanges` | `{ id, at, by }[]` | ≤ 20, newest last; appended by the store on each change |
+
+`MetaPatch.strategy = { id, version, settings }`. The store stamps `at` and `by`. Only the owner
+may change it.
+
+### StrategyComparisonRow (not stored)
+
+`{ strategyId, name, ok: true, order, winner, seed? }` or `{ strategyId, name, ok: false, reason }`.
+
+The seed is `hex(SHA-256(canonical tally input))[0..32]`, so reopening the comparison or adopting
+a result reproduces the same draw.
+
+### Tooltip texts (host)
+
+| Where | Text |
+|---|---|
+| own stars | `You rated {v} · {time}`; plus `Changed from {old} at {time}`, or `Reset by {name} · {time}` |
+| average | `Last rating · {time}` |
+| ballot button | `Submitted {first} · updated {latest}` |
+| seen action (status plugin, via the footer action `title`) | `Seen automatically · {time}` / `Marked as seen · {time}` / `Marked as not seen · {time}` |
+| owner ratings list | `{name} {v} · {time}` per participant |

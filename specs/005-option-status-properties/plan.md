@@ -19,6 +19,20 @@ that uses only those two interfaces. The plugin registry's `enabled` flag become
 disabling the plugin removes the feature (FR-018). Storage, live share, export, restore, Move
 and the agent API all carry the new entry. Per-person values are shown only to their author.
 
+**Extension (User Stories 5–8, same MVP feature)**:
+
+- Stores keep every grade, ballot and property entry. Latest-wins and a new `reset` entry are
+  applied at read time by one core function, and the superseded entries are exposed as
+  `snapshot.history`.
+- Hover, focus and long-press tooltips show times.
+- The owner can reset all votes or one participant's; each person can reset their own seen marks.
+- The project stores its decision strategy in meta, and closing the vote uses it.
+- A "Compare strategies" view previews every enabled strategy with input-derived seeds and can
+  adopt one result as a new outcome.
+
+Design: research R13–R18, [contracts/history-resets.md](./contracts/history-resets.md) and
+[contracts/strategy-choice.md](./contracts/strategy-choice.md).
+
 ## Technical Context
 
 **Language/Version**: TypeScript 5.7 (strict, ESM), Node.js 24 for tooling
@@ -72,9 +86,10 @@ plugin.
 | I. Minimal core, modules | "Seen" lives entirely in a built-in plugin that uses only the new public hooks. The core gains only generic properties, view places and exposure. Disabling the plugin removes the feature (FR-018). The example cost plugin proves third-party parity. | PASS |
 | II. Versioned contracts | New contracts `option-properties` 1.0.0 and `option-view` 1.0.0. Bumps: ProjectStore 1.3.0 → 1.4.0 (additive), sheet layout 2.2.0 → 2.3.0 (migration), live-share 2.1.0 → 3.0.0 (proto 3, with the plain mismatch message), manifest schema (new optional `provides` keys, `platform.optionProperties`/`optionView`), plugin runtime minor, agentic API minor. Each comes with a changeset. | PASS |
 | III. Simple by default | Works with no setup (5 s default). Settings are optional, in Settings → Options. Plugins reach only fixed places; title, grading, comments and ballot cannot be touched (FR-022). | PASS |
+| II (extension) | ProjectStore 1.4.0 (still unreleased) also gains `reset`, `history` and the meta `strategy`; sheet layout 2.3.0 gains the `resets` tab in the same migration; live-share 3.0.0 (unreleased) gains the guest self-reset. New contract `strategy-choice` 1.0.0. | PASS |
 | IV. Agent-native | Shared properties are readable and writable through REST and MCP, with attribution. Per-person marks are personal data, not an agent capability; the spec scopes agents to shared values (FR-017). | PASS |
 | V. User owns the data | Marks are visible only to their author in the product, redacted for live guests, and automatic marking can be switched off. Exports include all values (the owner's data). The Sheets backend's raw-sheet visibility is documented (research R2). | PASS |
-| VI. Reproducible, append-only | Properties are append-only entries with latest-wins, and they never feed strategies or outcomes (FR-007). | PASS |
+| VI. Reproducible, append-only | Properties are append-only entries with latest-wins, and they never feed strategies or outcomes (FR-007). Extension: the file and Automerge stores stop replacing grades and ballots in place (a fix that brings them in line with append-only); resets are entries, not deletions; past outcomes still verify (SC-009); the comparison uses deterministic seeds, and adopting appends a new outcome. | PASS |
 | VII. Test-first for contracts | Contract-kit property cases and share-inpage protocol tests are written before the store and host changes. Exposure timing is a pure, fake-clock-tested class. | PASS |
 | Dependencies | none added | PASS |
 | Accessibility | Host-rendered places only, markers not colour-only, axe in e2e for the card, lightbox and Settings (FR-025). | PASS |
@@ -117,6 +132,10 @@ examples/plugin-option-cost       sample third-party-style plugin (shared number
 plugins/option-status/            NEW built-in: manifest, definition (view, list, exposure), tests
 plugins/share-inpage/src          protocol v3 property entry, policy + redaction
 packages/node/src/agent-api       context properties, PUT property, MCP tools
+packages/core/src/model/history.ts         Reset schema, effectiveEntries (latest wins + resets → effective + history)
+apps/web/src/features/history/             TimeTooltip, time texts, OwnerRatings, ResetDialog
+apps/web/src/features/decide/strategies.ts enabled strategies, chosenStrategy, StrategyPicker
+apps/web/src/features/decide/compare.ts    compareStrategies (pure) + CompareStrategiesDialog.tsx
 apps/web/src/
   features/plugins/plugin-registry.ts   subscribe(), merge new built-ins
   features/option-view/
@@ -161,7 +180,22 @@ package (`plugins/option-status`), like the strategies. Generic host code lives 
 6. **Live share**: proto 3 property entry, policy, redaction and guest batching (FR-009).
 7. **Export, restore and Move**: JSON, xlsx and copy-entries (FR-015).
 8. **Agent API**: context, PUT and MCP (FR-017).
-9. **E2E, accessibility, docs** (`docs/plugin-authors.md`) and changesets.
+9. **History and resets (US5, US6)**:
+   - `effectiveEntries` in core and its kit cases;
+   - every store moves to append plus effective-on-read;
+   - the Sheets `resets` tab;
+   - the live-share guest reset and history redaction;
+   - export of history and resets;
+   - `TimeTooltip`, the owner ratings list, the Reset dialog, and "Mark all as not seen" (a
+     status-plugin list action).
+10. **Strategy choice and comparison (US7, US8)**:
+    - meta `strategy` in every store;
+    - `features/decide/strategies.ts` (registry of enabled strategies, `chosenStrategy`);
+    - the voting-settings chooser;
+    - "Decided by";
+    - close-and-tally with the chosen strategy;
+    - `compareStrategies` and the Compare dialog with Adopt.
+11. **E2E, accessibility, docs** (`docs/plugin-authors.md`) and changesets.
 
 ## Complexity Tracking
 

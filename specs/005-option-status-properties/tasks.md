@@ -447,7 +447,212 @@ the dot back).
 
 ---
 
-## Phase 7: Polish & Cross-Cutting
+## Phase 7: User Story 5 — See when things happened (P2)
+
+**Goal**: history is kept for grades, ballots and properties, and times are shown in tooltips.
+
+**Independent Test**: spec US5 (a re-grade from 3 to 4 shows its time and "Changed from 3"; the
+seen action shows "Seen automatically · time").
+
+- [ ] T051 [P] [US5] Write `packages/core/test/history.test.ts` for `effectiveEntries`, per
+  data-model.md "Reset" and contracts/history-resets.md:
+  - latest wins per slot, and superseded entries go to `history` oldest first;
+  - a participant reset clears only that participant's entries appended earlier;
+  - an all-scope reset with `round: 1` leaves round-2 ballots;
+  - an all-scope reset clears only `shared` properties;
+  - a reset never clears entries appended after it;
+  - the `plugin`/`key` limits apply.
+- [ ] T052 [US5] Create `packages/core/src/model/history.ts`:
+  - `ResetSchema` with these rules: targets are 1–3 unique values; `participantId` is required
+    if and only if the scope is `participant`; `plugin` and `key` come together; `round` ≥ 1;
+  - `effectiveEntries({ grades, rankings, properties, resets })` returning
+    `{ grades, rankings, properties, history }`.
+  
+  Export it from `packages/core/src/index.ts`. In `packages/plugin-sdk/src/project-store.ts`, add
+  the `reset` member to `Entry` and `history?` to `ProjectSnapshot`.
+  `packages/plugin-sdk/src/delegation.ts` allows `reset` only in the self form, and
+  `packages/plugin-sdk/src/property-entries.ts` gets `checkResetEntries(entries, { isOwner, self })`.
+  T051 should pass.
+- [ ] T053 [US5] Add the contract-kit cases from contracts/history-resets.md ("Contract-kit
+  cases") to `packages/plugin-sdk/testing/project-store-kit.ts`, under the describe
+  "history and resets (v1.4.0)". They fail first.
+- [ ] T054 [P] [US5] `plugins/store-file/src/file-store.ts`:
+  - append grades, rankings and properties instead of replacing them;
+  - store resets;
+  - build the snapshot with `effectiveEntries`, including `history`.
+- [ ] T055 [P] [US5] `plugins/store-local/src/store.ts`: the same as T054 for Automerge, never
+  storing `undefined`.
+- [ ] T056 [P] [US5] `plugins/store-firestore/src/{collections,firestore-store}.ts`: a `reset`
+  entry doc; `buildEntries` uses `effectiveEntries` and returns `history`.
+- [ ] T057 [P] [US5] Google Sheets:
+  - `plugins/store-google-sheets/src/layout.ts`: tab `resets[id,at,by,payload]`, added in the
+    same 2.3.0 migration;
+  - `src/rows.ts`: `decodeResetRow`;
+  - `src/sheet-store.ts`: `effectiveEntries` over row order, and `history`;
+  - update `specs/001-decision-engine-core/contracts/sheet-store.md`.
+- [ ] T058 [P] [US5] `examples/plugin-store-memory/src/index.ts`: append plus
+  `effectiveEntries`. Add the rules from contracts/history-resets.md to
+  `specs/001-decision-engine-core/contracts/project-store.md` (1.4.0).
+- [ ] T059 [US5] Live share:
+  - `plugins/share-inpage/src/policy.ts`: `redactSnapshotFor` passes `history` filtered to the
+    guest's own grades, rankings and properties, plus resets with `scope: "all"` or that target
+    the guest;
+  - tests in `plugins/share-inpage/test/host-guest.test.ts`;
+  - update `specs/004-live-share-network/contracts/live-share.md` (3.0.0).
+- [ ] T060 [P] [US5] Export:
+  - `packages/core/src/export/project-v1.ts`: optional `history` and `resets` (default empty),
+    mirrored in the JSON schema;
+  - `project-xlsx.ts`: "History" and "Resets" sheets;
+  - round-trip tests in `packages/core/test/export/`;
+  - update `docs/project-export.md`.
+- [ ] T061 [US5] `apps/web/src/features/project/copy-entries.ts`: restore and Move re-append the
+  history in its original order (per author, through `onBehalfOf`), then the effective entries and
+  resets. Extend `copy-entries.test.ts` and `project-file.test.ts`.
+- [ ] T062 [P] [US5] Create `apps/web/src/features/history/time-texts.ts`:
+  - pure functions for the texts in data-model.md "Tooltip texts";
+  - `Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })`, with an
+    injectable locale and time zone;
+  - tests in `time-texts.test.ts`.
+- [ ] T063 [US5] Create `apps/web/src/features/history/TimeTooltip.tsx`:
+  - built on the Radix tooltip, on an existing focusable trigger, so it opens on hover and focus;
+  - a 500 ms touch long-press also opens it;
+  - the same text is set as `aria-describedby`.
+  
+  Use it on the own stars (card and lightbox in `OptionRow.tsx`), on the average, and on
+  "Submit/Update Ballot" in `apps/web/src/features/voting/RankBallot.tsx`.
+- [ ] T064 [US5] In `OptionLightbox` (`OptionRow.tsx`), add an owner-only "Ratings" disclosure
+  listing `{name} {v} · {time}` from the effective grades. Pass `isOwner` and the option's
+  grades into `OptionRow`.
+- [ ] T065 [US5] Seen-status tooltip:
+  - `packages/plugin-sdk/src/option-view.ts`: footer actions gain `title` (≤ 120 chars), shown by
+    `OptionPlaces.tsx` in a `TimeTooltip`;
+  - `OptionViewContext` gains `valueMeta: Record<key, { at, by }>` for the viewer's own
+    effective values;
+  - `plugins/option-status/src/index.ts` sets "Seen automatically · {time}", "Marked as seen ·
+    {time}" and "Marked as not seen · {time}". Add tests.
+
+---
+
+## Phase 8: User Story 6 — Start over: reset votes and seen status (P2)
+
+**Goal**: the owner resets all votes or one participant's, and clears shared properties. Each
+person resets their own seen marks. Resets are recorded; nothing is deleted.
+
+**Independent Test**: spec US6 (resetting Tom keeps the owner's and Gina's grades; Gina's "Mark
+all as not seen" changes only her marks).
+
+- [ ] T066 [US6] Create `apps/web/src/features/history/ResetDialog.tsx` (owner only), opened from
+  "More project actions" → "Reset…" in `apps/web/src/app/ProjectViewPage.tsx`:
+  - a choice between "All votes" and one participant, listed from the grade, ballot and history
+    authors with `byName`;
+  - shared plugin properties to clear;
+  - a confirmation with counts, for example "Clear 12 grades and 1 ballot from Tom?";
+  - one `reset` entry appended per choice;
+  - toasts for the result.
+- [ ] T067 [US6] List actions for plugins:
+  - in `packages/plugin-sdk/src/option-view.ts`, `OptionListContribution.actions` (≤ 2,
+    `{ id, label, confirm }`) and an `onListAction(ctx, id)` hook;
+  - `OptionListContext.resetValues(key)`;
+  - the host in `OptionExtensionsProvider.tsx` appends
+    `{ kind: "reset", scope: "participant", participantId: viewer, targets: ["properties"], plugin, key }`
+    for a person-scoped key, or `scope: "all"` for a shared key (owner only);
+  - `OptionListBar` shows each action, with its `confirm` text in a dialog.
+- [ ] T068 [US6] `plugins/option-status/src/index.ts`: a list action "Mark all as not seen", with
+  the confirm text "Show every option as new again? Only your own marks change.". It calls
+  `resetValues("seen")` and clears the manual hold. Add tests.
+- [ ] T069 [US6] Live share:
+  - `plugins/share-inpage/src/protocol.ts`: a guest `reset` entry (self form);
+  - `src/policy.ts`: force `participantId` to the guest and accept only
+    `targets: ["properties"]` with `plugin` and `key`;
+  - tests: a guest self reset is accepted; any other reset → `invalid`; an owner reset reaches
+    guests through the broadcast;
+  - `apps/web/src/features/live/GuestSession.tsx` sends list resets through the existing batching.
+- [ ] T070 [US6] Write e2e `apps/web/e2e/history-reset.spec.ts`:
+  - the owner plus two live guests, each with their own device secret;
+  - the owner resets Tom, and the averages update for everyone within 1 s;
+  - "Reset all votes" for round 1;
+  - an earlier outcome still verifies ("Verify Outcome" → "Reproduced ✓");
+  - Gina's "Mark all as not seen";
+  - the US5 tooltip texts, by hover and keyboard focus;
+  - `checkA11y` on the Reset dialog.
+
+---
+
+## Phase 9: User Story 7 — Choose how this project is decided (P2)
+
+**Goal**: the project stores its strategy, participants see it, and closing the vote uses it.
+
+**Independent Test**: spec US7 ("Weighted grades" is chosen and "Decided by: Weighted grades" is
+shown; the outcome names Weighted grades).
+
+- [ ] T071 [US7] Start with contract-kit cases "strategy meta (v1.4.0)" in
+  `packages/plugin-sdk/testing/project-store-kit.ts`:
+  - an owner set returns `snapshot.project.strategy` with `at`/`by`;
+  - `strategyChanges` is capped at 20;
+  - a non-owner change → `PERMISSION_DENIED`;
+  - it round-trips in password mode.
+  
+  Then implement:
+  - `strategy` and `strategyChanges` in `packages/core/src/model/project.ts`;
+  - `MetaPatch.strategy` in `packages/plugin-sdk/src/project-store.ts`;
+  - `updateMeta` and the read path in all five stores (Sheets meta keys `strategy` and
+    `strategyChanges`).
+- [ ] T072 [US7] Create `apps/web/src/features/decide/strategies.ts`:
+  - move `BUILTIN_STRATEGIES` and the descriptors out of `StrategyChooser.tsx`;
+  - `enabledStrategies()`;
+  - `chosenStrategy(snapshot)`, falling back to Borda with `{ topN: voting.topN }`;
+  - `strategyName(id)`;
+  - tests in `strategies.test.ts`.
+- [ ] T073 [US7] Add an owner-only "Decision method" picker to `ProjectVotePage`
+  (`apps/web/src/app/pages.tsx`), with the strategy settings form:
+  - while voting is open with ballots, warn "{n} people have already voted. Changing the method
+    now may change the result.";
+  - save with `store.updateMeta(ref, { strategy })`.
+- [ ] T074 [US7] Show "Decided by: {name}" with the one-line description on the vote page, in
+  `apps/web/src/features/live/GuestSession.tsx` and in `ResultsView.tsx`.
+- [ ] T075 [US7] `handleCloseAndTally` in `apps/web/src/app/pages.tsx`:
+  - use `chosenStrategy`;
+  - when the strategy is unavailable, show "{name} is not available. Choose another method
+    before closing the vote.";
+  - when `check()` fails, show its reason;
+  - in both cases voting stays open.
+  
+  Write e2e `apps/web/e2e/strategy.spec.ts` for the US7 scenarios.
+
+---
+
+## Phase 10: User Story 8 — Compare what each strategy would decide (P3)
+
+**Goal**: a side-by-side, reproducible preview of every enabled strategy, with Adopt.
+
+**Independent Test**: spec US8 (a row per strategy, differences marked, the same random draw on
+reopening, and Adopt records exactly one outcome).
+
+- [ ] T076 [P] [US8] Write `apps/web/src/features/decide/compare.test.ts`, then
+  `compare.ts`'s `compareStrategies(snapshot, strategies, chosenId)`:
+  - the seed is `hex(SHA-256(canonical tally input))[0..32]`;
+  - each row is `{ ok, order, winner, seed }` or `{ ok: false, reason }`;
+  - `differsFromChosen`;
+  - a repeated call gives the same seed;
+  - an unrunnable strategy gives its `check()` reason.
+- [ ] T077 [US8] Create `apps/web/src/features/decide/CompareStrategiesDialog.tsx`:
+  - a table with Strategy, Winner, Top 3, and Seed or Reason;
+  - the text "Winner differs from the chosen method";
+  - an owner-only "Adopt" that appends the reproduced outcome through the existing
+    StrategyChooser append path;
+  - opened from Results: always for the owner; read-only for others (including the guest view)
+    when `liveResults` is on or voting is closed.
+- [ ] T078 [US8] Add e2e tests to `apps/web/e2e/strategy.spec.ts`:
+  - 4 strategy rows;
+  - the same random seed when reopened;
+  - Adopt adds exactly one outcome, and it verifies;
+  - read-only for a guest with live results on;
+  - hidden while live results are off and voting is open;
+  - `checkA11y` on the dialog.
+
+---
+
+## Phase 11: Polish & Cross-Cutting
 
 - [ ] T047 [P] Document both extension points in `docs/plugin-authors.md`: declaring properties,
   view places, exposure, the examples, and the limits (≤ 3 badges, sections in the detail view
@@ -486,6 +691,15 @@ the dot back).
 - **US2 (T034–T036)** needs T028 (the status plugin's settings).
 - **US3 (T037–T043)** needs Foundational only; it does not need US1. T040 → T041.
 - **US4 (T044–T046)** needs T037 (example plugins) and T028 (the default marker to replace).
+- **US5 (T051–T065)** needs Foundational:
+  - T051 → T052 → T053;
+  - then the stores T054–T058 in parallel;
+  - then T059–T061;
+  - T062 → T063 → T064;
+  - T065 needs T028.
+- **US6 (T066–T070)** needs US5 (reset entries and history).
+- **US7 (T071–T075)** needs Foundational only. T071 → T072 → T073–T075.
+- **US8 (T076–T078)** needs T072.
 - **Polish** comes last.
 
 ## Parallel Examples

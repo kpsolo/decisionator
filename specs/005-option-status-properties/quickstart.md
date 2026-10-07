@@ -50,3 +50,12 @@ These cover:
 8. Start a live session and join as a guest in another browser. The guest's marks appear only
    in the guest's view. The owner sees no change.
 9. Export as JSON and as Excel, then restore. The marks are restored for their authors.
+10. Grade "Lisbon" 3, then 4. Hover over or focus your stars: "You rated 4 · …" and "Changed from 3
+    at …". The average shows "Last rating · …". "Mark as not seen" shows "Seen automatically · …".
+11. As the owner, open the menu → "Reset…" → choose Tom → confirm "Clear 3 grades and 1 ballot
+    from Tom?". Tom's ratings leave the averages, and an earlier outcome still verifies.
+12. As Gina, choose "Mark all as not seen": every option is new for her only.
+13. On the vote page, open "Decision method" and choose "Weighted grades". The page says "Decided
+    by: Weighted grades". Close and tally: the outcome names Weighted grades.
+14. Results → "Compare strategies": one row per strategy, with differences marked. Reopen it: the
+    random draw is the same. Adopt one: a new outcome appears, and the chosen method is unchanged.

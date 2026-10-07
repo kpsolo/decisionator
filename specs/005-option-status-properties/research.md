@@ -337,3 +337,165 @@ The agentic API contract goes from 1.x to the next minor.
   - axe on the card, the lightbox and Settings.
 - Real-time waits are kept short by setting the status plugin to 1 s in e2e, except for one
   test that checks the 5 s default.
+
+---
+
+# Extension: User Stories 5–8 (2026-10-07)
+
+The feature stays in 005 as an MVP slice (no split). New facts found in the code:
+
+- `runTally` takes an optional `seed` and otherwise generates one.
+- Project meta updates go field by field in every store (`updateMeta`). The Sheets `meta` tab
+  is key/value, so a new meta key needs no migration.
+- The file and Automerge stores replace grades and ballots in place, so their history is lost
+  today. Sheets and Firestore append rows and apply latest-wins on read, so their history
+  already exists.
+- `components/ui/tooltip.tsx` (Radix) exists.
+
+## R13 — Keeping history (FR-027)
+
+**Decision**:
+
+- Every store keeps every grade, ranking and property entry, and applies latest-wins only when
+  building the snapshot.
+- The snapshot's `grades`, `rankings` and `properties` stay effective-only, so stats, tallies,
+  the live share and plugins are unchanged.
+- A new optional `snapshot.history` holds what was superseded or cleared:
+  ```
+  { grades: Grade[]; rankings: Ranking[]; properties: PropertyValue[]; resets: Reset[] }
+  ```
+- The file and Automerge stores move from replace-in-place to append, plus latest-wins on read.
+- Older documents simply start with no history.
+
+**Rationale**:
+
+- Tooltips need the previous value and times.
+- Resets must not delete anything (Constitution VI, SC-009).
+- Keeping the effective arrays unchanged avoids touching every consumer.
+
+**Alternatives considered**: a separate audit log. It is a second source of truth, and stores
+already hold the entries.
+
+**Size**: seen marks change rarely, at most a few per option and person. The history of a 200-option,
+64-guest live session stays in the low thousands of rows, well within IndexedDB, Automerge and
+Sheets limits. The Sheets read cost is unchanged, because the same tabs are read.
+
+## R14 — Resets as one entry, not many clears (FR-030 – FR-034)
+
+**Decision**: a new entry kind `reset`.
+
+```
+{ kind: "reset", scope: "all" | "participant", participantId?, targets: ("grades"|"ballots"|"properties")[],
+  round?, plugin?, key? }
+```
+
+The store stamps `id`, `at` and `by`.
+
+An earlier entry E is cleared by R when all of these hold:
+
+- E is stored before R (stores apply entries in append order; `at` ties are broken by append
+  order);
+- E's kind is in R's `targets`;
+- R's scope is `all`, or `E.by === participantId`;
+- for ballots, R has no `round` or `E.round === round`;
+- for properties, R's `plugin` and `key` match when given.
+
+`effectiveEntries(...)` in `@decisionator/core` applies latest-wins plus resets. Every store calls
+it in `openProject`, so the rule lives in one place.
+
+**Permissions**:
+
+| Reset | Who may append it |
+|---|---|
+| `scope: "all"` | owner only |
+| `scope: "participant"` for another participant | owner only |
+| own seen marks: `scope: "participant"`, `participantId` = self, `targets: ["properties"]`, person-scoped plugin and key | anyone |
+
+A delegated reset (live guest) is allowed only in that last form.
+
+**Rationale**:
+
+- One row per reset, so the Sheets quota is not an issue.
+- The tooltip can say "Reset by the owner · 16:00" and name who reset.
+- Cleared entries stay in the history.
+
+**Alternatives considered**:
+
+- Writing a "clear" grade and ranking per option and person. That is N writes (quota), and the
+  clears would look as if the participant wrote them.
+- Physically deleting entries. That violates the append-only rule.
+
+## R15 — Tooltips and owner grade view (FR-028, FR-029)
+
+**Decision**:
+
+- A host component `TimeTooltip` uses the Radix tooltip. The trigger is the existing control,
+  focusable, so the tooltip shows on hover and on keyboard focus. Touch long-press opens it via
+  `onPointerDown` held for 500 ms.
+- Times are formatted with `Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })`.
+- The text comes from `snapshot.history` plus the effective entry:
+  - "You rated 4 · {time}" / "Changed from 3 at {time}";
+  - "Reset by {name} · {time}";
+  - "Last rating · {time}";
+  - ballot "Submitted {time} · updated {time}";
+  - seen status "Seen automatically · {time}" / "Marked as seen · {time}".
+- The seen-status text is produced by the status plugin through a new optional footer-action
+  field `title` (a tooltip), so the core stays unaware of "seen".
+- Owner per-participant grades: a "Ratings" list in the detail view's rating bar, owner-only,
+  rendered by the host from effective grades (name, grade, time).
+
+## R16 — Live share for resets and history (FR-034)
+
+**Decision**:
+
+- Protocol 3 (unreleased, same feature) gains a guest entry
+  `{ kind: "reset", scope: "participant", targets: ["properties"], plugin, key }`. The host forces
+  `participantId` to the guest and accepts only person-scoped keys.
+- Owner resets come back to guests through the normal snapshot broadcast (≤ 1 s).
+- Redaction of `history`:
+  - a guest gets only their own history entries;
+  - resets with `scope: "all"`;
+  - resets that target them.
+- The live-share contract stays at 3.0.0 (still unreleased) with these additions.
+
+## R17 — Project strategy choice (FR-035 – FR-037)
+
+**Decision**:
+
+- `Project.strategy?: { id, version, settings, at, by }` (default: Borda count 0.1.0, top N from
+  voting), plus `Project.strategyChanges?: { id, at, by }[]` (the last 20 changes).
+- Written through `updateMeta` (`MetaPatch.strategy`). The stores persist them:
+  - file and Automerge: inside meta;
+  - Firestore: meta doc;
+  - Sheets: meta keys `strategy` and `strategyChanges` as JSON, encrypted in password mode like
+    the title.
+- The app uses `chosenStrategy(snapshot)` from `features/decide/strategies.ts` (moved out of
+  `StrategyChooser`).
+- "Close voting and tally" calls `runTally` with it. When the strategy is missing or its `check`
+  fails, the reason is shown and voting stays open.
+- "Decided by: {name}" is shown on the vote page, in `GuestSession` and on Results.
+
+**Rationale**: the strategy is a project setting, like voting; meta already carries such
+settings, with no migration.
+
+**Alternatives considered**: an entry kind `strategy`. It gives full history for free, but needs
+another Sheets tab and the owner-only rules. Twenty recorded changes satisfy FR-035.
+
+## R18 — Comparing strategies (FR-038 – FR-040)
+
+**Decision**:
+
+- Pure `compareStrategies(snapshot, strategies)` in `apps/web/src/features/decide/compare.ts`
+  runs `runTally` for each enabled strategy with `triggeredBy: "preview"`.
+- The seed is derived from the inputs, `hex(SHA-256(canonical JSON of tally input))[0..32]`, so
+  reopening gives the same draw and adopting reproduces it.
+- Results are `{ strategyId, name, ok, order, winner, seed? , reason? }`. Nothing is appended.
+- "Adopt" appends `{ kind: "outcome" }` with the same seed (the existing StrategyChooser path).
+- Shown as a "Compare strategies" dialog on Results:
+  - owner always;
+  - participants and guests read-only when `liveResults` is on or voting is closed.
+- Rows whose winner differs from the chosen strategy's winner are highlighted, with text, not
+  colour only.
+
+**Rationale**: the strategies are pure and deterministic given a seed (Constitution VI), so a
+preview is cheap: 20 options and 30 ballots take well under 100 ms (SC-010).
