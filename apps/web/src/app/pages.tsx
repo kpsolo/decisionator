@@ -1,18 +1,29 @@
 import { runTally } from "@decisionator/core";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { bordaStrategy } from "@decisionator/strategy-borda";
 import { ArrowLeft, BarChart3, Lock, Radio, Share2, Trophy, Vote } from "lucide-react";
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button.js";
 import { Card, CardDescription, CardHeader, CardTitle } from "../components/ui/card.js";
 import { Skeleton } from "../components/ui/skeleton.js";
+import { toast } from "../components/ui/use-toast.js";
+import { CompareStrategiesDialog } from "../features/decide/CompareStrategiesDialog.js";
+import { DecidedBy, DecisionMethodPicker } from "../features/decide/DecisionMethod.js";
 import { StrategyChooser } from "../features/decide/StrategyChooser.js";
+import {
+  cannotRunReason,
+  chosenStrategy,
+  enabledStrategies,
+} from "../features/decide/strategies.js";
+import { ballotText } from "../features/history/time-texts.js";
 import { LiveNetworkSettings } from "../features/live/LiveNetworkSettings.js";
 import { projectKey, useLiveShare } from "../features/live/LiveShareContext.js";
+import { OptionExtensionsProvider } from "../features/option-view/OptionExtensionsProvider.js";
+import { getInstalledPlugins } from "../features/plugins/plugin-registry.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
 import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
+import { OptionSettings } from "../features/settings/OptionSettings.js";
 import { StorageSettings } from "../features/settings/StorageSettings.js";
 import { PasswordSetup } from "../features/sharing/PasswordSetup.js";
 import { ShareDialog } from "../features/sharing/ShareDialog.js";
@@ -183,14 +194,36 @@ export function ProjectVotePage() {
     setSnapshot(updated);
   };
 
+  const handleSaveStrategy = async (strategy: {
+    id: string;
+    version: string;
+    settings: Record<string, unknown>;
+  }) => {
+    await store.updateMeta(projectRef, { strategy });
+    setSnapshot(await store.openProject(projectRef));
+  };
+
   const handleCloseAndTally = async () => {
-    // Run tally
+    // The project's chosen method decides (FR-036); never fall back silently.
+    const chosen = chosenStrategy(snapshot, enabledStrategies(getInstalledPlugins()));
+    const reason = cannotRunReason(snapshot, chosen);
+    if (reason || !chosen.descriptor) {
+      toast({
+        title: "Voting stays open",
+        description: reason ?? undefined,
+        variant: "destructive",
+      });
+      return;
+    }
     const outcome = await runTally({
       snapshot,
-      strategy: bordaStrategy,
-      strategyId: "org.decisionator.strategy.borda",
-      strategyVersion: "0.1.0",
+      strategy: chosen.descriptor.strategy,
+      strategyId: chosen.id,
+      strategyVersion: chosen.version,
       triggeredBy: currentUser,
+      settings: chosen.settings,
+      runInput: typeof chosen.settings.pick === "string" ? chosen.settings.pick : undefined,
+      usesRandomness: chosen.descriptor.usesRandomness,
     });
 
     // Close voting state
@@ -212,43 +245,67 @@ export function ProjectVotePage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <PageHeader
-        title="Ballot / Voting"
-        description={`${snapshot.project.title} — Round ${currentRound}`}
-        actions={
-          <>
-            <Button variant="outline" size="sm" asChild leftIcon={<Trophy className="h-4 w-4" />}>
-              <Link to={`${baseUrl}/results`}>Results</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild leftIcon={<ArrowLeft className="h-4 w-4" />}>
-              <Link to={baseUrl}>Project</Link>
-            </Button>
-          </>
-        }
-      />
-
-      {isOwner && (
-        <VotingControls
-          voting={snapshot.project.voting}
-          onUpdateVoting={handleUpdateVoting}
-          onCloseAndTally={handleCloseAndTally}
+    <OptionExtensionsProvider
+      viewerId={currentUser || null}
+      isOwner={isOwner}
+      options={snapshot.options}
+      properties={snapshot.properties}
+      appendProperties={async (entries) => {
+        await store.append(projectRef, entries);
+      }}
+    >
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+        <PageHeader
+          title="Ballot / Voting"
+          description={`${snapshot.project.title} — Round ${currentRound}`}
+          actions={
+            <>
+              <Button variant="outline" size="sm" asChild leftIcon={<Trophy className="h-4 w-4" />}>
+                <Link to={`${baseUrl}/results`}>Results</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                leftIcon={<ArrowLeft className="h-4 w-4" />}
+              >
+                <Link to={baseUrl}>Project</Link>
+              </Button>
+            </>
+          }
         />
-      )}
 
-      <RankBallot
-        options={snapshot.options}
-        topN={topN}
-        initialRanking={myBallot?.ranking}
-        disabled={!roleCaps.canVote || snapshot.project.voting?.state === "closed"}
-        disabledReason={
-          snapshot.project.voting?.state === "closed"
-            ? "Voting is currently closed for this round."
-            : roleCaps.disabledReason
-        }
-        onSubmitBallot={handleSubmitBallot}
-      />
-    </div>
+        <DecidedBy snapshot={snapshot} />
+
+        {isOwner && (
+          <VotingControls
+            voting={snapshot.project.voting}
+            onUpdateVoting={handleUpdateVoting}
+            onCloseAndTally={handleCloseAndTally}
+          />
+        )}
+        {isOwner && <DecisionMethodPicker snapshot={snapshot} onSave={handleSaveStrategy} />}
+
+        <RankBallot
+          options={snapshot.options}
+          topN={topN}
+          initialRanking={myBallot?.ranking}
+          disabled={!roleCaps.canVote || snapshot.project.voting?.state === "closed"}
+          disabledReason={
+            snapshot.project.voting?.state === "closed"
+              ? "Voting is currently closed for this round."
+              : roleCaps.disabledReason
+          }
+          onSubmitBallot={handleSubmitBallot}
+          submittedText={ballotText({
+            viewerId: currentUser || null,
+            round: currentRound,
+            rankings: snapshot.rankings,
+            history: snapshot.history,
+          })}
+        />
+      </div>
+    </OptionExtensionsProvider>
   );
 }
 
@@ -287,49 +344,82 @@ export function ProjectResultsPage() {
   const currentRound = snapshot.project.voting?.round ?? 1;
   const liveResults = snapshot.project.voting?.liveResults ?? true;
   const isOpen = snapshot.project.voting?.state === "open";
+  const isOwner = snapshot.role === "owner";
+  // Others may compare once results are visible to them (FR-040).
+  const canCompare = isOwner || liveResults || !isOpen;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <PageHeader
-        title="Decision Outcome & Results"
-        description={snapshot.project.title}
-        actions={
-          <>
-            <Button variant="outline" size="sm" asChild leftIcon={<Vote className="h-4 w-4" />}>
-              <Link to={`${baseUrl}/vote`}>Ballot</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild leftIcon={<ArrowLeft className="h-4 w-4" />}>
-              <Link to={baseUrl}>Project</Link>
-            </Button>
-          </>
-        }
-      />
-
-      <ResultsView
-        outcomes={snapshot.outcomes}
-        options={snapshot.options}
-        rankings={snapshot.rankings}
-        currentRound={currentRound}
-        liveResults={liveResults}
-        isOpen={isOpen}
-      />
-
-      {snapshot.role === "owner" && (
-        <StrategyChooser
-          snapshot={snapshot}
-          store={store}
-          projectRef={projectRef}
-          currentUser={currentUser}
-          isOwner={true}
-          onOutcomeCreated={(newOutcome) => {
-            setSnapshot({
-              ...snapshot,
-              outcomes: [...snapshot.outcomes, newOutcome],
-            });
-          }}
+    <OptionExtensionsProvider
+      viewerId={currentUser || null}
+      isOwner={isOwner}
+      options={snapshot.options}
+      properties={snapshot.properties}
+      appendProperties={async (entries) => {
+        await store.append(projectRef, entries);
+      }}
+    >
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+        <PageHeader
+          title="Decision Outcome & Results"
+          description={snapshot.project.title}
+          actions={
+            <>
+              <Button variant="outline" size="sm" asChild leftIcon={<Vote className="h-4 w-4" />}>
+                <Link to={`${baseUrl}/vote`}>Ballot</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                leftIcon={<ArrowLeft className="h-4 w-4" />}
+              >
+                <Link to={baseUrl}>Project</Link>
+              </Button>
+            </>
+          }
         />
-      )}
-    </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <DecidedBy snapshot={snapshot} />
+          {canCompare && (
+            <CompareStrategiesDialog
+              snapshot={snapshot}
+              canAdopt={isOwner}
+              triggeredBy={currentUser}
+              onAdopt={async (outcome) => {
+                await store.append(projectRef, [{ kind: "outcome", outcome }]);
+                setSnapshot(await store.openProject(projectRef));
+              }}
+            />
+          )}
+        </div>
+
+        <ResultsView
+          outcomes={snapshot.outcomes}
+          options={snapshot.options}
+          rankings={snapshot.rankings}
+          currentRound={currentRound}
+          liveResults={liveResults}
+          isOpen={isOpen}
+        />
+
+        {snapshot.role === "owner" && (
+          <StrategyChooser
+            snapshot={snapshot}
+            store={store}
+            projectRef={projectRef}
+            currentUser={currentUser}
+            isOwner={true}
+            onOutcomeCreated={(newOutcome) => {
+              setSnapshot({
+                ...snapshot,
+                outcomes: [...snapshot.outcomes, newOutcome],
+              });
+            }}
+          />
+        )}
+      </div>
+    </OptionExtensionsProvider>
   );
 }
 
@@ -458,6 +548,7 @@ export function SettingsPage() {
         description="Storage provider settings, active persistence target, and credentials management."
       />
       <StorageSettings />
+      <OptionSettings />
       <LiveNetworkSettings />
     </div>
   );

@@ -1,11 +1,36 @@
 import type { AppendOptions, Entry } from "./project-store.js";
 
-/** Entry kinds an owner may record on behalf of another participant (contract v1.2.0). */
+/**
+ * Entry kinds an owner may record on behalf of another participant (contract v1.2.0; `property`
+ * since v1.4.0, and only with `scope: "person"`).
+ */
 export const DELEGATABLE_ENTRY_KINDS: ReadonlySet<Entry["kind"]> = new Set([
   "grade",
   "comment",
   "ranking",
+  "property",
+  "reset",
 ]);
+
+function isDelegatable(e: Entry, delegateId: string): boolean {
+  if (!DELEGATABLE_ENTRY_KINDS.has(e.kind)) return false;
+  if (e.kind === "property") return e.scope === "person";
+  if (e.kind === "reset") return isSelfPropertyReset(e, delegateId);
+  return true;
+}
+
+/** The only reset a non-owner (or a delegate) may append: clearing their own property values. */
+export function isSelfPropertyReset(e: Entry, self: string): boolean {
+  return (
+    e.kind === "reset" &&
+    e.scope === "participant" &&
+    e.participantId === self &&
+    e.targets.length === 1 &&
+    e.targets[0] === "properties" &&
+    typeof e.plugin === "string" &&
+    typeof e.key === "string"
+  );
+}
 
 export const DELEGATE_ID_MAX_LENGTH = 200;
 export const DELEGATE_NAME_MAX_LENGTH = 80;
@@ -22,8 +47,8 @@ export interface DelegatedAuthor {
  * writes nothing.
  *
  * Throws `INVALID_ARGUMENT` for a blank or over-long participant id or display name, and
- * `PERMISSION_DENIED` when the caller is not the project owner or an entry kind other than
- * grade, comment or ranking is delegated.
+ * `PERMISSION_DENIED` when the caller is not the project owner or an entry other than a grade,
+ * comment, ranking or person-scoped property is delegated.
  */
 export function resolveDelegatedAuthor(
   entries: readonly Entry[],
@@ -60,11 +85,15 @@ export function resolveDelegatedAuthor(
     throw new Error("PERMISSION_DENIED: Only the project owner may append on behalf of others");
   }
 
-  const refused = entries.find((e) => !DELEGATABLE_ENTRY_KINDS.has(e.kind));
+  const refused = entries.find((e) => !isDelegatable(e, participantId));
   if (refused) {
-    throw new Error(
-      `PERMISSION_DENIED: '${refused.kind}' entries cannot be appended on behalf of others`
-    );
+    const what =
+      refused.kind === "property"
+        ? "shared 'property'"
+        : refused.kind === "reset"
+          ? "'reset' entries other than clearing the delegate's own properties"
+          : `'${refused.kind}'`;
+    throw new Error(`PERMISSION_DENIED: ${what} entries cannot be appended on behalf of others`);
   }
 
   return byName === undefined ? { by: participantId } : { by: participantId, byName };

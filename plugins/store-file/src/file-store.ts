@@ -5,13 +5,17 @@ import {
   type Option,
   type OutcomeRecord,
   type Project,
+  type PropertyValue,
   type Ranking,
+  type Reset,
   checkVerifier,
   decrypt,
   deriveKey,
+  effectiveEntries,
   encrypt,
   generateSalt,
   makeVerifier,
+  monotonicNow,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -30,6 +34,11 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  applyStrategyPatch,
+  checkPropertyEntries,
+  checkResetEntries,
+  propertyRecord,
+  resetRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
@@ -48,6 +57,64 @@ async function openSealed(value: string, key: CryptoKey): Promise<string> {
 
 async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
   return body === "" ? "" : encrypt(body, key);
+}
+
+/** Property values of protected projects are stored as an encrypted JSON string. */
+async function sealPropertyValue(
+  value: PropertyValue["value"],
+  key: CryptoKey | undefined
+): Promise<PropertyValue["value"]> {
+  return key ? encrypt(JSON.stringify(value), key) : value;
+}
+
+async function openPropertyValue(
+  value: PropertyValue["value"],
+  key: CryptoKey
+): Promise<PropertyValue["value"]> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return JSON.parse(await decrypt(value, key)) as PropertyValue["value"];
+}
+
+/**
+ * The chosen strategy as stored. In a protected project the settings are kept as an encrypted
+ * JSON string in `sealedSettings`, like the title.
+ */
+interface StoredStrategy {
+  id: string;
+  version: string;
+  at: string;
+  by: string;
+  settings?: Record<string, unknown>;
+  sealedSettings?: string;
+}
+
+type ProjectStrategy = NonNullable<Project["strategy"]>;
+
+async function sealStrategy(
+  strategy: ProjectStrategy,
+  key: CryptoKey | undefined
+): Promise<StoredStrategy> {
+  const stamp = {
+    id: strategy.id,
+    version: strategy.version,
+    at: strategy.at ?? "",
+    by: strategy.by ?? "",
+  };
+  return key
+    ? { ...stamp, sealedSettings: await encrypt(JSON.stringify(strategy.settings), key) }
+    : { ...stamp, settings: strategy.settings };
+}
+
+async function openStrategy(
+  stored: StoredStrategy,
+  key: CryptoKey | undefined
+): Promise<ProjectStrategy> {
+  let settings = stored.settings ?? {};
+  if (stored.sealedSettings !== undefined) {
+    if (!key) throw new Error("Password required");
+    settings = JSON.parse(await decrypt(stored.sealedSettings, key)) as Record<string, unknown>;
+  }
+  return { id: stored.id, version: stored.version, settings, at: stored.at, by: stored.by };
 }
 
 function newId(prefix: string): string {
@@ -73,6 +140,10 @@ interface StoredFileProject {
     owner: string;
     createdAt: string;
     updatedAt: string;
+    /** Chosen strategy (ProjectStore v1.4.0). Missing in older docs. */
+    strategy?: StoredStrategy;
+    /** The last 20 strategy changes, oldest first. */
+    strategyChanges?: { id: string; at: string; by: string }[];
   };
   options: Option[];
   grades: Grade[];
@@ -80,6 +151,14 @@ interface StoredFileProject {
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
   contributions: Contribution[];
+  /**
+   * Grades, rankings and properties keep every entry in append order (ProjectStore v1.4.0);
+   * latest-wins and resets are applied when the snapshot is built. Older docs kept only the
+   * latest entry per slot, which reads back the same.
+   */
+  properties?: PropertyValue[];
+  /** Reset entries in append order (ProjectStore v1.4.0). Missing in older docs. */
+  resets?: Reset[];
   collaborators: {
     email: string;
     role: ParticipantRole;
@@ -235,6 +314,8 @@ export class FileProjectStore implements ProjectStore {
       rankings: [],
       outcomes: [],
       contributions: [],
+      properties: [],
+      resets: [],
       collaborators: [{ email: this.currentUser, role: "owner" }],
     };
 
@@ -253,59 +334,54 @@ export class FileProjectStore implements ProjectStore {
     }
 
     const role = this.resolveRole(doc, this.currentUser);
+    const key = doc.meta.protected ? await this.unlock(doc, opts?.password) : undefined;
+    const open = (value: string) => (key ? openSealed(value, key) : Promise.resolve(value));
 
-    if (doc.meta.protected) {
-      const key = await this.unlock(doc, opts?.password);
-
-      // Decrypt
-      const decryptedTitle = await openSealed(doc.meta.title, key);
-      const decryptedDesc = await openSealed(doc.meta.description, key);
-      const decryptedOptions = await Promise.all(
-        doc.options.map(async (opt) => ({
-          ...opt,
-          title: await openSealed(opt.title, key),
-          description: await openSealed(opt.description, key),
-        }))
-      );
-      const decryptedComments = await Promise.all(
-        doc.comments.map(async (c) => ({
-          ...c,
-          body: await openSealed(c.body, key),
-        }))
-      );
-
-      return {
-        project: {
-          title: decryptedTitle,
-          description: decryptedDesc,
-          protected: true,
-          formatVersion: 2,
-          voting: { ...doc.meta.voting },
-        },
-        options: decryptedOptions,
-        grades: [...doc.grades],
-        comments: decryptedComments,
-        rankings: [...doc.rankings],
-        outcomes: [...doc.outcomes],
-        contributions: [...doc.contributions],
-        role,
-      };
-    }
+    const options = key
+      ? await Promise.all(
+          doc.options.map(async (opt) => ({
+            ...opt,
+            title: await openSealed(opt.title, key),
+            description: await openSealed(opt.description, key),
+          }))
+        )
+      : [...doc.options];
+    const comments = await Promise.all(
+      doc.comments.map(async (c) => ({ ...c, body: await open(c.body) }))
+    );
+    const properties = await Promise.all(
+      (doc.properties ?? []).map(async (p) =>
+        key ? { ...p, value: await openPropertyValue(p.value, key) } : { ...p }
+      )
+    );
+    // Latest wins and resets, with the superseded and cleared entries as history.
+    const effective = effectiveEntries({
+      grades: doc.grades,
+      rankings: doc.rankings,
+      properties,
+      resets: doc.resets ?? [],
+    });
 
     return {
       project: {
-        title: doc.meta.title,
-        description: doc.meta.description,
-        protected: false,
+        title: await open(doc.meta.title),
+        description: await open(doc.meta.description),
+        protected: doc.meta.protected,
         formatVersion: 2,
         voting: { ...doc.meta.voting },
+        ...(doc.meta.strategy ? { strategy: await openStrategy(doc.meta.strategy, key) } : {}),
+        ...(doc.meta.strategyChanges
+          ? { strategyChanges: doc.meta.strategyChanges.map((c) => ({ ...c })) }
+          : {}),
       },
-      options: [...doc.options],
-      grades: [...doc.grades],
-      comments: [...doc.comments],
-      rankings: [...doc.rankings],
+      options,
+      grades: effective.grades,
+      comments,
+      rankings: effective.rankings,
       outcomes: [...doc.outcomes],
       contributions: [...doc.contributions],
+      properties: effective.properties,
+      history: effective.history,
       role,
     };
   }
@@ -344,6 +420,17 @@ export class FileProjectStore implements ProjectStore {
       }
       // Validates the whole call before anything is written.
       const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+      checkPropertyEntries(entries, {
+        optionIds: new Set(doc.options.map((o) => o.id)),
+        isOwner: role === "owner",
+      });
+      // Resets: the owner may append any; others only their own (or the delegate's) values.
+      checkResetEntries(
+        entries,
+        delegated
+          ? { isOwner: false, self: delegated.by }
+          : { isOwner: role === "owner", self: this.currentUser }
+      );
       const by = delegated?.by ?? this.currentUser;
       const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
@@ -353,13 +440,14 @@ export class FileProjectStore implements ProjectStore {
         if (!key) throw new Error("Password required");
       }
 
-      const now = new Date().toISOString();
+      let now = "";
       let sent = 0;
 
+      // Every entry is appended, never replaced, and stamped with a strictly increasing time so
+      // a reset clears exactly the entries appended before it (contract `history-resets`).
       for (const e of entries) {
+        now = monotonicNow();
         if (e.kind === "grade") {
-          // Latest wins per (by, optionId)
-          doc.grades = doc.grades.filter((g) => !(g.by === by && g.optionId === e.optionId));
           doc.grades.push({
             id: newId("grd"),
             optionId: e.optionId,
@@ -382,15 +470,12 @@ export class FileProjectStore implements ProjectStore {
           });
           sent++;
         } else if (e.kind === "ranking") {
-          const round = e.round ?? doc.meta.voting.round;
-          // Latest wins per (by, round)
-          doc.rankings = doc.rankings.filter((r) => !(r.by === by && r.round === round));
           doc.rankings.push({
             id: newId("rnk"),
             ranking: [...e.ranking],
             by,
             ...byName,
-            round,
+            round: e.round ?? doc.meta.voting.round,
             at: now,
           });
           sent++;
@@ -400,10 +485,24 @@ export class FileProjectStore implements ProjectStore {
         } else if (e.kind === "contribution") {
           doc.contributions.push(e.contribution);
           sent++;
+        } else if (e.kind === "property") {
+          const record = propertyRecord(
+            { ...e, value: await sealPropertyValue(e.value, key) },
+            { id: newId("prp"), at: now, by, ...byName }
+          );
+          doc.properties = [...(doc.properties ?? []), record];
+          sent++;
+        } else if (e.kind === "reset") {
+          // Reset records hold no secrets beyond plugin/key, so they are stored plainly.
+          doc.resets = [
+            ...(doc.resets ?? []),
+            resetRecord(e, { id: newId("rst"), at: now, by, ...byName }),
+          ];
+          sent++;
         }
       }
 
-      doc.meta.updatedAt = now;
+      doc.meta.updatedAt = now || new Date().toISOString();
       await db.put("projects", doc);
       await this.syncToHandleIfAvailable(doc);
       return sent;
@@ -479,6 +578,14 @@ export class FileProjectStore implements ProjectStore {
         doc.meta.description = key ? await encrypt(patch.description, key) : patch.description;
       }
       if (patch.voting) doc.meta.voting = { ...doc.meta.voting, ...patch.voting };
+      if (patch.strategy !== undefined) {
+        const current: Pick<Project, "strategy" | "strategyChanges"> = {
+          strategyChanges: doc.meta.strategyChanges,
+        };
+        const next = applyStrategyPatch(current, patch.strategy, this.currentUser, monotonicNow());
+        if (next.strategy) doc.meta.strategy = await sealStrategy(next.strategy, key);
+        doc.meta.strategyChanges = next.strategyChanges;
+      }
 
       doc.meta.updatedAt = new Date().toISOString();
       await db.put("projects", doc);
@@ -641,6 +748,8 @@ export class FileProjectStore implements ProjectStore {
             protected: doc.meta.protected,
             formatVersion: 2,
             voting: doc.meta.voting,
+            ...(doc.meta.strategy ? { strategy: doc.meta.strategy } : {}),
+            ...(doc.meta.strategyChanges ? { strategyChanges: doc.meta.strategyChanges } : {}),
           },
           options: doc.options,
           grades: doc.grades,
@@ -648,6 +757,8 @@ export class FileProjectStore implements ProjectStore {
           rankings: doc.rankings,
           outcomes: doc.outcomes,
           contributions: doc.contributions,
+          properties: doc.properties ?? [],
+          resets: doc.resets ?? [],
         };
         await writable.write(JSON.stringify(exportData, null, 2));
         await writable.close();

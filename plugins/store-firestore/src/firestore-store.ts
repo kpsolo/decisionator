@@ -1,11 +1,16 @@
-import type {
-  Comment,
-  Contribution,
-  Grade,
-  Option,
-  OutcomeRecord,
-  Project,
-  Ranking,
+import {
+  type Comment,
+  type Contribution,
+  type Grade,
+  type Option,
+  type OutcomeRecord,
+  type Project,
+  type PropertyScalar,
+  type PropertyValue,
+  type Ranking,
+  type Reset,
+  effectiveEntries,
+  monotonicNow,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -24,7 +29,11 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  applyStrategyPatch,
+  checkPropertyEntries,
+  checkResetEntries,
   readStoredByName,
+  resetRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import type { FirestoreEntryDoc, FirestoreOptionDoc, FirestoreProjectDoc } from "./collections.js";
@@ -51,6 +60,42 @@ async function openSealed(value: string, key: CryptoKey): Promise<string> {
 
 async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
   return body === "" ? "" : encrypt(body, key);
+}
+
+/** Property values of protected projects are stored as their JSON, encrypted. */
+async function sealPropertyValue(value: PropertyScalar, key: CryptoKey): Promise<string> {
+  return encrypt(JSON.stringify(value), key);
+}
+
+async function openPropertyValue(value: PropertyScalar, key: CryptoKey): Promise<PropertyScalar> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return JSON.parse(await decrypt(value, key)) as PropertyScalar;
+}
+
+type StoredStrategy = Pick<Project, "strategy" | "strategyChanges">;
+
+/** Strategy meta of protected projects is stored as its JSON, encrypted, like the title. */
+async function sealJson<T>(value: T | undefined, key: CryptoKey | undefined) {
+  if (value === undefined || !key) return value;
+  return encrypt(JSON.stringify(value), key);
+}
+
+async function openJson<T>(value: T | string | undefined, key: CryptoKey | undefined) {
+  if (typeof value !== "string") return value;
+  if (!key || !value.startsWith(ENCRYPTED_PREFIX)) return undefined;
+  return JSON.parse(await decrypt(value, key)) as T;
+}
+
+async function readStrategy(
+  doc: FirestoreProjectDoc,
+  key: CryptoKey | undefined
+): Promise<StoredStrategy> {
+  const strategy = await openJson(doc.strategy, key);
+  const strategyChanges = await openJson(doc.strategyChanges, key);
+  return {
+    ...(strategy ? { strategy } : {}),
+    ...(strategyChanges ? { strategyChanges } : {}),
+  };
 }
 
 export interface FirebaseConfig {
@@ -206,14 +251,18 @@ export class FirestoreProjectStore implements ProjectStore {
         });
       }
 
-      const { grades, comments, rankings, outcomes, contributions } = this.buildEntries(
-        entryList,
-        doc.voting.round
-      );
+      const { grades, comments, rankings, outcomes, contributions, properties, history } =
+        this.buildEntries(entryList);
 
       const decryptedComments = await Promise.all(
         comments.map(async (c) => ({ ...c, body: await openSealed(c.body, key) }))
       );
+      const openValues = (list: PropertyValue[]) =>
+        Promise.all(
+          list.map(async (p) => ({ ...p, value: await openPropertyValue(p.value, key) }))
+        );
+      const decryptedProperties = await openValues(properties);
+      const decryptedHistory = { ...history, properties: await openValues(history.properties) };
 
       return {
         project: {
@@ -222,6 +271,7 @@ export class FirestoreProjectStore implements ProjectStore {
           protected: true,
           formatVersion: 2,
           voting: { ...doc.voting },
+          ...(await readStrategy(doc, key)),
         },
         options: decryptedOptions,
         grades,
@@ -229,14 +279,14 @@ export class FirestoreProjectStore implements ProjectStore {
         rankings,
         outcomes,
         contributions,
+        properties: decryptedProperties,
+        history: decryptedHistory,
         role,
       };
     }
 
-    const { grades, comments, rankings, outcomes, contributions } = this.buildEntries(
-      entryList,
-      doc.voting.round
-    );
+    const { grades, comments, rankings, outcomes, contributions, properties, history } =
+      this.buildEntries(entryList);
 
     return {
       project: {
@@ -245,6 +295,7 @@ export class FirestoreProjectStore implements ProjectStore {
         protected: false,
         formatVersion: 2,
         voting: { ...doc.voting },
+        ...(await readStrategy(doc, undefined)),
       },
       options: Array.from(optsMap.values()),
       grades,
@@ -252,6 +303,8 @@ export class FirestoreProjectStore implements ProjectStore {
       rankings,
       outcomes,
       contributions,
+      properties,
+      history,
       role,
     };
   }
@@ -294,6 +347,11 @@ export class FirestoreProjectStore implements ProjectStore {
     const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
     const by = delegated?.by ?? this.currentUser;
     const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
+    checkPropertyEntries(entries, {
+      optionIds: new Set((this.options.get(ref.id) ?? new Map()).keys()),
+      isOwner: role === "owner",
+    });
+    checkResetEntries(entries, { isOwner: role === "owner" && !delegated, self: by });
 
     // Protected projects keep comment bodies encrypted, so writes need the session key.
     // Bodies are sealed before anything is written, so a failure leaves no partial append.
@@ -301,12 +359,17 @@ export class FirestoreProjectStore implements ProjectStore {
     const bodies = await Promise.all(
       entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
     );
+    const sealedValues = await Promise.all(
+      entries.map((e) => (e.kind === "property" && key ? sealPropertyValue(e.value, key) : null))
+    );
 
-    const now = new Date().toISOString();
     const entryList = this.entries.get(ref.id) || [];
     let sentCount = 0;
+    let now = doc.updatedAt;
 
     for (const [i, e] of entries.entries()) {
+      // Strictly increasing stamps keep "appended after a reset" decidable by time.
+      now = monotonicNow();
       const entryId = `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       if (e.kind === "grade") {
         entryList.push({
@@ -359,6 +422,26 @@ export class FirestoreProjectStore implements ProjectStore {
           contribution: e.contribution,
           by: this.currentUser,
           at: now,
+        });
+        sentCount++;
+      } else if (e.kind === "property") {
+        entryList.push({
+          id: entryId,
+          kind: "property",
+          optionId: e.optionId,
+          plugin: e.plugin,
+          key: e.key,
+          scope: e.scope,
+          value: sealedValues[i] ?? e.value,
+          by,
+          ...byName,
+          at: now,
+        });
+        sentCount++;
+      } else if (e.kind === "reset") {
+        entryList.push({
+          ...resetRecord(e, { id: entryId, at: now, by, ...byName }),
+          kind: "reset",
         });
         sentCount++;
       }
@@ -437,12 +520,27 @@ export class FirestoreProjectStore implements ProjectStore {
       value !== undefined && key ? encrypt(value, key) : value;
     const title = await seal(patch.title);
     const description = await seal(patch.description);
+    const now = monotonicNow();
+    let strategyMeta: Pick<FirestoreProjectDoc, "strategy" | "strategyChanges"> | undefined;
+    if (patch.strategy) {
+      const next = applyStrategyPatch(
+        await readStrategy(doc, key),
+        patch.strategy,
+        this.currentUser,
+        now
+      );
+      strategyMeta = {
+        strategy: await sealJson(next.strategy, key),
+        strategyChanges: await sealJson(next.strategyChanges, key),
+      };
+    }
 
     if (title !== undefined) doc.title = title;
     if (description !== undefined) doc.description = description;
     if (patch.voting) doc.voting = { ...doc.voting, ...patch.voting };
+    if (strategyMeta) Object.assign(doc, strategyMeta);
 
-    doc.updatedAt = new Date().toISOString();
+    doc.updatedAt = now;
     await this.notifyListeners(ref);
   }
 
@@ -546,26 +644,23 @@ export class FirestoreProjectStore implements ProjectStore {
     return found ? found.role : "view";
   }
 
-  private buildEntries(entryList: FirestoreEntryDoc[], currentRound: number) {
+  private buildEntries(entryList: FirestoreEntryDoc[]) {
     const grades: Grade[] = [];
     const comments: Comment[] = [];
     const rankings: Ranking[] = [];
     const outcomes: OutcomeRecord[] = [];
     const contributions: Contribution[] = [];
-
-    // Latest-wins map for grades, keyed on (by, optionId). JSON keys keep ids that contain ':'
-    // (e.g. "peer:a") from colliding.
-    const latestGrades = new Map<string, Grade>();
-    // Latest-wins map for rankings, keyed on (by, round)
-    const latestRankings = new Map<string, Ranking>();
+    const properties: PropertyValue[] = [];
+    const resets: Reset[] = [];
     const nameOf = (value: unknown) => {
       const byName = readStoredByName(value);
       return byName === undefined ? {} : { byName };
     };
 
+    // Entries are kept in append order; latest-wins and resets are applied by effectiveEntries.
     for (const e of entryList) {
       if (e.kind === "grade") {
-        latestGrades.set(JSON.stringify([e.by, e.optionId]), {
+        grades.push({
           id: e.id,
           optionId: e.optionId,
           value: e.value,
@@ -585,7 +680,7 @@ export class FirestoreProjectStore implements ProjectStore {
           replaces: e.replaces,
         });
       } else if (e.kind === "ranking") {
-        latestRankings.set(JSON.stringify([e.by, e.round]), {
+        rankings.push({
           id: e.id,
           ranking: e.ranking,
           by: e.by,
@@ -597,15 +692,33 @@ export class FirestoreProjectStore implements ProjectStore {
         outcomes.push(e.outcome);
       } else if (e.kind === "contribution") {
         contributions.push(e.contribution);
+      } else if (e.kind === "property") {
+        properties.push({
+          id: e.id,
+          at: e.at,
+          by: e.by,
+          ...nameOf(e.byName),
+          optionId: e.optionId,
+          plugin: e.plugin,
+          key: e.key,
+          scope: e.scope,
+          value: e.value,
+        });
+      } else if (e.kind === "reset") {
+        const { kind: _kind, byName, ...rest } = e;
+        resets.push({ ...rest, ...nameOf(byName) } as Reset);
       }
     }
 
+    const effective = effectiveEntries({ grades, rankings, properties, resets });
     return {
-      grades: Array.from(latestGrades.values()),
+      grades: effective.grades,
       comments,
-      rankings: Array.from(latestRankings.values()),
+      rankings: effective.rankings,
       outcomes,
       contributions,
+      properties: effective.properties,
+      history: effective.history,
     };
   }
 }

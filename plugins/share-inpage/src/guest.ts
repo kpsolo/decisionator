@@ -27,6 +27,8 @@ export interface LiveGuestState {
   snapshot: ProjectSnapshot | null;
   participantId: string | null;
   role: LiveRole | null;
+  /** The display name the host gave us; differs from the one asked for when it was taken. */
+  name?: string;
   /** Why the session ended or failed. */
   message?: string;
 }
@@ -204,6 +206,7 @@ export class LiveShareGuest {
         this.set({
           status: "live",
           participantId: msg.participantId,
+          name: msg.name,
           role: msg.role,
           snapshot: msg.snapshot as unknown as ProjectSnapshot,
           message: undefined,

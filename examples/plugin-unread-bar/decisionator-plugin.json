@@ -1,0 +1,45 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.examples.unread-bar",
+  "name": "Unread bar",
+  "description": "Example plugin: shows options you have not seen yet with a blue bar instead of the default dot, and marks them seen after a few seconds on screen.",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "optionProperties": "^1.0.0",
+    "optionView": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "optionProperties": [
+      {
+        "key": "seen",
+        "label": "Seen",
+        "type": "choice",
+        "scope": "person",
+        "hidden": true,
+        "choices": [
+          { "value": "seen", "label": "Seen" },
+          { "value": "not_seen", "label": "Not seen" }
+        ]
+      }
+    ],
+    "optionView": {
+      "places": ["marker", "footer"],
+      "replaces": ["marker"]
+    },
+    "exposure": true
+  },
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "seconds": {
+        "type": "integer",
+        "title": "Seconds an option must stay on screen",
+        "minimum": 1,
+        "maximum": 300,
+        "default": 5
+      }
+    }
+  }
+}

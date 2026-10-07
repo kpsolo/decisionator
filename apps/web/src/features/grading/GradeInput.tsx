@@ -15,6 +15,8 @@ export interface GradeInputProps {
   showMeta?: boolean;
   size?: "sm" | "md" | "lg";
   className?: string;
+  /** Id of an element describing the rating, e.g. a time tooltip's hidden text. */
+  describedBy?: string;
   onChange: (newValue: number) => void;
 }
 
@@ -28,6 +30,7 @@ export const GradeInput: React.FC<GradeInputProps> = ({
   showMeta = true,
   size = "md",
   className,
+  describedBy,
   onChange,
 }) => {
   // Previewing a rating while pointing makes the 1–5 scale obvious before committing.
@@ -39,6 +42,7 @@ export const GradeInput: React.FC<GradeInputProps> = ({
       <fieldset
         className="flex items-center border-0 p-0 m-0"
         aria-label={label}
+        aria-describedby={describedBy}
         onPointerLeave={() => setHovered(null)}
       >
         {[1, 2, 3, 4, 5].map((star) => {

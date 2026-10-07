@@ -1,3 +1,4 @@
+import optionStatusManifest from "../../../../../plugins/option-status/decisionator-plugin.json";
 import sourcePasteManifest from "../../../../../plugins/source-paste/decisionator-plugin.json";
 import storeSheetsManifest from "../../../../../plugins/store-google-sheets/decisionator-plugin.json";
 import strategyBordaManifest from "../../../../../plugins/strategy-borda/decisionator-plugin.json";
@@ -33,30 +34,80 @@ const BUILTIN_MANIFESTS: PluginManifest[] = [
   strategyOwnerPickManifest as unknown as PluginManifest,
   sourcePasteManifest as unknown as PluginManifest,
   storeSheetsManifest as unknown as PluginManifest,
+  optionStatusManifest as unknown as PluginManifest,
 ];
+
+type Listener = (plugins: InstalledPlugin[]) => void;
+const listeners = new Set<Listener>();
+let devManifests: PluginManifest[] = [];
+
+/** Calls `cb` whenever the installed plugins change, in this tab or another one. */
+export function subscribePlugins(cb: Listener): () => void {
+  listeners.add(cb);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY) cb(getInstalledPlugins());
+  };
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(cb);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** Development only: example plugins offered like built-ins (see option-view/dev-plugins.ts). */
+export function setDevPluginManifests(manifests: PluginManifest[]): void {
+  devManifests = manifests;
+}
+
+function builtinRecord(m: PluginManifest, enabled = true): InstalledPlugin {
+  return {
+    id: m.id,
+    name: m.name,
+    version: m.version,
+    description: (m as { description?: string }).description,
+    manifest: m,
+    source: { type: "builtin" },
+    bundleCode: "",
+    enabled,
+    grantedPermissions: m.permissions ? [...m.permissions] : [],
+    settings: {},
+    installedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Adds built-ins a stored registry does not know yet and refreshes the manifests of the ones it
+ * does, keeping the person's enabled flag and settings.
+ */
+function withBuiltins(stored: InstalledPlugin[]): { plugins: InstalledPlugin[]; changed: boolean } {
+  let changed = false;
+  const plugins = [...stored];
+  for (const m of [...BUILTIN_MANIFESTS, ...devManifests]) {
+    const index = plugins.findIndex((p) => p.id === m.id);
+    if (index < 0) {
+      // Development examples are only offered when listed in deci.devPlugins, and start enabled.
+      plugins.push(builtinRecord(m, true));
+      changed = true;
+    } else {
+      const existing = plugins[index] as InstalledPlugin;
+      if (
+        existing.source.type === "builtin" &&
+        JSON.stringify(existing.manifest) !== JSON.stringify(m)
+      ) {
+        plugins[index] = { ...existing, manifest: m, version: m.version, name: m.name };
+        changed = true;
+      }
+    }
+  }
+  return { plugins, changed };
+}
 
 export function getInstalledPlugins(): InstalledPlugin[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      // Initialize with built-ins
-      const initial: InstalledPlugin[] = BUILTIN_MANIFESTS.map((m) => ({
-        id: m.id,
-        name: m.name,
-        version: m.version,
-        description: (m as { description?: string }).description,
-        manifest: m,
-        source: { type: "builtin" },
-        bundleCode: "",
-        enabled: true,
-        grantedPermissions: m.permissions ? [...m.permissions] : [],
-        settings: {},
-        installedAt: new Date().toISOString(),
-      }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-      return initial;
-    }
-    return JSON.parse(raw) as InstalledPlugin[];
+    const { plugins, changed } = withBuiltins(raw ? (JSON.parse(raw) as InstalledPlugin[]) : []);
+    if (changed || !raw) localStorage.setItem(STORAGE_KEY, JSON.stringify(plugins));
+    return plugins;
   } catch {
     return [];
   }
@@ -64,6 +115,7 @@ export function getInstalledPlugins(): InstalledPlugin[] {
 
 export function saveInstalledPlugins(plugins: InstalledPlugin[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(plugins));
+  for (const cb of listeners) cb(plugins);
 }
 
 export function installPlugin(

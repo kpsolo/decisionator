@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@decisionator/core": "workspace:*",
+    "@decisionator/option-status": "workspace:*",
     "@decisionator/plugin-sdk": "workspace:*",
     "@decisionator/share-inpage": "workspace:*",
     "@decisionator/source-paste": "workspace:*",

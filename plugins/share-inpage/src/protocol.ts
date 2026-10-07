@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-/** Session protocol version spoken over the data channel (contract live-share v2). */
-export const PROTOCOL_VERSION = 2;
+/** Session protocol version spoken over the data channel (contract live-share v3). */
+export const PROTOCOL_VERSION = 3;
 
 // ── Signaling ────────────────────────────────────────────────────────────────────────────────
 // Rendezvous messages, encrypted with the session key before they reach any relay.
@@ -40,6 +40,32 @@ export const GuestEntrySchema = z.discriminatedUnion("kind", [
     kind: z.literal("ranking"),
     ranking: z.array(z.string().min(1).max(200)).min(1).max(50),
     round: z.number().int().min(1),
+  }),
+  z.object({
+    kind: z.literal("property"),
+    optionId: z.string().min(1).max(200),
+    /** Id of the plugin that declares the property. */
+    plugin: z.string().min(1).max(200),
+    key: z.string().min(1).max(40),
+    /** Guests may only set `person` values; `shared` parses so the host can refuse it clearly. */
+    scope: z.union([z.literal("shared"), z.literal("person")]),
+    /** `null` clears the value; the host caps its size (PROPERTY_VALUE_MAX_BYTES). */
+    value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  }),
+  z.object({
+    kind: z.literal("reset"),
+    /**
+     * Guests may only clear their own values of one property: `scope: "participant"`,
+     * `targets: ["properties"]`, `plugin` and `key`. The host sets `participantId` to the guest;
+     * anything else parses so the host can refuse it clearly.
+     */
+    scope: z.union([z.literal("all"), z.literal("participant")]),
+    targets: z
+      .array(z.enum(["grades", "ballots", "properties"]))
+      .min(1)
+      .max(3),
+    plugin: z.string().min(1).max(200).optional(),
+    key: z.string().min(1).max(40).optional(),
   }),
 ]);
 export type GuestEntry = z.infer<typeof GuestEntrySchema>;

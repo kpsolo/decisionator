@@ -1,5 +1,10 @@
-import type { Option } from "@decisionator/core";
-import type { Delegate, Entry, ProjectSnapshot } from "@decisionator/plugin-sdk";
+import { type Option, effectiveEntries, monotonicNow } from "@decisionator/core";
+import {
+  type Delegate,
+  type Entry,
+  type ProjectSnapshot,
+  resetRecord,
+} from "@decisionator/plugin-sdk";
 import { randomId } from "../src/crypto.js";
 import type { HostedProject } from "../src/hosted-project.js";
 import { type Link, createLink, createPipePair } from "../src/link.js";
@@ -37,13 +42,15 @@ export function baseSnapshot(patch: Partial<ProjectSnapshot> = {}): ProjectSnaps
     rankings: [],
     outcomes: [],
     contributions: [],
+    properties: [],
     role: "owner",
     ...patch,
   };
 }
 
 /**
- * An in-memory project with store semantics (latest-wins per author) and a deliberately slow
+ * An in-memory project with store semantics (every entry kept; latest-wins and resets applied
+ * with `effectiveEntries`) and a deliberately slow
  * read-modify-write, so concurrent appends would lose updates if the host did not serialize them.
  */
 export class FakeProject implements HostedProject {
@@ -89,12 +96,19 @@ export class FakeProject implements HostedProject {
     const doc = structuredClone(this.state);
     await new Promise((r) => setTimeout(r, 1));
     const by = who.participantId;
-    const at = new Date().toISOString();
     const byName = who.displayName ? { byName: who.displayName } : {};
+    // Store semantics: keep every entry, derive the effective arrays and history on read.
+    const past = doc.history;
+    const log = {
+      grades: inAppendOrder([...(past?.grades ?? []), ...doc.grades]),
+      rankings: inAppendOrder([...(past?.rankings ?? []), ...doc.rankings]),
+      properties: inAppendOrder([...(past?.properties ?? []), ...(doc.properties ?? [])]),
+      resets: [...(past?.resets ?? [])],
+    };
     for (const e of entries) {
+      const at = monotonicNow();
       if (e.kind === "grade") {
-        doc.grades = doc.grades.filter((g) => !(g.by === by && g.optionId === e.optionId));
-        doc.grades.push({
+        log.grades.push({
           id: randomId(6),
           at,
           by,
@@ -114,13 +128,35 @@ export class FakeProject implements HostedProject {
         });
       } else if (e.kind === "ranking") {
         const round = e.round ?? 1;
-        doc.rankings = doc.rankings.filter((r) => !(r.by === by && r.round === round));
-        doc.rankings.push({ id: randomId(6), at, by, round, ranking: e.ranking, ...byName });
+        log.rankings.push({ id: randomId(6), at, by, round, ranking: e.ranking, ...byName });
+      } else if (e.kind === "property") {
+        log.properties.push({
+          id: randomId(6),
+          at,
+          by,
+          optionId: e.optionId,
+          plugin: e.plugin,
+          key: e.key,
+          scope: e.scope,
+          value: e.value,
+          ...byName,
+        });
+      } else if (e.kind === "reset") {
+        log.resets.push(resetRecord(e, { id: randomId(6), at, by, ...byName }));
       }
     }
+    const effective = effectiveEntries(log);
+    doc.grades = effective.grades;
+    doc.rankings = effective.rankings;
+    doc.properties = effective.properties;
+    doc.history = effective.history;
     this.state = doc;
     for (const cb of this.listeners) cb(structuredClone(doc));
   }
+}
+
+function inAppendOrder<T extends { at: string }>(list: T[]): T[] {
+  return list.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }
 
 /** A link pair whose host end is handed to `accept`; returns the guest end. */

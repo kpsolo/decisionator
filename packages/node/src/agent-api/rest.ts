@@ -1,15 +1,80 @@
+import type { PropertyValue } from "@decisionator/core";
 import { Hono } from "hono";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { GrantManager } from "./grants.js";
+import type { GrantManager, HttpStatus } from "./grants.js";
 import {
   AGENT_RULES_TEXT,
   AddContributionInputSchema,
   AgentHelloInputSchema,
   CompleteRequestInputSchema,
   ProposeOptionInputSchema,
+  SetOptionPropertyBodySchema,
   UpdateContributionInputSchema,
 } from "./schemas.js";
-import type { AgentStateStore } from "./state.js";
+import type { AgentStateStore, DeclaredOptionProperty, SetSharedPropertyInput } from "./state.js";
+
+export type AgentPropertyWriteResult =
+  | { ok: true; value: PropertyValue }
+  | { ok: false; status: HttpStatus; code: string; message: string };
+
+/**
+ * Shared by REST and MCP: an agent sets a shared option property. Needs `contribute` and the
+ * option inside the grant's scope; the value is attributed to the agent and audited.
+ */
+export function agentSetOptionProperty(
+  grantManager: GrantManager,
+  stateStore: AgentStateStore,
+  token: string,
+  input: SetSharedPropertyInput
+): AgentPropertyWriteResult {
+  const auth = grantManager.verifyAccess(token, "contribute", {
+    kind: "option",
+    optionId: input.optionId,
+  });
+  if (!auth.valid || !auth.grant) {
+    return { ok: false, status: auth.status, code: auth.code, message: auth.message };
+  }
+  const grant = auth.grant;
+  const result = stateStore.setSharedProperty(grant.projectId, input, {
+    id: `agent:${grant.id}`,
+    name: grant.agentName || "Agent",
+  });
+  const where = {
+    grantId: grant.id,
+    projectId: grant.projectId,
+    optionId: input.optionId,
+    plugin: input.plugin,
+    key: input.key,
+  };
+  if (!result.ok) {
+    if (result.status === 403) {
+      grantManager.recordAudit("agent_refused_permission", {
+        ...where,
+        reason: "person_property",
+      });
+    }
+    return result;
+  }
+  grantManager.recordAudit("agent_property_set", { ...where, value: result.value.value });
+  return result;
+}
+
+/**
+ * Declarations of enabled plugins and effective shared values of the options in the grant's
+ * scope (one option for an option target, otherwise all). Per-person values are never included.
+ */
+export function agentOptionProperties(
+  stateStore: AgentStateStore,
+  projectId: string,
+  target: { kind: string; optionId?: string }
+): { optionProperties: DeclaredOptionProperty[]; properties: PropertyValue[] } {
+  const all = stateStore.getOptions(projectId).map((o) => o.id);
+  const inScope = target.kind === "option" ? all.filter((id) => id === target.optionId) : all;
+  return {
+    optionProperties: stateStore.getOptionProperties(projectId),
+    properties: stateStore.getSharedPropertyValues(projectId, inScope),
+  };
+}
 
 export interface RestApiOptions {
   grantManager: GrantManager;
@@ -128,6 +193,7 @@ export function createRestRouter(options: RestApiOptions): Hono {
       })),
       acceptedContributions: accepted,
       sourceRefs: project?.sourceRefs || [],
+      ...agentOptionProperties(stateStore, auth.grant.projectId, auth.grant.target),
     });
   });
 
@@ -314,6 +380,38 @@ export function createRestRouter(options: RestApiOptions): Hono {
     return c.json({ id: newOption.id, title: newOption.title, status: "proposed" }, 201);
   });
 
+  // 7a. GET /properties (get_option_properties)
+  router.get("/properties", async (c) => {
+    const token = c.get("token" as never) as string;
+    const auth = grantManager.verifyAccess(token, "read");
+    if (!auth.valid || !auth.grant) {
+      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    }
+    return c.json(agentOptionProperties(stateStore, auth.grant.projectId, auth.grant.target));
+  });
+
+  // 7b. PUT /options/:optionId/properties/:plugin/:key (set_option_property)
+  router.put("/options/:optionId/properties/:plugin/:key", async (c) => {
+    const token = c.get("token" as never) as string;
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object" || !("value" in body)) {
+      return c.json(
+        { error: "INVALID_PARAMS", message: "Request body must be an object with a value" },
+        400
+      );
+    }
+    const result = agentSetOptionProperty(grantManager, stateStore, token, {
+      optionId: c.req.param("optionId"),
+      plugin: c.req.param("plugin"),
+      key: c.req.param("key"),
+      value: (body as { value: unknown }).value,
+    });
+    if (!result.ok) {
+      return c.json({ error: result.code, message: result.message }, result.status);
+    }
+    return c.json(result.value, 200);
+  });
+
   // 8. POST /complete (complete_request)
   router.post("/complete", async (c) => {
     const token = c.get("token" as never) as string;
@@ -341,7 +439,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
     openapi: "3.1.0",
     info: {
       title: "Decisionator Agent API",
-      version: "1.0.0",
+      version: "1.1.0",
       description: "Local & remote agent API for Decisionator with full MCP parity.",
     },
     paths: {
@@ -443,6 +541,42 @@ export function generateOpenApiSpec(): Record<string, unknown> {
           },
           responses: {
             "201": { description: "Option proposed" },
+          },
+        },
+      },
+      "/properties": {
+        get: {
+          operationId: "get_option_properties",
+          summary:
+            "Gets option property declarations of enabled plugins and shared values of options in scope",
+          responses: {
+            "200": { description: "Declarations and shared values" },
+          },
+        },
+      },
+      "/options/{optionId}/properties/{plugin}/{key}": {
+        put: {
+          operationId: "set_option_property",
+          summary: "Sets a shared option property value (null clears it); attributed to the agent",
+          parameters: ["optionId", "plugin", "key"].map((name) => ({
+            name,
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          })),
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: zodToJsonSchema(SetOptionPropertyBodySchema),
+              },
+            },
+          },
+          responses: {
+            "200": { description: "The stored property value" },
+            "400": { description: "Invalid value" },
+            "403": { description: "Person-scoped property, missing permission or out of scope" },
+            "404": { description: "Unknown option or undeclared property" },
           },
         },
       },

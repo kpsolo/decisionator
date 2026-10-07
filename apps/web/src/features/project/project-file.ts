@@ -25,6 +25,13 @@ export function snapshotToExport(snapshot: ProjectSnapshot): ProjectExportV1 {
     rankings: snapshot.rankings,
     outcomes: snapshot.outcomes,
     contributions: snapshot.contributions ?? [],
+    properties: snapshot.properties ?? [],
+    history: {
+      grades: snapshot.history?.grades ?? [],
+      rankings: snapshot.history?.rankings ?? [],
+      properties: snapshot.history?.properties ?? [],
+    },
+    resets: snapshot.history?.resets ?? [],
   });
 }
 
@@ -44,8 +51,8 @@ function saveBlob(blob: Blob, fileName: string) {
 }
 
 /**
- * Downloads the project with its options, grades, ballots, comments, outcomes and
- * contributions: a `decisionator.project/v1` JSON bundle, or the same data as an `.xlsx`
+ * Downloads the project with its options, grades, ballots, comments, outcomes, contributions
+ * and option property values: a `decisionator.project/v1` JSON bundle, or the same data as an `.xlsx`
  * workbook that Excel and Google Sheets open. Either file restores the project.
  */
 export function downloadProjectExport(snapshot: ProjectSnapshot, format: ExportFormat = "json") {
@@ -83,7 +90,10 @@ export async function readProjectFile(file: Blob): Promise<ProjectExportV1> {
 /**
  * Re-creates an exported project in `store`: title, description, voting state and options
  * (with their IDs), then every grade, ballot and comment under its original author, the
- * outcomes (so results and verification work as before) and contributions.
+ * outcomes (so results and verification work as before), contributions and option property
+ * values (per-person ones under their author, shared ones under the restoring owner). History
+ * and resets are re-recorded in their original order, so the effective state and the history
+ * both survive.
  */
 export async function restoreProject(
   store: ProjectStore,

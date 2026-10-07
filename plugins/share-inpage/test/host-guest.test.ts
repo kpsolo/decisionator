@@ -13,8 +13,12 @@ afterEach(() => {
   for (const c of cleanups.splice(0)) c();
 });
 
-async function startHost(project = new FakeProject(), role?: "contribute" | "view") {
-  const host = new LiveShareHost({ project, role });
+async function startHost(
+  project = new FakeProject(),
+  role?: "contribute" | "view",
+  maxLinks?: number
+) {
+  const host = new LiveShareHost({ project, role, maxLinks });
   await host.start();
   cleanups.push(() => host.close());
   return { host, project };
@@ -88,6 +92,43 @@ describe("LiveShareHost + LiveShareGuest", () => {
     );
   });
 
+  it("gives guests with the same name distinct names, kept across a reconnect", async () => {
+    const { host, project } = await startHost();
+    const first = await joined(makeGuest(host, "Gina", "device-1").guest);
+    const second = makeGuest(host, "gina ", "device-2");
+    await joined(second.guest);
+
+    expect(first.getState().name).toBe("Gina");
+    expect(second.guest.getState().name).toBe("gina 2");
+    expect(
+      host
+        .getState()
+        .guests.map((g) => g.name)
+        .sort()
+    ).toEqual(["Gina", "gina 2"]);
+
+    await second.guest.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    expect(project.appendCalls.at(-1)?.participant.displayName).toBe("gina 2");
+
+    second.links[0]?.close("network blip");
+    await until(() => second.links.length === 2 && second.guest.getState().status === "live");
+    expect(second.guest.getState().name).toBe("gina 2");
+  });
+
+  it("picks the lowest free number for a repeated name", async () => {
+    const { host } = await startHost();
+    await joined(makeGuest(host, "Gina", "device-1").guest);
+    const two = makeGuest(host, "Gina", "device-2");
+    await joined(two.guest);
+    const three = await joined(makeGuest(host, "Gina", "device-3").guest);
+    expect(three.getState().name).toBe("Gina 3");
+
+    two.guest.leave();
+    await until(() => host.getState().guests.length === 2);
+    const four = await joined(makeGuest(host, "Gina", "device-4").guest);
+    expect(four.getState().name).toBe("Gina 2");
+  });
+
   it("serializes concurrent submissions so none are lost", async () => {
     const { host, project } = await startHost();
     const guests = await Promise.all(
@@ -118,6 +159,34 @@ describe("LiveShareHost + LiveShareGuest", () => {
     ).rejects.toMatchObject({ code: "voting_closed" });
     await alice.submit([{ kind: "ranking", ranking: ["b", "a"], round: 2 }]);
     expect(project.state.rankings).toHaveLength(1);
+  });
+
+  it("accepts grades and comments while voting is closed", async () => {
+    const project = new FakeProject(
+      baseSnapshot({
+        project: {
+          ...baseSnapshot().project,
+          voting: { state: "closed", round: 1, topN: 3, liveResults: true },
+        },
+      })
+    );
+    const { host } = await startHost(project);
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    await alice.submit([{ kind: "comment", optionId: "a", body: "Still good" }]);
+    expect(project.state.grades).toHaveLength(1);
+    expect(project.state.comments.map((c) => c.body)).toEqual(["Still good"]);
+  });
+
+  it("turns away guests beyond the link limit", async () => {
+    const { host } = await startHost(new FakeProject(), "contribute", 2);
+    await joined(makeGuest(host, "Alice").guest);
+    await joined(makeGuest(host, "Bob").guest);
+    const carol = makeGuest(host, "Carol").guest;
+    carol.start();
+    await until(() => carol.getState().status === "failed");
+    expect(carol.getState().message).toBe("This session is full.");
+    expect(host.getState().guests).toHaveLength(2);
   });
 
   it("rejects removed options, over-long ballots and edits of someone else's comment", async () => {
@@ -267,6 +336,34 @@ describe("LiveShareHost + LiveShareGuest", () => {
     expect(guest.getState().message).toMatch(/Could not reach the host/);
   });
 
+  it("says the host is no longer reachable when it vanishes mid-session", async () => {
+    const { host } = await startHost();
+    let reachable = true;
+    const links: Link[] = [];
+    const guest = new LiveShareGuest({
+      sessionId: SESSION,
+      deviceSecret: "d",
+      displayName: "Alice",
+      dial: async () => {
+        if (!reachable) throw new Error("unreachable");
+        const link = connectPair((l) => host.accept(l));
+        links.push(link);
+        return link;
+      },
+      maxRetryDelayMs: 10,
+      giveUpAfterMs: 60,
+    });
+    cleanups.push(() => guest.leave());
+    await joined(guest);
+
+    // The host tab disappears without sending `closing`.
+    reachable = false;
+    links[0]?.close("tab gone");
+    await until(() => guest.getState().status === "failed");
+    expect(guest.getState().message).toBe("The host is no longer reachable.");
+    expect(guest.getState().snapshot?.project.title).toBe("Lunch");
+  });
+
   it("turns away a guest speaking another protocol version", async () => {
     const { host } = await startHost();
     const link = connectPair((l) => host.accept(l));
@@ -288,5 +385,236 @@ describe("LiveShareHost + LiveShareGuest", () => {
       (r) => r.status === "rejected" && (r.reason as SubmitError).code === "rate_limited"
     );
     expect(limited.length).toBeGreaterThan(0);
+  });
+});
+
+describe("option properties over live share (proto 3)", () => {
+  const STATUS = { plugin: "status-personal", key: "status" } as const;
+
+  it("records a guest's person-scoped property under the guest", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "seen" },
+    ]);
+
+    expect(project.appendCalls).toHaveLength(1);
+    expect(project.appendCalls[0]?.participant).toMatchObject({
+      participantId: alice.getState().participantId,
+      displayName: "Alice",
+    });
+    expect(project.appendCalls[0]?.entries).toEqual([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "seen" },
+    ]);
+    expect(project.state.properties).toMatchObject([
+      { by: alice.getState().participantId, optionId: "a", scope: "person", value: "seen" },
+    ]);
+
+    // Latest wins per guest and option.
+    await alice.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "done" },
+    ]);
+    expect(project.state.properties?.map((p) => p.value)).toEqual(["done"]);
+  });
+
+  it("refuses shared properties, removed options and oversized values", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+
+    await expect(
+      alice.submit([{ kind: "property", optionId: "a", ...STATUS, scope: "shared", value: "x" }])
+    ).rejects.toMatchObject({ code: "invalid", message: "That change is not allowed." });
+    await expect(
+      alice.submit([
+        { kind: "property", optionId: "gone", ...STATUS, scope: "person", value: "seen" },
+      ])
+    ).rejects.toMatchObject({ code: "invalid" });
+    await expect(
+      alice.submit([
+        { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "x".repeat(2100) },
+      ])
+    ).rejects.toMatchObject({ code: "invalid" });
+    expect(project.appendCalls).toHaveLength(0);
+  });
+
+  it("shows each guest shared values and only their own person values", async () => {
+    const project = new FakeProject();
+    const { host } = await startHost(project);
+    await project.ownerAppend([
+      { kind: "property", optionId: "a", plugin: "cost", key: "eur", scope: "shared", value: 12 },
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "owner-private" },
+    ]);
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    await alice.submit([
+      { kind: "property", optionId: "b", ...STATUS, scope: "person", value: "alice-private" },
+    ]);
+    await bob.submit([
+      { kind: "property", optionId: "c", ...STATUS, scope: "person", value: "bob-mark" },
+    ]);
+    await until(() => (bob.getState().snapshot?.properties?.length ?? 0) >= 2);
+    await until(() => (alice.getState().snapshot?.properties?.length ?? 0) >= 2);
+
+    const bobSees = bob.getState().snapshot?.properties?.map((p) => p.value);
+    expect(bobSees?.sort()).toEqual([12, "bob-mark"].sort());
+    const aliceSees = alice.getState().snapshot?.properties?.map((p) => p.value);
+    expect(aliceSees?.sort()).toEqual([12, "alice-private"].sort());
+    for (const seen of [bobSees, aliceSees]) expect(seen).not.toContain("owner-private");
+  });
+
+  it("turns away a guest speaking protocol 2", async () => {
+    expect(PROTOCOL_VERSION).toBe(3);
+    const { host } = await startHost();
+    const link = connectPair((l) => host.accept(l));
+    const got: unknown[] = [];
+    link.onMessage((m) => got.push(m));
+    link.send({ t: "hello", proto: 2, key: "k".repeat(64), name: "Old" });
+    await flush();
+    expect(got[0]).toMatchObject({ t: "error", code: "protocol_mismatch" });
+  });
+});
+
+describe("resets and history over live share (proto 3)", () => {
+  const STATUS = { plugin: "status-personal", key: "status" } as const;
+
+  it("lets a guest clear their own person values, and only theirs", async () => {
+    const { host, project } = await startHost();
+    await project.ownerAppend([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "owner-mark" },
+    ]);
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    const aliceId = alice.getState().participantId;
+    const bobId = bob.getState().participantId;
+    await alice.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "seen" },
+      { kind: "property", optionId: "b", ...STATUS, scope: "person", value: "done" },
+    ]);
+    await bob.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "bob-mark" },
+    ]);
+
+    await alice.submit([
+      { kind: "reset", scope: "participant", targets: ["properties"], ...STATUS },
+    ]);
+
+    expect(project.appendCalls.at(-1)?.entries).toEqual([
+      {
+        kind: "reset",
+        scope: "participant",
+        participantId: aliceId,
+        targets: ["properties"],
+        ...STATUS,
+      },
+    ]);
+    expect(project.state.properties?.map((p) => [p.by, p.value]).sort()).toEqual(
+      [
+        [OWNER, "owner-mark"],
+        [bobId, "bob-mark"],
+      ].sort()
+    );
+    expect(project.state.history?.properties.map((p) => p.value).sort()).toEqual(["done", "seen"]);
+    await until(
+      () =>
+        (alice.getState().snapshot?.properties ?? []).length === 0 &&
+        (alice.getState().snapshot?.history?.resets.length ?? 0) === 1
+    );
+  });
+
+  it("refuses any other guest reset", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const refused = [
+      { kind: "reset", scope: "all", targets: ["properties"], ...STATUS },
+      { kind: "reset", scope: "participant", targets: ["grades"], ...STATUS },
+      { kind: "reset", scope: "participant", targets: ["properties", "ballots"], ...STATUS },
+      { kind: "reset", scope: "participant", targets: ["properties"] },
+    ] as const;
+    for (const entry of refused) {
+      await expect(alice.submit([entry as never])).rejects.toMatchObject({
+        code: "invalid",
+        message: "That change is not allowed.",
+      });
+    }
+    expect(project.appendCalls).toHaveLength(0);
+  });
+
+  it("records a guest reset for the guest even if the guest names someone else", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([
+      {
+        kind: "reset",
+        scope: "participant",
+        participantId: OWNER,
+        targets: ["properties"],
+        ...STATUS,
+      } as never,
+    ]);
+    expect(project.appendCalls[0]?.entries[0]).toMatchObject({
+      participantId: alice.getState().participantId,
+    });
+  });
+
+  it("delivers an owner reset to the guest, whose grade disappears", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const aliceId = alice.getState().participantId ?? "";
+    await alice.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    await until(() => (alice.getState().snapshot?.grades.length ?? 0) === 1);
+
+    await project.ownerAppend([
+      { kind: "reset", scope: "participant", participantId: aliceId, targets: ["grades"] },
+    ]);
+    await until(() => (alice.getState().snapshot?.grades.length ?? 0) === 0);
+    const history = alice.getState().snapshot?.history;
+    expect(history?.grades.map((g) => g.value)).toEqual([4]);
+    expect(history?.resets.map((r) => r.participantId)).toEqual([aliceId]);
+  });
+
+  it("shows a guest only their own history and the resets that concern them", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    const aliceId = alice.getState().participantId ?? "";
+    const bobId = bob.getState().participantId ?? "";
+    await project.ownerAppend([{ kind: "grade", optionId: "a", value: 5 }]);
+    await project.ownerAppend([{ kind: "grade", optionId: "a", value: 1 }]);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 2 }]);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 3 }]);
+    await bob.submit([{ kind: "grade", optionId: "b", value: 2 }]);
+    await bob.submit([{ kind: "grade", optionId: "b", value: 4 }]);
+    await bob.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "bob-mark" },
+    ]);
+    await bob.submit([{ kind: "reset", scope: "participant", targets: ["properties"], ...STATUS }]);
+    await project.ownerAppend([
+      { kind: "reset", scope: "participant", participantId: bobId, targets: ["grades"] },
+      { kind: "reset", scope: "all", targets: ["ballots"] },
+    ]);
+
+    // The owner's store keeps everything.
+    expect(project.state.history?.grades.map((g) => g.by).sort()).toEqual(
+      [OWNER, aliceId, bobId, bobId].sort()
+    );
+    expect(project.state.history?.resets).toHaveLength(3);
+
+    await until(() => (alice.getState().snapshot?.history?.resets.length ?? 0) === 1);
+    await until(() => (bob.getState().snapshot?.history?.resets.length ?? 0) === 3);
+    const aliceHistory = alice.getState().snapshot?.history;
+    expect(aliceHistory?.grades.map((g) => [g.by, g.value])).toEqual([[aliceId, 2]]);
+    expect(aliceHistory?.rankings).toEqual([]);
+    expect(aliceHistory?.properties).toEqual([]);
+    expect(aliceHistory?.resets.map((r) => r.scope)).toEqual(["all"]);
+
+    const bobHistory = bob.getState().snapshot?.history;
+    expect(bobHistory?.grades.every((g) => g.by === bobId)).toBe(true);
+    expect(bobHistory?.grades.map((g) => g.value)).toEqual([2, 4]);
+    expect(bobHistory?.properties.map((p) => p.value)).toEqual(["bob-mark"]);
+    expect(bobHistory?.resets.map((r) => r.scope).sort()).toEqual([
+      "all",
+      "participant",
+      "participant",
+    ]);
   });
 });

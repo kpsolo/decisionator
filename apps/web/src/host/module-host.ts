@@ -1,3 +1,4 @@
+import { OptionPropertyDefinitionSchema } from "@decisionator/core";
 import type {
   IdeaSourcePlugin,
   IdeaSourceRequest,
@@ -18,14 +19,18 @@ export interface HostPlatformVersions {
   ideaSource?: string;
   projectStore?: string;
   uiSlot?: string;
+  optionProperties?: string;
+  optionView?: string;
 }
 
 export const HOST_PLATFORM_VERSIONS: HostPlatformVersions = {
   runtime: "1.0.0",
   strategy: "1.1.0",
   ideaSource: "1.0.0",
-  projectStore: "1.2.1",
+  projectStore: "1.4.0",
   uiSlot: "1.0.0",
+  optionProperties: "1.0.0",
+  optionView: "1.0.0",
 };
 
 const emptySnapshot: ProjectSnapshot = {
@@ -56,6 +61,8 @@ export interface PluginManifest {
     ideaSource?: string;
     projectStore?: string;
     uiSlot?: string;
+    optionProperties?: string;
+    optionView?: string;
   };
   main: string;
   provides: {
@@ -63,10 +70,18 @@ export interface PluginManifest {
     ideaSource?: unknown;
     projectStore?: unknown;
     uiSlots?: unknown[];
+    /** Option properties (contract option-properties 1.0.0); see `OptionPropertyDefinition`. */
+    optionProperties?: unknown[];
+    /** Option view places the plugin uses and replaces (contract option-view 1.0.0). */
+    optionView?: { places?: OptionViewPlaceName[]; replaces?: "marker"[] };
+    /** The plugin wants `onOptionExposed` calls. */
+    exposure?: boolean;
   };
   permissions?: string[];
   oauth?: Record<string, unknown>;
 }
+
+export type OptionViewPlaceName = "marker" | "badges" | "footer" | "sections" | "list";
 
 export class ModuleError extends Error {
   constructor(
@@ -89,6 +104,11 @@ export function validateManifest(
   manifest: unknown,
   hostVersions: HostPlatformVersions = HOST_PLATFORM_VERSIONS
 ): PluginManifest {
+  // Before the schema, so a bad declaration is reported by property name, not by JSON path.
+  const declarations = (manifest as { provides?: { optionProperties?: unknown } } | null)?.provides
+    ?.optionProperties;
+  if (Array.isArray(declarations)) checkOptionProperties(declarations);
+
   const valid = validateManifestFn(manifest);
   if (!valid) {
     const errors = validateManifestFn.errors
@@ -115,6 +135,29 @@ export function validateManifest(
   }
 
   return typedManifest;
+}
+
+/**
+ * Rules the JSON Schema cannot express (contract option-properties 1.0.0): keys unique within the
+ * plugin, choices only for choice properties, unique choice values and a default that fits.
+ * The error names the property.
+ */
+function checkOptionProperties(declarations: unknown[]): void {
+  const seen = new Set<string>();
+  for (const [index, raw] of declarations.entries()) {
+    const key = (raw as { key?: unknown } | null)?.key;
+    const name = typeof key === "string" ? `"${key}"` : `#${index + 1}`;
+    const parsed = OptionPropertyDefinitionSchema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
+      throw new Error(`Option property ${name} is invalid: ${where}${issue?.message ?? "invalid"}`);
+    }
+    if (seen.has(parsed.data.key)) {
+      throw new Error(`Option property ${name} is declared more than once`);
+    }
+    seen.add(parsed.data.key);
+  }
 }
 
 /**

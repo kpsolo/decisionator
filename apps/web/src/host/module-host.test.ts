@@ -1,5 +1,6 @@
 import type { ProjectStore } from "@decisionator/plugin-sdk";
 import { describe, expect, it } from "vitest";
+import optionStatusManifest from "../../../../plugins/option-status/decisionator-plugin.json";
 import storeManifest from "../../../../plugins/store-google-sheets/decisionator-plugin.json";
 import strategyManifest from "../../../../plugins/strategy-borda/decisionator-plugin.json";
 import {
@@ -77,5 +78,124 @@ describe("ModuleHost", () => {
         100
       )
     ).rejects.toThrow(/\[Module test.module\] Internal explosion/);
+  });
+});
+
+describe("validateManifest: option extension points (manifest 1.2)", () => {
+  const base = {
+    manifestVersion: 1,
+    id: "org.example.props",
+    name: "Props",
+    version: "0.1.0",
+    platform: { runtime: "^1.0.0", optionProperties: "^1.0.0", optionView: "^1.0.0" },
+    main: "dist/index.js",
+  };
+  const cost = { key: "cost", label: "Cost per person", type: "number", scope: "shared" };
+  const withProps = (optionProperties: unknown[], extra: Record<string, unknown> = {}) => ({
+    ...base,
+    provides: { optionProperties, ...extra },
+  });
+
+  it("provides optionProperties and optionView 1.0.0 and keeps projectStore 1.4.0", () => {
+    expect(HOST_PLATFORM_VERSIONS.optionProperties).toBe("1.0.0");
+    expect(HOST_PLATFORM_VERSIONS.optionView).toBe("1.0.0");
+    expect(HOST_PLATFORM_VERSIONS.projectStore).toBe("1.4.0");
+  });
+
+  it("accepts the built-in option-status manifest", () => {
+    const m = validateManifest(optionStatusManifest);
+    expect(m.id).toBe("org.decisionator.option-status");
+    expect(m.provides.optionView?.replaces).toEqual(["marker"]);
+    expect(m.provides.exposure).toBe(true);
+  });
+
+  it("accepts properties, view places and exposure", () => {
+    const m = validateManifest(
+      withProps(
+        [
+          { ...cost, cardBadge: true },
+          {
+            key: "priority",
+            label: "Priority",
+            type: "choice",
+            scope: "shared",
+            choices: [
+              { value: "low", label: "Low" },
+              { value: "high", label: "High" },
+            ],
+            default: "low",
+          },
+        ],
+        { optionView: { places: ["badges", "sections"], replaces: [] }, exposure: false }
+      )
+    );
+    expect(m.provides.optionProperties).toHaveLength(2);
+  });
+
+  it("refuses duplicate property keys, naming the property", () => {
+    expect(() => validateManifest(withProps([cost, { ...cost, label: "Other" }]))).toThrow(
+      /Option property "cost" is declared more than once/
+    );
+  });
+
+  it("refuses a choice property without choices, naming the property", () => {
+    expect(() =>
+      validateManifest(
+        withProps([{ key: "level", label: "Level", type: "choice", scope: "shared" }])
+      )
+    ).toThrow(/Option property "level" is invalid: choices/);
+  });
+
+  it("refuses choices on a non-choice property", () => {
+    expect(() =>
+      validateManifest(withProps([{ ...cost, choices: [{ value: "a", label: "A" }] }]))
+    ).toThrow(/Option property "cost" is invalid: choices/);
+  });
+
+  it("refuses duplicate choice values", () => {
+    const choices = [
+      { value: "a", label: "A" },
+      { value: "a", label: "Again" },
+    ];
+    expect(() =>
+      validateManifest(
+        withProps([{ key: "pick", label: "Pick", type: "choice", scope: "person", choices }])
+      )
+    ).toThrow(/Option property "pick" is invalid: choices: choice values must be unique/);
+  });
+
+  it("refuses a default that does not fit the type", () => {
+    expect(() => validateManifest(withProps([{ ...cost, default: "abc" }]))).toThrow(
+      /Option property "cost" is invalid: default: Cost per person: enter a number/
+    );
+  });
+
+  it("refuses a bad key or scope", () => {
+    expect(() => validateManifest(withProps([{ ...cost, key: "Cost" }]))).toThrow(
+      /Option property "Cost" is invalid: key/
+    );
+    expect(() => validateManifest(withProps([{ ...cost, scope: "everyone" }]))).toThrow(
+      /Option property "cost" is invalid: scope/
+    );
+  });
+
+  it("refuses more than 20 properties", () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({ ...cost, key: `p${i}` }));
+    expect(() => validateManifest(withProps(many))).toThrow(/Manifest schema validation failed/);
+  });
+
+  it("refuses unknown view places and replacing places other than the marker", () => {
+    expect(() =>
+      validateManifest({ ...base, provides: { optionView: { places: ["title"] } } })
+    ).toThrow(/Manifest schema validation failed/);
+    expect(() =>
+      validateManifest({ ...base, provides: { optionView: { replaces: ["badges"] } } })
+    ).toThrow(/Manifest schema validation failed/);
+  });
+
+  it("refuses a manifest needing option properties from a host without them", () => {
+    expect(() => validateManifest(withProps([cost]), { runtime: "1.0.0" })).toThrow(
+      /not supported by this host/
+    );
   });
 });

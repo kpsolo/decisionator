@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { AgentPermission, AgentRequestStatus, TargetRef } from "@decisionator/core";
-import type { AuditLog } from "./audit.js";
+import type { AgentAuditEventType, AuditLog } from "./audit.js";
 
 export interface StoredGrant {
   id: string; // request ID
@@ -111,6 +111,11 @@ export class GrantManager {
       summary,
     });
     return true;
+  }
+
+  /** Appends an event to the audit log this manager was created with, if any. */
+  recordAudit(type: AgentAuditEventType, details: Record<string, unknown>): void {
+    this.auditLog?.record(type, details);
   }
 
   setAgentName(grantId: string, name: string): void {

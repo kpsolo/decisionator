@@ -20,6 +20,18 @@ import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "../../components/ui/dialog.js";
 import { cn } from "../../lib/utils.js";
+import { TimeTooltip } from "../history/TimeTooltip.js";
+import { type ParticipantRating, ratingLine } from "../history/time-texts.js";
+import { useExposureRef, useOptionView } from "../option-view/OptionExtensionsProvider.js";
+import {
+  OptionBadges,
+  OptionFooter,
+  OptionMarker,
+  OptionMarkerFrame,
+  OptionSections,
+  PropertySection,
+  markerTitleClass,
+} from "../option-view/OptionPlaces.js";
 import { GradeInput } from "./GradeInput.js";
 
 export interface OptionRowProps {
@@ -33,6 +45,16 @@ export interface OptionRowProps {
   onGrade: (value: number) => void;
   /** The option's comment thread, shown when the comments toggle is expanded or in the lightbox. */
   comments: React.ReactNode;
+  /** Time tooltips (FR-028): on the viewer's own stars and on the average. */
+  timeTexts?: OptionTimeTexts;
+  /** Each participant's current grade, shown in the detail view when `isOwner` (FR-029). */
+  ratings?: ParticipantRating[];
+  isOwner?: boolean;
+}
+
+export interface OptionTimeTexts {
+  ownGrade?: string;
+  average?: string;
 }
 
 function getHostname(url: string): string {
@@ -78,10 +100,17 @@ export const OptionRow: React.FC<OptionRowProps> = ({
   canGrade,
   onGrade,
   comments,
+  timeTexts,
+  ratings,
+  isOwner = false,
 }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const commentsId = useId();
+  // Plugin places (contract option-view): marker, badges and footer. Title, grading and
+  // comments below stay host-owned.
+  const view = useOptionView(option, "card");
+  const exposureRef = useExposureRef(option.id);
 
   const handleCardClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -97,6 +126,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
 
   return (
     <li
+      ref={exposureRef}
+      data-option-id={option.id}
       className={cn(
         "group relative flex flex-col items-start p-5 w-full rounded-[14px] transition-all duration-200 cursor-pointer",
         // Light mode
@@ -115,6 +146,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         }
       }}
     >
+      <OptionMarkerFrame view={view} />
       {/* Top container: Left content + Right action buttons */}
       <div className="flex flex-col sm:flex-row items-start justify-between gap-6 w-full">
         {/* Left container: Badge + Text content */}
@@ -139,7 +171,13 @@ export const OptionRow: React.FC<OptionRowProps> = ({
           <div className="flex flex-col items-start flex-1 min-w-0">
             {/* Title row */}
             <div className="flex flex-row items-center gap-2 min-h-8 w-full py-0.5">
-              <h4 className="text-[20px] sm:text-[22px] font-semibold leading-tight tracking-[-0.45px] text-[#0066CC] dark:text-[#0B84FE] [overflow-wrap:anywhere] truncate">
+              <OptionMarker view={view} />
+              <h4
+                className={cn(
+                  "text-[20px] sm:text-[22px] font-semibold leading-tight tracking-[-0.45px] text-[#0066CC] dark:text-[#0B84FE] [overflow-wrap:anywhere] truncate",
+                  markerTitleClass(view)
+                )}
+              >
                 {option.title}
               </h4>
               <ArrowUpRight
@@ -159,22 +197,32 @@ export const OptionRow: React.FC<OptionRowProps> = ({
 
               {/* Rating row: Stars + Text label */}
               <div className="flex flex-row items-center gap-2 flex-wrap">
-                <GradeInput
-                  value={myGrade}
-                  optionId={option.id}
-                  label={`Your rating for ${option.title}`}
-                  showMeta={false}
-                  size="lg"
-                  disabled={!canGrade}
-                  onChange={onGrade}
-                  className="items-start"
-                />
-                <span className="text-xs leading-4 text-muted-foreground dark:text-[#A1A1AB] tabular-nums font-normal pl-0.5">
-                  {averageGrade !== undefined && gradeCount > 0
-                    ? `${averageGrade.toFixed(1)} avg · ${gradeCount} ${gradeCount === 1 ? "rating" : "ratings"}`
-                    : "No ratings yet"}
-                </span>
+                <TimeTooltip text={timeTexts?.ownGrade}>
+                  {(describedBy) => (
+                    <div className="inline-flex">
+                      <GradeInput
+                        value={myGrade}
+                        optionId={option.id}
+                        label={`Your rating for ${option.title}`}
+                        showMeta={false}
+                        size="lg"
+                        disabled={!canGrade}
+                        onChange={onGrade}
+                        className="items-start"
+                        describedBy={timeTexts?.ownGrade ? describedBy : undefined}
+                      />
+                    </div>
+                  )}
+                </TimeTooltip>
+                <TimeTooltip text={timeTexts?.average} focusable>
+                  <span className="rounded text-xs leading-4 text-muted-foreground dark:text-[#A1A1AB] tabular-nums font-normal pl-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {averageGrade !== undefined && gradeCount > 0
+                      ? `${averageGrade.toFixed(1)} avg · ${gradeCount} ${gradeCount === 1 ? "rating" : "ratings"}`
+                      : "No ratings yet"}
+                  </span>
+                </TimeTooltip>
               </div>
+              <OptionBadges view={view} />
             </div>
           </div>
         </div>
@@ -196,7 +244,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
               </span>
             )}
             {option.cons.length > 0 && (
-              <span className="text-rose-600 dark:text-[#FF547B] tabular-nums font-normal">
+              <span className="text-rose-700 dark:text-[#FF547B] tabular-nums font-normal">
                 −{option.cons.length}
               </span>
             )}
@@ -235,6 +283,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         </div>
       </div>
 
+      <OptionFooter view={view} option={option} className="mt-3 pl-[54px]" />
+
       {/* Quick comments disclosure below the card */}
       {commentsOpen && (
         <div
@@ -258,6 +308,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         canGrade={canGrade}
         onGrade={onGrade}
         comments={comments}
+        timeTexts={timeTexts}
+        ratings={isOwner ? ratings : undefined}
       />
     </li>
   );
@@ -275,6 +327,9 @@ interface OptionLightboxProps {
   canGrade: boolean;
   onGrade: (value: number) => void;
   comments: React.ReactNode;
+  timeTexts?: OptionTimeTexts;
+  /** Owner only: each participant's current grade. */
+  ratings?: ParticipantRating[];
 }
 
 function OptionLightbox({
@@ -289,13 +344,18 @@ function OptionLightbox({
   canGrade,
   onGrade,
   comments,
+  timeTexts,
+  ratings,
 }: OptionLightboxProps) {
+  const view = useOptionView(option, "detail");
+  const exposureRef = useExposureRef(option.id);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 rounded-2xl gap-0 border border-border shadow-raised bg-background sm:rounded-2xl">
         {/* Lightbox Header banner */}
-        <div className="p-6 border-b border-border bg-muted/20 space-y-3">
+        <div ref={exposureRef} className="p-6 border-b border-border bg-muted/20 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
+            <OptionMarker view={view} />
             <Badge variant="secondary" className="font-bold tabular-nums">
               Option #{index + 1}
             </Badge>
@@ -315,9 +375,15 @@ function OptionLightbox({
                 {option.status}
               </Badge>
             )}
+            <OptionBadges view={view} />
           </div>
 
-          <DialogTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-snug [overflow-wrap:anywhere]">
+          <DialogTitle
+            className={cn(
+              "text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-snug [overflow-wrap:anywhere]",
+              markerTitleClass(view)
+            )}
+          >
             {option.title}
           </DialogTitle>
 
@@ -351,27 +417,38 @@ function OptionLightbox({
                 <span>Average Score</span>
                 <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
               </div>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {gradeCount > 0
-                  ? `${gradeCount} ${gradeCount === 1 ? "rating submitted" : "ratings submitted"}`
-                  : "No ratings recorded yet"}
-              </p>
+              <TimeTooltip text={timeTexts?.average} focusable side="bottom">
+                <p className="w-fit rounded text-xs text-muted-foreground tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {gradeCount > 0
+                    ? `${gradeCount} ${gradeCount === 1 ? "rating submitted" : "ratings submitted"}`
+                    : "No ratings recorded yet"}
+                </p>
+              </TimeTooltip>
             </div>
           </div>
 
           <div className="flex flex-col sm:items-end gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">Your Rating:</span>
-            <GradeInput
-              value={myGrade}
-              optionId={option.id}
-              label={`Your rating for ${option.title}`}
-              showMeta={false}
-              size="lg"
-              disabled={!canGrade}
-              onChange={onGrade}
-            />
+            <TimeTooltip text={timeTexts?.ownGrade} side="bottom">
+              {(describedBy) => (
+                <div className="inline-flex">
+                  <GradeInput
+                    value={myGrade}
+                    optionId={option.id}
+                    label={`Your rating for ${option.title}`}
+                    showMeta={false}
+                    size="lg"
+                    disabled={!canGrade}
+                    onChange={onGrade}
+                    describedBy={timeTexts?.ownGrade ? describedBy : undefined}
+                  />
+                </div>
+              )}
+            </TimeTooltip>
           </div>
         </div>
+
+        {ratings && <OwnerRatings ratings={ratings} />}
 
         {/* Lightbox Body */}
         <div className="p-6 space-y-6">
@@ -500,6 +577,9 @@ function OptionLightbox({
             </section>
           )}
 
+          <PropertySection option={option} />
+          <OptionSections view={view} />
+
           {/* Comments & Discussion */}
           <section className="space-y-3 pt-4 border-t border-border">
             <div className="flex items-center gap-2">
@@ -513,13 +593,38 @@ function OptionLightbox({
         </div>
 
         {/* Lightbox Footer */}
-        <DialogFooter className="p-4 bg-muted/20 border-t border-border sm:justify-end">
+        <DialogFooter className="p-4 bg-muted/20 border-t border-border sm:justify-end sm:items-center">
+          <OptionFooter view={view} option={option} className="sm:mr-auto" />
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Owner-only disclosure: each participant's current grade with its time (FR-029). */
+function OwnerRatings({ ratings }: { ratings: ParticipantRating[] }) {
+  return (
+    <details className="group/ratings px-6 py-3 bg-card border-b border-border text-sm">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronDown
+          className="h-4 w-4 text-muted-foreground transition-transform group-open/ratings:rotate-180 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+        {`Ratings (${ratings.length})`}
+      </summary>
+      {ratings.length > 0 ? (
+        <ul className="mt-2 space-y-1 pl-6 text-muted-foreground tabular-nums">
+          {ratings.map((r) => (
+            <li key={`${r.name}:${r.at}`}>{ratingLine(r)}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 pl-6 text-muted-foreground">No ratings yet.</p>
+      )}
+    </details>
   );
 }
 

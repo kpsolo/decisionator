@@ -40,6 +40,8 @@ export function createLink(pipe: MessagePipe, opts: LinkOptions = {}): Link {
   const timeoutMs = opts.timeoutMs ?? 15_000;
 
   const messageListeners: ((m: unknown) => void)[] = [];
+  /** Messages that arrived before anyone listened, e.g. a refusal sent the moment a link opens. */
+  let early: unknown[] | null = [];
   const closeListeners: ((reason: string) => void)[] = [];
   const partial = new Map<string, { parts: string[]; received: number; size: number }>();
   let closed = false;
@@ -85,7 +87,8 @@ export function createLink(pipe: MessagePipe, opts: LinkOptions = {}): Link {
     } catch {
       return;
     }
-    for (const cb of messageListeners) cb(message);
+    if (early) early.push(message);
+    else for (const cb of messageListeners) cb(message);
   }
 
   pipe.onmessage = (data) => {
@@ -147,6 +150,9 @@ export function createLink(pipe: MessagePipe, opts: LinkOptions = {}): Link {
     },
     onMessage(cb) {
       messageListeners.push(cb);
+      const queued = early;
+      early = null;
+      for (const m of queued ?? []) cb(m);
     },
     onClose(cb) {
       if (closed) cb("closed");

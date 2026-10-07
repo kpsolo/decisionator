@@ -32,6 +32,29 @@ async function createProject(page: Page) {
   return page.url();
 }
 
+async function startSession(host: Page) {
+  await host.getByRole("button", { name: "More project actions" }).click();
+  await host.getByRole("menuitem", { name: "Live session…" }).click();
+  const dialog = host.getByRole("dialog");
+  await expect(dialog.getByText("Live", { exact: true })).toBeVisible({ timeout: 10000 });
+  return dialog;
+}
+
+/** Joins from a page of the same browser as a different device (its own guest identity). */
+async function joinAsOtherDevice(guest: Page, joinUrl: string, name: string) {
+  await guest.goto(joinUrl);
+  const saved = await guest.evaluate(() => {
+    const previous = localStorage.getItem("deci.live.device");
+    localStorage.setItem("deci.live.device", `other-${Math.random().toString(36).slice(2)}`);
+    return previous;
+  });
+  await joinAs(guest, name);
+  // The identity was derived on join; give the shared storage back to the first guest.
+  await guest.evaluate((previous) => {
+    if (previous) localStorage.setItem("deci.live.device", previous);
+  }, saved);
+}
+
 async function joinAs(guest: Page, name: string) {
   await guest.getByRole("textbox", { name: "Your name" }).fill(name);
   await guest.getByRole("button", { name: "Join" }).click();
@@ -55,10 +78,7 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
   await host.locator('input[aria-label="5 stars"]').first().check({ force: true });
   await expect(host.getByText("5.0 avg · 1 rating")).toBeVisible();
 
-  await host.getByRole("button", { name: "More project actions" }).click();
-  await host.getByRole("menuitem", { name: "Live session…" }).click();
-  const dialog = host.getByRole("dialog");
-  await expect(dialog.getByText("Live", { exact: true })).toBeVisible({ timeout: 10000 });
+  const dialog = await startSession(host);
   await expect(dialog.getByRole("img", { name: "QR code for the join link" })).toBeVisible();
   const joinUrl = await dialog.getByRole("textbox", { name: "Join link" }).inputValue();
   expect(joinUrl).toMatch(/#\/join\/[\w-]+\/[\w-]+$/);
@@ -117,6 +137,70 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
     await expect(host.getByRole("heading", { name: "Friday lunch" })).toBeVisible();
   });
 
+  await test.step("the guest sees the decision method and can compare, read-only", async () => {
+    await expect(guest.getByTestId("decided-by")).toContainText("Decided by: Borda Count Ranking");
+    await guest.getByRole("button", { name: "Compare strategies" }).click();
+    const compare = guest.getByRole("dialog");
+    await expect(compare.getByRole("table", { name: "Strategy comparison" })).toBeVisible();
+    await expect(compare.getByRole("button", { name: /^Adopt/ })).toHaveCount(0);
+    await compare.getByRole("button", { name: "Close" }).last().click();
+  });
+
+  await test.step("a second guest with the same name joins under a numbered name", async () => {
+    const twin = await context.newPage();
+    twin.on("pageerror", (e) => errors.push(e.message));
+    await joinAsOtherDevice(twin, joinUrl, "Gina");
+    await expect(twin.getByText("You're Gina 2")).toBeVisible();
+    await expect(guest.getByText("You're Gina", { exact: true })).toBeVisible();
+    await host.getByRole("button", { name: /^Live session for Friday lunch/ }).click();
+    const people = host.getByRole("dialog").getByRole("list", { name: "Connected people" });
+    await expect(people.getByText("Gina", { exact: true })).toBeVisible();
+    await expect(people.getByText("Gina 2", { exact: true })).toBeVisible();
+    await host.getByRole("dialog").getByRole("button", { name: "Hide" }).click();
+    await twin.close();
+    await expect(host.getByRole("button", { name: /Friday lunch, 1 connected/ })).toBeVisible();
+  });
+
+  await test.step("closing voting reaches the guest within a second; grading still works", async () => {
+    await host.getByRole("link", { name: "Vote" }).click();
+    await host.getByRole("button", { name: "Close Voting & Tally Results" }).click();
+    await expect(guest.getByText("Voting is closed.")).toBeVisible({ timeout: 1000 });
+    await expect(guest.getByRole("button", { name: "Update Ballot" })).toBeDisabled();
+
+    await guest.locator('input[aria-label="5 stars"]').nth(1).check({ force: true });
+    await host.getByRole("link", { name: "Project", exact: true }).click();
+    await expect(host.getByText("5.0 avg · 1 rating")).toBeVisible({ timeout: 10000 });
+  });
+
+  await test.step("changes the host refuses are reported and rolled back", async () => {
+    // 80 grade changes at once: well over what the host accepts in a burst, even on a busy CPU.
+    await guest.evaluate(() => {
+      for (let i = 0; i < 80; i++) {
+        const stars = i % 2 === 0 ? "3 stars" : "4 stars";
+        document.querySelectorAll<HTMLInputElement>(`input[aria-label="${stars}"]`)[0]?.click();
+      }
+    });
+    await expect(
+      guest.getByText("Too many changes at once. Try again shortly.").first()
+    ).toBeVisible({ timeout: 10000 });
+    // What the guest sees settles on what the host saved.
+    await expect
+      .poll(
+        async () => {
+          const mine = (await guest.locator('input[aria-label="3 stars"]').first().isChecked())
+            ? 3
+            : 4;
+          const shown = await host
+            .getByText(/avg · 2 ratings/)
+            .first()
+            .textContent();
+          return shown === `${((5 + mine) / 2).toFixed(1)} avg · 2 ratings`;
+        },
+        { timeout: 10000 }
+      )
+      .toBe(true);
+  });
+
   await test.step("ending the session tells the guest and lets them keep a copy", async () => {
     await host.getByRole("button", { name: /^Live session for Friday lunch/ }).click();
     await host.getByRole("dialog").getByRole("button", { name: "End session" }).click();
@@ -133,6 +217,38 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
   });
 
   expect(errors).toEqual([]);
+});
+
+test("closing the host tab asks first, then tells guests", async ({
+  page: host,
+  context,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+  test.setTimeout(90_000);
+
+  await createProject(host);
+  const dialog = await startSession(host);
+  const joinUrl = await dialog.getByRole("textbox", { name: "Join link" }).inputValue();
+  await dialog.getByRole("button", { name: "Hide" }).click();
+  const guest = await context.newPage();
+  await guest.goto(joinUrl);
+  await joinAs(guest, "Gina");
+  await expect(host.getByRole("button", { name: /Friday lunch, 1 connected/ })).toBeVisible();
+
+  // The first attempt is cancelled: the session keeps running.
+  const kept = host.waitForEvent("dialog");
+  await host.close({ runBeforeUnload: true });
+  const prompt = await kept;
+  expect(prompt.type()).toBe("beforeunload");
+  await prompt.dismiss();
+  await expect(guest.getByText("Live", { exact: true })).toBeVisible();
+  expect(host.isClosed()).toBe(false);
+
+  // The second is confirmed: the tab goes and the guest is told why.
+  host.once("dialog", (d) => void d.accept());
+  await host.close({ runBeforeUnload: true });
+  await expect(guest.getByText(/The host closed their tab\./)).toBeVisible({ timeout: 10000 });
 });
 
 test("a join link without its secret explains what to do", async ({ page }) => {

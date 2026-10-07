@@ -118,6 +118,54 @@
                 "liveResults": true
               }
             },
+            "strategy": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "settings": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "default": {}
+                },
+                "at": {
+                  "type": "string"
+                },
+                "by": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "version"],
+              "additionalProperties": false
+            },
+            "strategyChanges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "by": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "at", "by"],
+                "additionalProperties": false
+              },
+              "maxItems": 20
+            },
             "createdAt": {
               "type": "string"
             },
@@ -600,6 +648,140 @@
             },
             "required": ["id", "at", "by", "targetKind", "type", "body", "author"],
             "additionalProperties": false
+          },
+          "default": []
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "by": {
+                "type": "string"
+              },
+              "byName": {
+                "type": "string"
+              },
+              "optionId": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,39}$"
+              },
+              "scope": {
+                "type": "string",
+                "enum": ["shared", "person"]
+              },
+              "value": {
+                "type": ["string", "number", "boolean", "null"]
+              }
+            },
+            "required": ["id", "at", "by", "optionId", "plugin", "key", "scope", "value"],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "history": {
+          "type": "object",
+          "properties": {
+            "grades": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/project-export-v1/properties/grades/items"
+              },
+              "default": []
+            },
+            "rankings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/project-export-v1/properties/rankings/items"
+              },
+              "default": []
+            },
+            "properties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/project-export-v1/properties/properties/items"
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "resets": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "by": {
+                    "type": "string"
+                  },
+                  "byName": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "at", "by"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["all", "participant"]
+                  },
+                  "participantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": ["grades", "ballots", "properties"]
+                    },
+                    "minItems": 1,
+                    "maxItems": 3
+                  },
+                  "round": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "required": ["scope", "targets"]
+              }
+            ]
           },
           "default": []
         }

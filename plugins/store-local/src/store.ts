@@ -6,13 +6,17 @@ import {
   type Option,
   type OutcomeRecord,
   type Project,
+  type PropertyValue,
   type Ranking,
+  type Reset,
   checkVerifier,
   decrypt,
   deriveKey,
+  effectiveEntries,
   encrypt,
   generateSalt,
   makeVerifier,
+  monotonicNow,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -31,6 +35,11 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  applyStrategyPatch,
+  checkPropertyEntries,
+  checkResetEntries,
+  propertyRecord,
+  resetRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
@@ -51,6 +60,27 @@ async function encryptCommentBody(body: string, key: CryptoKey): Promise<string>
   return body === "" ? "" : encrypt(body, key);
 }
 
+/** Property values of protected projects are stored as an encrypted JSON string. */
+async function openPropertyValue(
+  value: PropertyValue["value"],
+  key: CryptoKey
+): Promise<PropertyValue["value"]> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return JSON.parse(await decrypt(value, key)) as PropertyValue["value"];
+}
+
+/**
+ * The chosen strategy as stored. `settings` is a JSON string, encrypted in a protected project
+ * like the title; a string also keeps arbitrary settings clear of Automerge's value rules.
+ */
+interface StoredStrategy {
+  id: string;
+  version: string;
+  at: string;
+  by: string;
+  settings: string;
+}
+
 export interface AutomergeProjectDoc {
   [key: string]: unknown;
   meta: {
@@ -69,6 +99,10 @@ export interface AutomergeProjectDoc {
     };
     owner: string;
     createdAt: string;
+    /** Chosen strategy (ProjectStore v1.4.0). Missing in older docs. */
+    strategy?: StoredStrategy;
+    /** The last 20 strategy changes, oldest first. */
+    strategyChanges?: { id: string; at: string; by: string }[];
   };
   options: Option[];
   grades: Grade[];
@@ -76,6 +110,14 @@ export interface AutomergeProjectDoc {
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
   contributions: Contribution[];
+  /**
+   * Grades, rankings and properties keep every entry in append order (ProjectStore v1.4.0);
+   * latest-wins and resets are applied when the snapshot is built. Older docs kept only the
+   * latest entry per slot, which reads back the same.
+   */
+  properties?: PropertyValue[];
+  /** Reset entries in append order (ProjectStore v1.4.0). Missing in older docs. */
+  resets?: Reset[];
   collaborators: {
     email: string;
     role: ParticipantRole;
@@ -224,6 +266,8 @@ export class LocalProjectStore implements ProjectStore {
       rankings: [],
       outcomes: [],
       contributions: [],
+      properties: [],
+      resets: [],
       collaborators: [{ email: this.currentUser, role: "owner" }],
     };
 
@@ -263,9 +307,14 @@ export class LocalProjectStore implements ProjectStore {
     let finalDesc = doc.meta.description;
     let finalOptions: Option[] = doc.options;
     let finalComments: Comment[] = doc.comments;
+    let finalProperties: PropertyValue[] = doc.properties ?? [];
+    let strategySettings = doc.meta.strategy?.settings;
 
     if (doc.meta.protected) {
       const cryptoKey = await this.unlock(ref.id, doc, opts?.password);
+      if (strategySettings !== undefined) {
+        strategySettings = await openSealed(strategySettings, cryptoKey);
+      }
       finalTitle = await openSealed(finalTitle, cryptoKey);
       finalDesc = await openSealed(finalDesc, cryptoKey);
       finalOptions = await Promise.all(
@@ -280,6 +329,12 @@ export class LocalProjectStore implements ProjectStore {
       finalComments = await Promise.all(
         doc.comments.map(async (c) => ({ ...c, body: await openSealed(c.body, cryptoKey) }))
       );
+      finalProperties = await Promise.all(
+        finalProperties.map(async (p) => ({
+          ...p,
+          value: await openPropertyValue(p.value, cryptoKey),
+        }))
+      );
     }
 
     // Role
@@ -291,6 +346,15 @@ export class LocalProjectStore implements ProjectStore {
       if (match) role = match.role;
     }
 
+    // Latest wins and resets, with the superseded and cleared entries as history.
+    const effective = effectiveEntries({
+      grades: doc.grades,
+      rankings: doc.rankings,
+      properties: finalProperties,
+      resets: doc.resets ?? [],
+    });
+    const strategy = doc.meta.strategy;
+
     return {
       project: {
         title: finalTitle,
@@ -298,13 +362,35 @@ export class LocalProjectStore implements ProjectStore {
         protected: doc.meta.protected,
         voting: doc.meta.voting,
         formatVersion: 1,
+        ...(strategy && strategySettings !== undefined
+          ? {
+              strategy: {
+                id: strategy.id,
+                version: strategy.version,
+                settings: JSON.parse(strategySettings) as Record<string, unknown>,
+                at: strategy.at,
+                by: strategy.by,
+              },
+            }
+          : {}),
+        ...(doc.meta.strategyChanges
+          ? {
+              strategyChanges: doc.meta.strategyChanges.map((c) => ({
+                id: c.id,
+                at: c.at,
+                by: c.by,
+              })),
+            }
+          : {}),
       },
       options: finalOptions,
-      grades: doc.grades,
+      grades: effective.grades,
       comments: finalComments,
-      rankings: doc.rankings,
+      rankings: effective.rankings,
       outcomes: doc.outcomes,
       contributions: doc.contributions,
+      properties: effective.properties,
+      history: effective.history,
       role,
     };
   }
@@ -345,6 +431,17 @@ export class LocalProjectStore implements ProjectStore {
       }
       // Validates the whole call before anything is written.
       const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+      checkPropertyEntries(entries, {
+        optionIds: new Set(doc.options.map((o) => o.id)),
+        isOwner: role === "owner",
+      });
+      // Resets: the owner may append any; others only their own (or the delegate's) values.
+      checkResetEntries(
+        entries,
+        delegated
+          ? { isOwner: false, self: delegated.by }
+          : { isOwner: role === "owner", self: this.currentUser }
+      );
       const by = delegated?.by ?? this.currentUser;
       // Automerge rejects `undefined` values, so the key is omitted when there is no name.
       const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
@@ -355,60 +452,72 @@ export class LocalProjectStore implements ProjectStore {
       const bodies = await Promise.all(
         entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
       );
+      // Property values are sealed as JSON strings, also up front.
+      const values = await Promise.all(
+        entries.map((e) =>
+          e.kind === "property" && key ? encrypt(JSON.stringify(e.value), key) : null
+        )
+      );
 
-      const now = new Date().toISOString();
+      // Every entry is appended, never replaced, and stamped with a strictly increasing time so
+      // a reset clears exactly the entries appended before it (contract `history-resets`).
+      const stamps = entries.map(() => monotonicNow());
+      const newId = (prefix: string) =>
+        `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       return A.change(doc, (d) => {
         for (const [i, entry] of entries.entries()) {
+          const at = stamps[i] ?? monotonicNow();
           if (entry.kind === "grade") {
-            // Latest wins per (by, optionId)
-            const idx = d.grades.findIndex((g) => g.by === by && g.optionId === entry.optionId);
             const newGrade: Grade = {
-              id: `g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              id: newId("g"),
               optionId: entry.optionId,
               value: entry.value,
               by,
               ...byName,
-              at: now,
+              at,
             };
-            if (idx !== -1) {
-              d.grades[idx] = newGrade;
-            } else {
-              d.grades.push(newGrade);
-            }
+            d.grades.push(newGrade);
           } else if (entry.kind === "comment") {
             const newComment: Comment = {
-              id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              id: newId("c"),
               optionId: entry.optionId,
               body: bodies[i] ?? entry.body,
               by,
               ...byName,
-              at: now,
+              at,
               ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
               ...(entry.replaces !== undefined ? { replaces: entry.replaces } : {}),
             };
             d.comments.push(newComment);
           } else if (entry.kind === "ranking") {
-            // Latest wins per (by, round)
-            const round = entry.round ?? d.meta.voting.round;
-            const idx = d.rankings.findIndex((r) => r.by === by && r.round === round);
             const newRanking: Ranking = {
-              id: `r_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              ranking: entry.ranking,
-              round,
+              id: newId("r"),
+              ranking: [...entry.ranking],
+              round: entry.round ?? d.meta.voting.round,
               by,
               ...byName,
-              at: now,
+              at,
             };
-            if (idx !== -1) {
-              d.rankings[idx] = newRanking;
-            } else {
-              d.rankings.push(newRanking);
-            }
+            d.rankings.push(newRanking);
           } else if (entry.kind === "outcome") {
             d.outcomes.push(entry.outcome);
           } else if (entry.kind === "contribution") {
             d.contributions.push(entry.contribution);
+          } else if (entry.kind === "property") {
+            // `propertyRecord` omits `byName` when absent, and a cleared value is stored as
+            // `null`, never `undefined`.
+            const record = propertyRecord(
+              { ...entry, value: values[i] ?? entry.value },
+              { id: newId("p"), at, by, ...byName }
+            );
+            if (!d.properties) d.properties = [];
+            d.properties.push(record);
+          } else if (entry.kind === "reset") {
+            // `resetRecord` omits absent optional fields. Reset records hold no secrets beyond
+            // plugin/key, so they are stored plainly.
+            if (!d.resets) d.resets = [];
+            d.resets.push(resetRecord(entry, { id: newId("x"), at, by, ...byName }));
           }
         }
       });
@@ -483,12 +592,40 @@ export class LocalProjectStore implements ProjectStore {
         value !== undefined && key ? encrypt(value, key) : value;
       const title = await seal(patch.title);
       const description = await seal(patch.description);
+      // Strategy choice: stamped here, settings kept as (sealed) JSON.
+      const current: Pick<Project, "strategy" | "strategyChanges"> = {
+        ...(doc.meta.strategyChanges
+          ? {
+              strategyChanges: doc.meta.strategyChanges.map((c) => ({
+                id: c.id,
+                at: c.at,
+                by: c.by,
+              })),
+            }
+          : {}),
+      };
+      const next = patch.strategy
+        ? applyStrategyPatch(current, patch.strategy, this.currentUser, monotonicNow())
+        : undefined;
+      const strategySettings = next?.strategy
+        ? await seal(JSON.stringify(next.strategy.settings))
+        : undefined;
 
       return A.change(doc, (d) => {
         if (title !== undefined) d.meta.title = title;
         if (description !== undefined) d.meta.description = description;
         if (patch.voting) {
           d.meta.voting = { ...d.meta.voting, ...patch.voting };
+        }
+        if (next?.strategy && strategySettings !== undefined) {
+          d.meta.strategy = {
+            id: next.strategy.id,
+            version: next.strategy.version,
+            at: next.strategy.at ?? "",
+            by: next.strategy.by ?? "",
+            settings: strategySettings,
+          };
+          d.meta.strategyChanges = next.strategyChanges ?? [];
         }
       });
     });
