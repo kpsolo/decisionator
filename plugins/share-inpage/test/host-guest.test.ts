@@ -375,6 +375,19 @@ describe("LiveShareHost + LiveShareGuest", () => {
     expect(link.closed).toBe(true);
   });
 
+  it("applies a configured per-guest rate limit", async () => {
+    const project = new FakeProject();
+    const host = new LiveShareHost({ project, rateLimit: { burst: 2, perSecond: 0.001 } });
+    await host.start();
+    cleanups.push(() => host.close());
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 3 }]);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    await expect(alice.submit([{ kind: "grade", optionId: "a", value: 5 }])).rejects.toMatchObject({
+      code: "rate_limited",
+    });
+  });
+
   it("rate-limits a guest flooding the host", async () => {
     const { host } = await startHost();
     const alice = await joined(makeGuest(host, "Alice").guest);

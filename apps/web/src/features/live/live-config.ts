@@ -55,6 +55,16 @@ export function defaultNetworkConfig(): LiveNetworkConfig {
 }
 
 /** The network settings in effect: the user's overrides from Settings, else the build defaults. */
+function validRateLimit(v: unknown): v is { burst: number; perSecond: number } {
+  const r = v as { burst?: unknown; perSecond?: unknown } | undefined;
+  return (
+    typeof r?.burst === "number" &&
+    r.burst >= 1 &&
+    typeof r.perSecond === "number" &&
+    r.perSecond > 0
+  );
+}
+
 export function loadNetworkConfig(): LiveNetworkConfig {
   const defaults = buildDefaults();
   const raw = read(NETWORK_KEY);
@@ -65,6 +75,7 @@ export function loadNetworkConfig(): LiveNetworkConfig {
       relays: Array.isArray(saved.relays) ? saved.relays : defaults.relays,
       iceServers: Array.isArray(saved.iceServers) ? saved.iceServers : defaults.iceServers,
       sameBrowser: typeof saved.sameBrowser === "boolean" ? saved.sameBrowser : true,
+      ...(validRateLimit(saved.rateLimit) ? { rateLimit: saved.rateLimit } : {}),
     };
   } catch {
     return defaults;

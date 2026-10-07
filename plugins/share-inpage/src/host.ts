@@ -31,6 +31,8 @@ export interface LiveShareHostOptions {
   maxLinks?: number;
   /** Time a new link has to say hello. */
   helloTimeoutMs?: number;
+  /** Per-guest submission limit: a burst of `burst`, refilled at `perSecond` (default 20, 5/s). */
+  rateLimit?: { burst: number; perSecond: number };
 }
 
 interface LinkState {
@@ -42,8 +44,7 @@ interface LinkState {
   helloTimer?: ReturnType<typeof setTimeout>;
 }
 
-const BUCKET_SIZE = 20;
-const REFILL_PER_SECOND = 5;
+const DEFAULT_RATE_LIMIT = { burst: 20, perSecond: 5 };
 
 /**
  * The host side of a live session. It owns no transport: anything that produces a {@link Link}
@@ -54,6 +55,7 @@ export class LiveShareHost {
   private readonly role: LiveRole;
   private readonly maxLinks: number;
   private readonly helloTimeoutMs: number;
+  private readonly rateLimit: { burst: number; perSecond: number };
 
   private links = new Set<LinkState>();
   private current: ProjectSnapshot | null = null;
@@ -72,6 +74,7 @@ export class LiveShareHost {
     this.role = opts.role ?? "contribute";
     this.maxLinks = opts.maxLinks ?? 64;
     this.helloTimeoutMs = opts.helloTimeoutMs ?? 10_000;
+    this.rateLimit = opts.rateLimit ?? DEFAULT_RATE_LIMIT;
   }
 
   /** Loads the project; throws if the store cannot open it (e.g. it is still locked). */
@@ -122,7 +125,7 @@ export class LiveShareHost {
       link.close("session full");
       return;
     }
-    const state: LinkState = { link, tokens: BUCKET_SIZE, refilledAt: Date.now() };
+    const state: LinkState = { link, tokens: this.rateLimit.burst, refilledAt: Date.now() };
     this.links.add(state);
     state.helloTimer = setTimeout(() => {
       if (!state.participantId) link.close("no hello");
@@ -261,8 +264,8 @@ export class LiveShareHost {
   private takeToken(state: LinkState): boolean {
     const now = Date.now();
     state.tokens = Math.min(
-      BUCKET_SIZE,
-      state.tokens + ((now - state.refilledAt) / 1000) * REFILL_PER_SECOND
+      this.rateLimit.burst,
+      state.tokens + ((now - state.refilledAt) / 1000) * this.rateLimit.perSecond
     );
     state.refilledAt = now;
     if (state.tokens < 1) return false;

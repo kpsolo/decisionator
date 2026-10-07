@@ -15,6 +15,8 @@ export interface LiveNetworkConfig {
   iceServers: RTCIceServer[];
   /** Also rendezvous through BroadcastChannel (other tabs of this browser). */
   sameBrowser: boolean;
+  /** Per-guest submission limit applied by the host (default 20 at once, 5 per second). */
+  rateLimit?: { burst: number; perSecond: number };
 }
 
 export const DEFAULT_RELAYS = [
@@ -64,7 +66,11 @@ export async function startHosting(opts: {
   role?: LiveRole;
 }): Promise<HostingSession> {
   if (!isWebRtcAvailable()) throw new LiveShareUnsupportedError();
-  const host = new LiveShareHost({ project: opts.project, role: opts.role });
+  const host = new LiveShareHost({
+    project: opts.project,
+    role: opts.role,
+    ...(opts.config.rateLimit ? { rateLimit: opts.config.rateLimit } : {}),
+  });
   await host.start();
   const room = openRoom(opts.credentials, opts.config);
   const stopListening = listenForGuests(room, { iceServers: opts.config.iceServers }, (link) =>

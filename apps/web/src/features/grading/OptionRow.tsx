@@ -239,9 +239,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
             <Info className="h-3.5 w-3.5 text-[#0066CC] dark:text-[#0B84FE]" aria-hidden="true" />
             <span>Details</span>
             {option.pros.length > 0 && (
-              <span className="text-success tabular-nums font-normal">
-                +{option.pros.length}
-              </span>
+              <span className="text-success tabular-nums font-normal">+{option.pros.length}</span>
             )}
             {option.cons.length > 0 && (
               <span className="text-rose-700 dark:text-[#FF547B] tabular-nums font-normal">
