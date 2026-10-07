@@ -24,7 +24,7 @@ changes, and the spec defines an independent test per story.
   - an empty `src/index.ts`;
   - a placeholder `decisionator-plugin.json`;
   - `test/`.
-- [ ] T002 [P] Scaffold `examples/plugin-option-cost/` (`README.md`, `decisionator-plugin.json`,
+- [x] T002 [P] Scaffold `examples/plugin-option-cost/` (`README.md`, `decisionator-plugin.json`,
   `src/index.ts`, `test/`) and `examples/plugin-unread-bar/` (same files), following
   `examples/plugin-strategy-example/`.
 - [x] T003 Wire the new packages into the workspace:
@@ -115,7 +115,7 @@ store, and the host plumbing. No story can be shown without them.
   `OptionViewContext`, `OptionListContext` and `ExposureContext` types from
   contracts/option-view.md. Export them from `packages/plugin-sdk/src/index.ts`. T006 should
   pass.
-- [ ] T011 Extend `specs/001-decision-engine-core/contracts/plugin-manifest.schema.json`:
+- [x] T011 Extend `specs/001-decision-engine-core/contracts/plugin-manifest.schema.json`:
   - `provides.optionProperties` (≤ 20, the definition shape);
   - `provides.optionView { places[], replaces[] }`;
   - `provides.exposure: boolean`;
@@ -349,7 +349,7 @@ exported, restored and kept when the plugin is disabled.
 **Independent Test**: spec US3 (the example "Cost per person" = 420 is visible to everyone,
 survives export → restore, and is hidden while disabled but kept).
 
-- [ ] T037 [P] [US3] Implement `examples/plugin-option-cost/`:
+- [x] T037 [P] [US3] Implement `examples/plugin-option-cost/`:
   - the manifest declares `cost` ("Cost per person", `number`, `shared`, `cardBadge: true`),
     `shortlisted` ("Shortlisted", `boolean`, `person`) and `priority` ("Priority", `choice`
     low/high, `shared`);
@@ -358,7 +358,7 @@ survives export → restore, and is hidden while disabled but kept).
   
   Also implement `examples/plugin-unread-bar/` with its own `person` property and exposure, and
   `replaces: ["marker"]` with `variant: "bar"`, `tone: "info"` (used by US4), with tests.
-- [ ] T038 [US3] Create `apps/web/src/features/option-view/dev-plugins.ts`. It registers the two
+- [x] T038 [US3] Create `apps/web/src/features/option-view/dev-plugins.ts`. It registers the two
   example plugins as installable entries only when `import.meta.env.DEV` and localStorage
   `deci.devPlugins` lists their ids, so they are never in production builds. A second fixture
   plugin defining `priority` under another id is used for the same-name case.
@@ -508,22 +508,22 @@ seen action shows "Seen automatically · time").
 - [x] T061 [US5] `apps/web/src/features/project/copy-entries.ts`: restore and Move re-append the
   history in its original order (per author, through `onBehalfOf`), then the effective entries and
   resets. Extend `copy-entries.test.ts` and `project-file.test.ts`.
-- [ ] T062 [P] [US5] Create `apps/web/src/features/history/time-texts.ts`:
+- [x] T062 [P] [US5] Create `apps/web/src/features/history/time-texts.ts`:
   - pure functions for the texts in data-model.md "Tooltip texts";
   - `Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })`, with an
     injectable locale and time zone;
   - tests in `time-texts.test.ts`.
-- [ ] T063 [US5] Create `apps/web/src/features/history/TimeTooltip.tsx`:
+- [x] T063 [US5] Create `apps/web/src/features/history/TimeTooltip.tsx`:
   - built on the Radix tooltip, on an existing focusable trigger, so it opens on hover and focus;
   - a 500 ms touch long-press also opens it;
   - the same text is set as `aria-describedby`.
   
   Use it on the own stars (card and lightbox in `OptionRow.tsx`), on the average, and on
   "Submit/Update Ballot" in `apps/web/src/features/voting/RankBallot.tsx`.
-- [ ] T064 [US5] In `OptionLightbox` (`OptionRow.tsx`), add an owner-only "Ratings" disclosure
+- [x] T064 [US5] In `OptionLightbox` (`OptionRow.tsx`), add an owner-only "Ratings" disclosure
   listing `{name} {v} · {time}` from the effective grades. Pass `isOwner` and the option's
   grades into `OptionRow`.
-- [ ] T065 [US5] Seen-status tooltip:
+- [x] T065 [US5] Seen-status tooltip:
   - `packages/plugin-sdk/src/option-view.ts`: footer actions gain `title` (≤ 120 chars), shown by
     `OptionPlaces.tsx` in a `TimeTooltip`;
   - `OptionViewContext` gains `valueMeta: Record<key, { at, by }>` for the viewer's own
@@ -549,7 +549,7 @@ all as not seen" changes only her marks).
   - a confirmation with counts, for example "Clear 12 grades and 1 ballot from Tom?";
   - one `reset` entry appended per choice;
   - toasts for the result.
-- [ ] T067 [US6] List actions for plugins:
+- [x] T067 [US6] List actions for plugins:
   - in `packages/plugin-sdk/src/option-view.ts`, `OptionListContribution.actions` (≤ 2,
     `{ id, label, confirm }`) and an `onListAction(ctx, id)` hook;
   - `OptionListContext.resetValues(key)`;
@@ -557,10 +557,10 @@ all as not seen" changes only her marks).
     `{ kind: "reset", scope: "participant", participantId: viewer, targets: ["properties"], plugin, key }`
     for a person-scoped key, or `scope: "all"` for a shared key (owner only);
   - `OptionListBar` shows each action, with its `confirm` text in a dialog.
-- [ ] T068 [US6] `plugins/option-status/src/index.ts`: a list action "Mark all as not seen", with
+- [x] T068 [US6] `plugins/option-status/src/index.ts`: a list action "Mark all as not seen", with
   the confirm text "Show every option as new again? Only your own marks change.". It calls
   `resetValues("seen")` and clears the manual hold. Add tests.
-- [ ] T069 [US6] Live share:
+- [x] T069 [US6] Live share:
   - `plugins/share-inpage/src/protocol.ts`: a guest `reset` entry (self form);
   - `src/policy.ts`: force `participantId` to the guest and accept only
     `targets: ["properties"]` with `plugin` and `key`;

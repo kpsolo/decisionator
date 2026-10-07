@@ -51,6 +51,8 @@ export const FooterItemSchema = z.union([
       action: z.object({
         id: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
         label: z.string().trim().min(1).max(40),
+        /** Tooltip shown on hover, focus and long-press, e.g. when a mark was set. */
+        title: z.string().trim().min(1).max(120).optional(),
       }),
     })
     .strict(),
@@ -104,14 +106,24 @@ export const FilterSchema = z.object({
 });
 export type OptionListFilter = z.infer<typeof FilterSchema>;
 
+/** A list-wide action, e.g. "Mark all as not seen"; the host asks `confirm` before running it. */
+export const ListActionSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
+  label: z.string().trim().min(1).max(40),
+  confirm: z.string().trim().min(1).max(200).optional(),
+});
+export type OptionListAction = z.infer<typeof ListActionSchema>;
+
 export interface OptionListContribution {
   summary?: { text: string };
   filters?: OptionListFilter[];
+  actions?: OptionListAction[];
 }
 
 const LIST_SCHEMAS = {
   summary: z.object({ text: z.string().trim().min(1).max(40) }),
   filters: z.array(FilterSchema).max(3),
+  actions: z.array(ListActionSchema).max(2),
 } as const;
 
 export interface ValidatedContribution<T> {
@@ -167,12 +179,20 @@ export function validateListContribution(
   return { value, droppedPlaces };
 }
 
+/** Time and author of an effective property value. */
+export interface PropertyValueMeta {
+  at: string;
+  by: string;
+}
+
 /** What a plugin hook sees about one option. `values` are only this plugin's, viewer-visible. */
 export interface OptionViewContext {
   option: Option;
   viewerId: string;
   surface: "card" | "detail";
   values: Record<string, PropertyScalar>;
+  /** When and by whom each of `values` was set (the effective entries the viewer may see). */
+  valueMeta: Record<string, PropertyValueMeta>;
   settings: Record<string, unknown>;
   /** Sets one of this plugin's own properties for this option (FR-012 enforced by the host). */
   setValue(key: string, value: PropertyScalar): Promise<void>;
@@ -184,6 +204,11 @@ export interface OptionListContext {
   viewerId: string;
   valuesByOption: Record<string, Record<string, PropertyScalar>>;
   settings: Record<string, unknown>;
+  /**
+   * Clears this plugin's property `key` on every option, recorded as a reset entry: the
+   * viewer's own values for a `person` property, every value of a `shared` one (owner only).
+   */
+  resetValues(key: string): Promise<void>;
 }
 
 export interface ExposureContext {

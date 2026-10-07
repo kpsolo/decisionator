@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://decisionator.dev/schemas/plugin-manifest/1.1.json",
+  "$id": "https://decisionator.dev/schemas/plugin-manifest/1.2.json",
   "title": "Deci plugin manifest (decisionator-plugin.json)",
-  "$comment": "Changelog:\n- 1.1.0 (2026-10-05, unreleased pre-implementation): Add projectStore extension point and gis-token OAuth flow (Principle I, FR-025).\n- 1.0.0 (2026-10-05): Initial plugin manifest schema.",
+  "$comment": "Changelog:\n- 1.2.0 (2026-10-07, feature 005): Add option extension points: provides.optionProperties, provides.optionView, provides.exposure, platform.optionProperties and platform.optionView (contracts option-properties 1.0.0 and option-view 1.0.0).\n- 1.1.0 (2026-10-05, unreleased pre-implementation): Add projectStore extension point and gis-token OAuth flow (Principle I, FR-025).\n- 1.0.0 (2026-10-05): Initial plugin manifest schema.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -77,6 +77,12 @@
         },
         "projectStore": {
           "type": "string"
+        },
+        "optionProperties": {
+          "type": "string"
+        },
+        "optionView": {
+          "type": "string"
         }
       }
     },
@@ -104,6 +110,21 @@
         },
         "projectStore": {
           "$ref": "#/$defs/projectStoreDecl"
+        },
+        "optionProperties": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/optionPropertyDecl"
+          },
+          "description": "Typed properties this plugin adds to options (contract option-properties 1.0.0). Keys are unique within the plugin."
+        },
+        "optionView": {
+          "$ref": "#/$defs/optionViewDecl"
+        },
+        "exposure": {
+          "type": "boolean",
+          "description": "The plugin wants to know when an option has stayed on screen (contract option-view 1.0.0)."
         }
       }
     },
@@ -341,7 +362,110 @@
           "description": "False for Google link sharing (research R21)."
         }
       }
+    },
+    "optionPropertyDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "type",
+        "scope"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,39}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "type": {
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "choice",
+            "date"
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "label"
+            ],
+            "properties": {
+              "value": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,39}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            }
+          }
+        },
+        "default": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "shared",
+            "person"
+          ]
+        },
+        "cardBadge": {
+          "type": "boolean",
+          "default": false
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "optionViewDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "places": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "marker",
+              "badges",
+              "footer",
+              "sections",
+              "list"
+            ]
+          }
+        },
+        "replaces": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "marker"
+            ]
+          }
+        }
+      }
     }
   },
-  "description": "Manifest v1.1 (additive over 1.0): adds the projectStore extension point and the browser token (\"gis-token\") OAuth flow."
+  "description": "Manifest v1.2 (additive over 1.1): adds the option extension points (optionProperties, optionView, exposure)."
 }

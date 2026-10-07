@@ -1,0 +1,40 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.examples.option-cost",
+  "name": "Option cost",
+  "description": "Example plugin: adds \"Cost per person\", \"Shortlisted\" and \"Priority\" to options, a cost badge on cards and a \"Budget\" section in the option detail view.",
+  "version": "0.1.0",
+  "platform": {
+    "runtime": "^1.0.0",
+    "optionProperties": "^1.0.0",
+    "optionView": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "optionProperties": [
+      {
+        "key": "cost",
+        "label": "Cost per person",
+        "type": "number",
+        "scope": "shared",
+        "cardBadge": true
+      },
+      {
+        "key": "shortlisted",
+        "label": "Shortlisted",
+        "type": "boolean",
+        "scope": "person"
+      },
+      {
+        "key": "priority",
+        "label": "Priority",
+        "type": "choice",
+        "scope": "shared",
+        "choices": [{ "value": "low", "label": "Low" }, { "value": "high", "label": "High" }]
+      }
+    ],
+    "optionView": {
+      "places": ["badges", "sections"]
+    }
+  }
+}

@@ -32,6 +32,7 @@ import { AgentBrief } from "../features/agents/AgentBrief.js";
 import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
 import { OptionRow } from "../features/grading/OptionRow.js";
+import { averageText, optionRatings, ownGradeText } from "../features/history/time-texts.js";
 import { useLiveShare } from "../features/live/LiveShareContext.js";
 import { FilterableOptionList } from "../features/option-view/FilterableOptionList.js";
 import { OptionExtensionsProvider } from "../features/option-view/OptionExtensionsProvider.js";
@@ -404,6 +405,17 @@ export function ProjectViewPage() {
                     commentCount={stat?.commentsCount}
                     myGrade={myGrade?.value}
                     canGrade={roleCapabilities.canGrade}
+                    timeTexts={{
+                      ownGrade: ownGradeText({
+                        optionId: opt.id,
+                        viewerId: currentUser || null,
+                        grades: snapshot.grades,
+                        history: snapshot.history,
+                      }),
+                      average: averageText({ optionId: opt.id, grades: snapshot.grades }),
+                    }}
+                    isOwner={isOwner}
+                    ratings={isOwner ? optionRatings(opt.id, snapshot.grades) : undefined}
                     onGrade={(val) => handleGradeChange(opt.id, val)}
                     comments={
                       <CommentThread

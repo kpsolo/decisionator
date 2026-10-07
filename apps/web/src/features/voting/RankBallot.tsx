@@ -22,6 +22,7 @@ import { useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { TimeTooltip } from "../history/TimeTooltip.js";
 import { ExposureBox } from "../option-view/OptionPlaces.js";
 
 export interface RankBallotProps {
@@ -31,6 +32,8 @@ export interface RankBallotProps {
   disabled?: boolean;
   disabledReason?: string;
   onSubmitBallot: (ranking: string[]) => Promise<void>;
+  /** Time tooltip on the submit button: "Submitted {first} · updated {latest}" (FR-028). */
+  submittedText?: string;
 }
 
 interface SortableOptionItemProps {
@@ -141,6 +144,7 @@ export const RankBallot: React.FC<RankBallotProps> = ({
   disabled = false,
   disabledReason,
   onSubmitBallot,
+  submittedText,
 }) => {
   const [orderedIds, setOrderedIds] = useState<string[]>(() => {
     const active = options.filter((o) => o.status === "active").map((o) => o.id);
@@ -261,15 +265,17 @@ export const RankBallot: React.FC<RankBallotProps> = ({
               Ballot submitted successfully!
             </span>
           )}
-          <Button
-            type="button"
-            variant="default"
-            onClick={handleSubmit}
-            disabled={disabled || loading}
-            leftIcon={<Send className="h-4 w-4" aria-hidden />}
-          >
-            {loading ? "Submitting..." : initialRanking ? "Update Ballot" : "Submit Ballot"}
-          </Button>
+          <TimeTooltip text={submittedText}>
+            <Button
+              type="button"
+              variant="default"
+              onClick={handleSubmit}
+              disabled={disabled || loading}
+              leftIcon={<Send className="h-4 w-4" aria-hidden />}
+            >
+              {loading ? "Submitting..." : initialRanking ? "Update Ballot" : "Submit Ballot"}
+            </Button>
+          </TimeTooltip>
         </div>
       </CardContent>
     </Card>

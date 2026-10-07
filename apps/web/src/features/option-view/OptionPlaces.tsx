@@ -20,8 +20,16 @@ import type React from "react";
 import { useEffect, useId, useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "../../components/ui/dialog.js";
 import { Input } from "../../components/ui/input.js";
 import { cn } from "../../lib/utils.js";
+import { TimeTooltip } from "../history/TimeTooltip.js";
 import {
   type PropertyRow,
   type ResolvedOptionList,
@@ -181,28 +189,29 @@ export function OptionFooter({
         }
         const key = `${item.plugin}:${item.action.id}`;
         return (
-          <Button
-            key={key}
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-xs pointer-coarse:h-9"
-            disabled={busy === key}
-            aria-busy={busy === key}
-            onClick={async () => {
-              setBusy(key);
-              try {
-                await run(item.plugin, option, item.action.id);
-              } finally {
-                setBusy(null);
-              }
-            }}
-          >
-            {busy === key && (
-              <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
-            )}
-            {item.action.label}
-          </Button>
+          <TimeTooltip key={key} text={item.action.title}>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs pointer-coarse:h-9"
+              disabled={busy === key}
+              aria-busy={busy === key}
+              onClick={async () => {
+                setBusy(key);
+                try {
+                  await run(item.plugin, option, item.action.id);
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              {busy === key && (
+                <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
+              )}
+              {item.action.label}
+            </Button>
+          </TimeTooltip>
         );
       })}
     </div>
@@ -442,7 +451,20 @@ export function OptionListBar({
   activeFilter: string | null;
   onFilterChange(filter: string | null): void;
 }) {
-  if (list.summaries.length === 0 && list.filters.length === 0) return null;
+  const [confirming, setConfirming] = useState<(typeof list.actions)[number] | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (list.summaries.length === 0 && list.filters.length === 0 && list.actions.length === 0) {
+    return null;
+  }
+  const run = async (plugin: string, id: string) => {
+    setBusy(true);
+    try {
+      await list.runAction(plugin, id);
+    } finally {
+      setBusy(false);
+      setConfirming(null);
+    }
+  };
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="option-list-bar">
       {list.summaries.map((s) => (
@@ -471,6 +493,37 @@ export function OptionListBar({
           </Button>
         );
       })}
+      {list.actions.map((a) => (
+        <Button
+          key={`${a.plugin}:${a.id}`}
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2.5 text-xs pointer-coarse:h-9"
+          disabled={busy}
+          onClick={() => (a.confirm ? setConfirming(a) : void run(a.plugin, a.id))}
+        >
+          {a.label}
+        </Button>
+      ))}
+      <Dialog open={confirming !== null} onOpenChange={(o) => !o && setConfirming(null)}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>{confirming?.label}</DialogTitle>
+          <DialogDescription>{confirming?.confirm}</DialogDescription>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => confirming && void run(confirming.plugin, confirming.id)}
+            >
+              {confirming?.label}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

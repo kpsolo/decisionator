@@ -79,4 +79,65 @@ describe("validateListContribution", () => {
     expect(value.summary).toBeUndefined();
     expect(droppedPlaces).toEqual(["summary"]);
   });
+
+  it("accepts up to two list actions with a confirmation text", () => {
+    const { value, droppedPlaces } = validateListContribution({
+      actions: [
+        {
+          id: "mark-all-not-seen",
+          label: "Mark all as not seen",
+          confirm: "Show every option as new again? Only your own marks change.",
+        },
+      ],
+    });
+    expect(droppedPlaces).toEqual([]);
+    expect(value.actions?.[0]?.id).toBe("mark-all-not-seen");
+  });
+
+  it.each([
+    [Array.from({ length: 3 }, (_, i) => ({ id: `a${i}`, label: "Go" }))],
+    [[{ id: "Bad Id", label: "Go" }]],
+    [[{ id: "go", label: "x".repeat(41) }]],
+    [[{ id: "go", label: "Go", confirm: "x".repeat(201) }]],
+  ])("drops invalid list actions and keeps the rest", (actions) => {
+    const { value, droppedPlaces } = validateListContribution({
+      summary: { text: "kept" },
+      actions,
+    });
+    expect(droppedPlaces).toEqual(["actions"]);
+    expect(value.actions).toBeUndefined();
+    expect(value.summary?.text).toBe("kept");
+  });
+});
+
+describe("footer action title", () => {
+  it("keeps a title of up to 120 characters", () => {
+    const { value, droppedPlaces } = validateContribution(
+      {
+        footer: [
+          {
+            action: {
+              id: "mark-not-seen",
+              label: "Mark as not seen",
+              title: "Seen automatically · 7 Oct 2026, 14:03",
+            },
+          },
+        ],
+      },
+      "detail"
+    );
+    expect(droppedPlaces).toEqual([]);
+    const item = value.footer?.[0];
+    expect(item && "action" in item ? item.action.title : undefined).toBe(
+      "Seen automatically · 7 Oct 2026, 14:03"
+    );
+  });
+
+  it("drops the footer when a title is too long", () => {
+    const { droppedPlaces } = validateContribution(
+      { footer: [{ action: { id: "go", label: "Go", title: "x".repeat(121) } }] },
+      "detail"
+    );
+    expect(droppedPlaces).toEqual(["footer"]);
+  });
 });

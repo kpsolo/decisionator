@@ -3,8 +3,11 @@ import type {
   OptionPropertyDefinition,
   PropertyScalar,
   PropertyValue,
+  Reset,
 } from "@decisionator/core";
+import { monotonicNow } from "@decisionator/core";
 import {
+  type OptionListAction,
   type OptionListFilter,
   type OptionViewContext,
   type OptionViewContribution,
@@ -26,14 +29,19 @@ import { getInstalledPlugins, subscribePlugins } from "../plugins/plugin-registr
 import { optionViewDefinition } from "./builtins.js";
 import {
   type ActivePlugin,
+  type ExtensionEntry,
   MARKER_CHOICE_KEY,
+  type MetaIndex,
   type PropertyEntry,
   type ValueIndex,
   activePlugins,
+  checkReset,
   checkWrite,
   filterMatches,
+  indexMeta,
   indexValues,
   markerPluginId,
+  sharedPropertyDefs,
   viewerValues,
 } from "./extensions.js";
 import { useExposure } from "./useExposure.js";
@@ -59,11 +67,17 @@ export interface PropertyRow {
 interface Ctx {
   plugins: ActivePlugin[];
   values: ValueIndex;
+  meta: MetaIndex;
   viewerId: string | null;
   isOwner: boolean;
   markerPlugin: string | null;
   setValue(pluginId: string, optionId: string, key: string, value: PropertyScalar): Promise<void>;
   runAction(pluginId: string, option: Option, actionId: string): Promise<void>;
+  resetValues(pluginId: string, key: string): Promise<void>;
+  runListAction(pluginId: string, actionId: string, options: Option[]): Promise<void>;
+  /** Appends reset entries chosen by the owner (Reset dialog). */
+  appendResets(entries: ResetEntry[]): Promise<void>;
+  sharedDefs: ReturnType<typeof sharedPropertyDefs>;
   exposureRef(optionId: string): (el: Element | null) => void;
 }
 
@@ -75,6 +89,7 @@ const EMPTY_VIEW: ResolvedOptionView = {
   failed: [],
 };
 const OptionExtensionsContext = createContext<Ctx | null>(null);
+type ResetEntry = Extract<ExtensionEntry, { kind: "reset" }>;
 
 function readMarkerChoice(): string | null {
   try {
@@ -90,8 +105,8 @@ export interface OptionExtensionsProviderProps {
   isOwner: boolean;
   options: Option[];
   properties: PropertyValue[] | undefined;
-  /** Records property entries for the viewer; rejects to roll the optimistic values back. */
-  appendProperties(entries: PropertyEntry[]): Promise<void>;
+  /** Records property and reset entries for the viewer; rejects to roll optimistic state back. */
+  appendProperties(entries: ExtensionEntry[]): Promise<void>;
   children: React.ReactNode;
 }
 
@@ -144,9 +159,16 @@ export function OptionExtensionsProvider({
 
   // Optimistic values: shown at once, superseded by the store's stamped entries.
   const [local, setLocal] = useState<PropertyValue[]>([]);
+  const [localResets, setLocalResets] = useState<Reset[]>([]);
   const all = useMemo(() => [...(properties ?? []), ...local], [properties, local]);
-  const visible = useMemo(() => viewerValues(all, viewerId), [all, viewerId]);
+  const visible = useMemo(
+    () => viewerValues(all, viewerId, localResets),
+    [all, viewerId, localResets]
+  );
   const values = useMemo(() => indexValues(visible), [visible]);
+  const meta = useMemo(() => indexMeta(visible), [visible]);
+  const metaRef = useRef(meta);
+  metaRef.current = meta;
   const valuesRef = useRef(values);
   valuesRef.current = values;
 
@@ -163,10 +185,9 @@ export function OptionExtensionsProvider({
         if (!check.ok) throw new Error(check.message);
         entries.push(check.entry);
       }
-      const at = new Date().toISOString();
       const optimistic: PropertyValue[] = entries.map((e, i) => ({
-        id: `local:${at}:${i}:${Math.random().toString(36).slice(2, 6)}`,
-        at,
+        id: `local:${i}:${Math.random().toString(36).slice(2, 10)}`,
+        at: monotonicNow(),
         by: viewerId ?? "",
         optionId: e.optionId,
         plugin: e.plugin,
@@ -198,11 +219,75 @@ export function OptionExtensionsProvider({
       viewerId: viewerId ?? "",
       surface,
       values: valuesRef.current.get(plugin.id)?.get(option.id) ?? {},
+      valueMeta: metaRef.current.get(plugin.id)?.get(option.id) ?? {},
       settings: plugin.settings,
       setValue: (key, value) => setValue(plugin.id, option.id, key, value),
     }),
     [viewerId, setValue]
   );
+
+  // Resets show at once (FR-034) and roll back when the store refuses them.
+  const appendResets = useCallback(
+    async (entries: ResetEntry[]) => {
+      if (entries.length === 0) return;
+      const optimistic: Reset[] = entries.map((e, i) => {
+        const { kind: _kind, ...fields } = e;
+        return {
+          id: `local-reset:${i}:${Math.random().toString(36).slice(2, 10)}`,
+          at: monotonicNow(),
+          by: viewerId ?? "",
+          ...fields,
+        } as Reset;
+      });
+      setLocalResets((r) => [...r, ...optimistic]);
+      try {
+        await appendProperties(entries);
+      } catch (err) {
+        const ids = new Set(optimistic.map((o) => o.id));
+        setLocalResets((r) => r.filter((x) => !ids.has(x.id)));
+        throw err;
+      }
+    },
+    [viewerId, appendProperties]
+  );
+
+  const resetValues = useCallback(
+    async (pluginId: string, key: string) => {
+      const plugin = plugins.find((p) => p.id === pluginId);
+      if (!plugin) return;
+      const check = checkReset(plugin, key, { id: viewerId, isOwner });
+      if (!check.ok) throw new Error(check.message);
+      await appendResets([check.entry]);
+    },
+    [plugins, viewerId, isOwner, appendResets]
+  );
+
+  const runListAction = useCallback(
+    async (pluginId: string, actionId: string, listOptions: Option[]) => {
+      const plugin = plugins.find((p) => p.id === pluginId);
+      if (!plugin?.definition.onListAction) return;
+      try {
+        await plugin.definition.onListAction(
+          {
+            options: listOptions,
+            viewerId: viewerId ?? "",
+            valuesByOption: Object.fromEntries(valuesRef.current.get(plugin.id) ?? []),
+            settings: plugin.settings,
+            resetValues: (key) => resetValues(plugin.id, key),
+          },
+          actionId
+        );
+      } catch (err) {
+        toast({
+          title: plugin.name,
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+      }
+    },
+    [plugins, viewerId, resetValues]
+  );
+  const sharedDefs = useMemo(() => sharedPropertyDefs(plugins), [plugins]);
 
   const runAction = useCallback(
     async (pluginId: string, option: Option, actionId: string) => {
@@ -267,14 +352,33 @@ export function OptionExtensionsProvider({
     () => ({
       plugins,
       values,
+      meta,
       viewerId,
       isOwner,
       markerPlugin: markerPluginId(plugins, markerChoice),
       setValue,
       runAction,
+      resetValues,
+      runListAction,
+      appendResets,
+      sharedDefs,
       exposureRef,
     }),
-    [plugins, values, viewerId, isOwner, markerChoice, setValue, runAction, exposureRef]
+    [
+      plugins,
+      values,
+      meta,
+      viewerId,
+      isOwner,
+      markerChoice,
+      setValue,
+      runAction,
+      resetValues,
+      runListAction,
+      appendResets,
+      sharedDefs,
+      exposureRef,
+    ]
   );
 
   return (
@@ -366,6 +470,7 @@ export function useOptionView(option: Option, surface: "card" | "detail"): Resol
           viewerId: ctx.viewerId ?? "",
           surface,
           values: ctx.values.get(plugin.id)?.get(option.id) ?? {},
+          valueMeta: ctx.meta.get(plugin.id)?.get(option.id) ?? {},
           settings: plugin.settings,
           setValue: (key, value) => ctx.setValue(plugin.id, option.id, key, value),
         });
@@ -463,6 +568,8 @@ export function usePropertyRows(option: Option): {
 export interface ResolvedOptionList {
   summaries: { plugin: string; text: string }[];
   filters: (OptionListFilter & { plugin: string })[];
+  actions: (OptionListAction & { plugin: string })[];
+  runAction(pluginId: string, actionId: string): Promise<void>;
   /** Whether the option passes the filter `plugin/filterId`. */
   matches(filterKey: string, optionId: string): boolean;
 }
@@ -471,7 +578,15 @@ export interface ResolvedOptionList {
 export function useOptionList(options: Option[]): ResolvedOptionList {
   const ctx = useCtx();
   return useMemo(() => {
-    const result: ResolvedOptionList = { summaries: [], filters: [], matches: () => true };
+    const result: ResolvedOptionList = {
+      summaries: [],
+      filters: [],
+      actions: [],
+      runAction: async (pluginId, actionId) => {
+        await ctx?.runListAction(pluginId, actionId, options);
+      },
+      matches: () => true,
+    };
     if (!ctx) return result;
     const filters = new Map<string, OptionListFilter & { plugin: string }>();
     for (const plugin of ctx.plugins) {
@@ -485,6 +600,7 @@ export function useOptionList(options: Option[]): ResolvedOptionList {
           viewerId: ctx.viewerId ?? "",
           valuesByOption: Object.fromEntries(byOption ?? []),
           settings: plugin.settings,
+          resetValues: (key) => ctx.resetValues(plugin.id, key),
         });
       } catch {
         continue;
@@ -492,6 +608,7 @@ export function useOptionList(options: Option[]): ResolvedOptionList {
       if (raw && typeof (raw as Promise<unknown>).then === "function") continue;
       const { value } = validateListContribution(raw);
       if (value.summary) result.summaries.push({ plugin: plugin.id, text: value.summary.text });
+      for (const a of value.actions ?? []) result.actions.push({ ...a, plugin: plugin.id });
       for (const f of value.filters ?? []) {
         result.filters.push({ ...f, plugin: plugin.id });
         filters.set(`${plugin.id}/${f.id}`, { ...f, plugin: plugin.id });
@@ -504,4 +621,13 @@ export function useOptionList(options: Option[]): ResolvedOptionList {
     };
     return result;
   }, [ctx, options]);
+}
+
+/** Owner tools for the Reset dialog: shared property declarations and a way to append resets. */
+export function useResetTools(): {
+  sharedDefs: { plugin: string; pluginName: string; key: string; label: string }[];
+  appendResets(entries: Extract<ExtensionEntry, { kind: "reset" }>[]): Promise<void>;
+} | null {
+  const ctx = useCtx();
+  return ctx ? { sharedDefs: ctx.sharedDefs, appendResets: ctx.appendResets } : null;
 }

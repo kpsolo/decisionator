@@ -15,6 +15,7 @@ import {
   chosenStrategy,
   enabledStrategies,
 } from "../features/decide/strategies.js";
+import { ballotText } from "../features/history/time-texts.js";
 import { LiveNetworkSettings } from "../features/live/LiveNetworkSettings.js";
 import { projectKey, useLiveShare } from "../features/live/LiveShareContext.js";
 import { OptionExtensionsProvider } from "../features/option-view/OptionExtensionsProvider.js";
@@ -295,6 +296,12 @@ export function ProjectVotePage() {
               : roleCaps.disabledReason
           }
           onSubmitBallot={handleSubmitBallot}
+          submittedText={ballotText({
+            viewerId: currentUser || null,
+            round: currentRound,
+            rankings: snapshot.rankings,
+            history: snapshot.history,
+          })}
         />
       </div>
     </OptionExtensionsProvider>

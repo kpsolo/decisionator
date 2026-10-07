@@ -3,7 +3,9 @@ import {
   OptionPropertyDefinitionSchema,
   type PropertyScalar,
   type PropertyValue,
+  type Reset,
   checkPropertyValue,
+  effectiveEntries,
   effectivePropertyValues,
 } from "@decisionator/core";
 import type { Entry, PluginDefinition } from "@decisionator/plugin-sdk";
@@ -12,6 +14,9 @@ import type { InstalledPlugin } from "../plugins/plugin-registry.js";
 /** Pure helpers behind OptionExtensionsProvider, kept free of React so they are unit-testable. */
 
 export type PropertyEntry = Extract<Entry, { kind: "property" }>;
+export type ResetEntry = Extract<Entry, { kind: "reset" }>;
+/** What the option-view host records for the viewer: property values and resets of them. */
+export type ExtensionEntry = PropertyEntry | ResetEntry;
 
 export interface ActivePlugin {
   id: string;
@@ -96,11 +101,15 @@ export function markerPluginId(plugins: ActivePlugin[], choice: string | null): 
  */
 export function viewerValues(
   properties: readonly PropertyValue[],
-  viewerId: string | null
+  viewerId: string | null,
+  /** Resets not yet reflected in `properties` (optimistic), applied on top. */
+  resets: readonly Reset[] = []
 ): PropertyValue[] {
-  return effectivePropertyValues(
-    properties.filter((v) => v.scope === "shared" || (viewerId !== null && v.by === viewerId))
+  const visible = properties.filter(
+    (v) => v.scope === "shared" || (viewerId !== null && v.by === viewerId)
   );
+  if (resets.length === 0) return effectivePropertyValues(visible);
+  return effectiveEntries({ grades: [], rankings: [], properties: visible, resets }).properties;
 }
 
 /** pluginId → optionId → key → value, without cleared values. */
@@ -114,6 +123,22 @@ export function indexValues(values: readonly PropertyValue[]): ValueIndex {
     if (!byOption) index.set(v.plugin, (byOption = new Map()));
     const record = byOption.get(v.optionId) ?? {};
     record[v.key] = v.value;
+    byOption.set(v.optionId, record);
+  }
+  return index;
+}
+
+/** pluginId → optionId → key → time and author of the effective value. */
+export type MetaIndex = Map<string, Map<string, Record<string, { at: string; by: string }>>>;
+
+export function indexMeta(values: readonly PropertyValue[]): MetaIndex {
+  const index: MetaIndex = new Map();
+  for (const v of values) {
+    if (v.value === null) continue;
+    let byOption = index.get(v.plugin);
+    if (!byOption) index.set(v.plugin, (byOption = new Map()));
+    const record = byOption.get(v.optionId) ?? {};
+    record[v.key] = { at: v.at, by: v.by };
     byOption.set(v.optionId, record);
   }
   return index;
@@ -150,4 +175,51 @@ export function filterMatches(
 ): boolean {
   const value = values?.[where.key] ?? null;
   return where.in.some((v) => v === value);
+}
+
+export type ResetCheck = { ok: true; entry: ResetEntry } | { ok: false; message: string };
+
+/**
+ * FR-032 and FR-033: a plugin may clear one of its own declared properties. A `person` property
+ * is cleared for the viewer only; a `shared` one for every option, and only by the owner.
+ */
+export function checkReset(
+  plugin: ActivePlugin,
+  key: string,
+  viewer: { id: string | null; isOwner: boolean }
+): ResetCheck {
+  const def = plugin.properties.find((p) => p.key === key);
+  if (!def) return { ok: false, message: `${plugin.name}: unknown property '${key}'` };
+  if (viewer.id === null) return { ok: false, message: "Sign in to change this." };
+  if (def.scope === "shared") {
+    if (!viewer.isOwner) {
+      return { ok: false, message: `${def.label}: only the project owner can clear this.` };
+    }
+    return {
+      ok: true,
+      entry: { kind: "reset", scope: "all", targets: ["properties"], plugin: plugin.id, key },
+    };
+  }
+  return {
+    ok: true,
+    entry: {
+      kind: "reset",
+      scope: "participant",
+      participantId: viewer.id,
+      targets: ["properties"],
+      plugin: plugin.id,
+      key,
+    },
+  };
+}
+
+/** Shared property declarations of enabled plugins (what the owner may clear for all options). */
+export function sharedPropertyDefs(
+  plugins: readonly ActivePlugin[]
+): { plugin: string; pluginName: string; key: string; label: string }[] {
+  return plugins.flatMap((p) =>
+    p.properties
+      .filter((d) => d.scope === "shared")
+      .map((d) => ({ plugin: p.id, pluginName: p.name, key: d.key, label: d.label }))
+  );
 }

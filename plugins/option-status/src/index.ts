@@ -17,6 +17,29 @@ function isNew(value: PropertyScalar | undefined): boolean {
   return value === undefined || value === null || value === "not_seen";
 }
 
+/** "Seen automatically · 7 Oct 2026, 14:03" — when and how the viewer's mark was set (FR-028). */
+export function statusTitle(
+  value: PropertyScalar | undefined,
+  at: string | undefined
+): string | undefined {
+  if (!at || (value !== "seen" && value !== "seen_auto" && value !== "not_seen")) return undefined;
+  let time = at;
+  try {
+    time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+      new Date(at)
+    );
+  } catch {
+    // keep the ISO time
+  }
+  const how =
+    value === "seen_auto"
+      ? "Seen automatically"
+      : value === "seen"
+        ? "Marked as seen"
+        : "Marked as not seen";
+  return `${how} · ${time}`;
+}
+
 function seconds(settings: Record<string, unknown>): number {
   const s = settings.seconds;
   return typeof s === "number" && Number.isInteger(s) && s >= 1 && s <= 300 ? s : DEFAULT_SECONDS;
@@ -35,6 +58,7 @@ export function createOptionStatusPlugin(): PluginDefinition {
 
     optionView(ctx): OptionViewContribution {
       const fresh = isNew(ctx.values[KEY]);
+      const title = statusTitle(ctx.values[KEY], ctx.valueMeta?.[KEY]?.at);
       // Cards stay quiet, like a mail list: only the marker. The manual actions live in the
       // detail view.
       const footer =
@@ -42,8 +66,16 @@ export function createOptionStatusPlugin(): PluginDefinition {
           ? []
           : [
               fresh
-                ? { action: { id: "mark-seen", label: "Mark as seen" } }
-                : { action: { id: "mark-not-seen", label: "Mark as not seen" } },
+                ? {
+                    action: { id: "mark-seen", label: "Mark as seen", ...(title ? { title } : {}) },
+                  }
+                : {
+                    action: {
+                      id: "mark-not-seen",
+                      label: "Mark as not seen",
+                      ...(title ? { title } : {}),
+                    },
+                  },
             ];
       return {
         marker: fresh
@@ -60,7 +92,21 @@ export function createOptionStatusPlugin(): PluginDefinition {
         filters: [
           { id: "unseen", label: "Only not seen", where: { key: KEY, in: [null, "not_seen"] } },
         ],
+        actions: [
+          {
+            id: "reset-seen",
+            label: "Mark all as not seen",
+            confirm: "Show every option as new again? Only your own marks change.",
+          },
+        ],
       };
+    },
+
+    async onListAction(ctx, actionId) {
+      if (actionId !== "reset-seen") return;
+      // Like a manual "not seen", the options stay new for the rest of this visit.
+      for (const o of ctx.options) heldNotSeen.add(o.id);
+      await ctx.resetValues(KEY);
     },
 
     async onOptionAction(ctx, actionId) {

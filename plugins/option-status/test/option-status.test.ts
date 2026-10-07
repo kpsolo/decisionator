@@ -1,7 +1,7 @@
 import type { Option, PropertyScalar } from "@decisionator/core";
 import type { ExposureContext, OptionViewContext } from "@decisionator/plugin-sdk";
 import { describe, expect, it } from "vitest";
-import { OPTION_STATUS_PLUGIN_ID, createOptionStatusPlugin } from "../src/index.js";
+import { OPTION_STATUS_PLUGIN_ID, createOptionStatusPlugin, statusTitle } from "../src/index.js";
 
 function option(id: string, status: Option["status"] = "active"): Option {
   return {
@@ -26,6 +26,7 @@ function viewCtx(
     viewerId: "gina",
     surface,
     values: seen === undefined ? {} : { seen },
+    valueMeta: seen === undefined ? {} : { seen: { at: "2026-10-07T12:03:00.000Z", by: "gina" } },
     settings: {},
     setValue: async (key, value) => {
       writes.push([key, value]);
@@ -63,12 +64,12 @@ describe("option status plugin", () => {
         tone: "primary",
         replace: true,
       });
-      expect(view?.footer).toEqual([{ action: { id: "mark-seen", label: "Mark as seen" } }]);
+      expect(view?.footer).toMatchObject([{ action: { id: "mark-seen", label: "Mark as seen" } }]);
     }
     for (const value of ["seen", "seen_auto"] as const) {
       const view = await plugin.optionView?.(viewCtx(value));
       expect(view?.marker).toBeNull();
-      expect(view?.footer).toEqual([
+      expect(view?.footer).toMatchObject([
         { action: { id: "mark-not-seen", label: "Mark as not seen" } },
       ]);
     }
@@ -131,6 +132,7 @@ describe("option status plugin", () => {
       viewerId: "gina",
       valuesByOption: { a: { seen: "seen_auto" }, b: { seen: "not_seen" } },
       settings: {},
+      resetValues: async () => {},
     });
     expect(list?.summary).toEqual({ text: "2 not seen yet" });
     expect(list?.filters).toEqual([
@@ -142,6 +144,7 @@ describe("option status plugin", () => {
       viewerId: "gina",
       valuesByOption: { a: { seen: "seen" } },
       settings: {},
+      resetValues: async () => {},
     });
     expect(none?.summary).toBeUndefined();
   });
@@ -155,5 +158,48 @@ describe("option status plugin", () => {
     expect(plugin.exposureMs?.({ seconds: 0 })).toBe(5000);
     expect(plugin.exposureMs?.({ seconds: 301 })).toBe(5000);
     expect(plugin.exposureMs?.({ seconds: "7" })).toBe(5000);
+  });
+
+  it("titles the status action with how and when the mark was set", async () => {
+    const plugin = createOptionStatusPlugin();
+    const auto = await plugin.optionView?.(viewCtx("seen_auto"));
+    const action = auto?.footer?.[0];
+    expect(action && "action" in action && action.action.title).toMatch(/^Seen automatically · /);
+    expect(statusTitle("seen", "2026-10-07T12:03:00.000Z")).toMatch(/^Marked as seen · /);
+    expect(statusTitle("not_seen", "2026-10-07T12:03:00.000Z")).toMatch(/^Marked as not seen · /);
+    expect(statusTitle(undefined, undefined)).toBeUndefined();
+  });
+
+  it("'Mark all as not seen' resets the viewer's marks and holds every option as new", async () => {
+    const plugin = createOptionStatusPlugin();
+    const list = await plugin.optionList?.({
+      options: [option("a")],
+      viewerId: "gina",
+      valuesByOption: {},
+      settings: {},
+      resetValues: async () => {},
+    });
+    expect(list?.actions).toEqual([
+      {
+        id: "reset-seen",
+        label: "Mark all as not seen",
+        confirm: "Show every option as new again? Only your own marks change.",
+      },
+    ]);
+    const resets: string[] = [];
+    await plugin.onListAction?.(
+      {
+        options: [option("a"), option("b")],
+        viewerId: "gina",
+        valuesByOption: {},
+        settings: {},
+        resetValues: async (key) => void resets.push(key),
+      },
+      "reset-seen"
+    );
+    expect(resets).toEqual(["seen"]);
+    const batches: { optionId: string; key: string; value: PropertyScalar }[][] = [];
+    await plugin.onOptionExposed?.(exposureCtx({}, batches), ["a", "b"]);
+    expect(batches).toEqual([]);
   });
 });

@@ -32,6 +32,7 @@ import { Skeleton } from "../../components/ui/skeleton.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { CommentThread } from "../comments/CommentThread.js";
 import { OptionRow } from "../grading/OptionRow.js";
+import { averageText, ballotText, ownGradeText } from "../history/time-texts.js";
 import { FilterableOptionList } from "../option-view/FilterableOptionList.js";
 import { OptionExtensionsProvider } from "../option-view/OptionExtensionsProvider.js";
 import { createBatcher } from "../option-view/batcher.js";
@@ -325,7 +326,16 @@ function GuestWorkspace({
       isOwner={false}
       options={snapshot.options}
       properties={snapshot.properties}
-      appendProperties={(entries) => batcher.add(entries as GuestEntry[])}
+      appendProperties={(entries) =>
+        batcher.add(
+          entries.map((e) => {
+            // The host adds the guest's own id to a reset.
+            if (e.kind !== "reset") return e as GuestEntry;
+            const { participantId: _self, ...rest } = e;
+            return rest as GuestEntry;
+          })
+        )
+      }
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="space-y-2">
@@ -395,6 +405,15 @@ function GuestWorkspace({
                   commentCount={stat?.commentsCount}
                   myGrade={pendingGrades[opt.id] ?? saved?.value}
                   canGrade={canContribute}
+                  timeTexts={{
+                    ownGrade: ownGradeText({
+                      optionId: opt.id,
+                      viewerId: me || null,
+                      grades: snapshot.grades,
+                      history: snapshot.history,
+                    }),
+                    average: averageText({ optionId: opt.id, grades: snapshot.grades }),
+                  }}
                   onGrade={(value) => {
                     setPendingGrades((p) => ({ ...p, [opt.id]: value }));
                     submit([
@@ -438,6 +457,12 @@ function GuestWorkspace({
               disabled={!canContribute || voting.state !== "open"}
               disabledReason={voting.state !== "open" ? "Voting is closed." : disabledReason}
               onSubmitBallot={(ranking) => submit([{ kind: "ranking", ranking, round }])}
+              submittedText={ballotText({
+                viewerId: me || null,
+                round,
+                rankings: snapshot.rankings,
+                history: snapshot.history,
+              })}
             />
             <ResultsView
               outcomes={snapshot.outcomes}

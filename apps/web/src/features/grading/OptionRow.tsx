@@ -20,6 +20,8 @@ import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "../../components/ui/dialog.js";
 import { cn } from "../../lib/utils.js";
+import { TimeTooltip } from "../history/TimeTooltip.js";
+import { type ParticipantRating, ratingLine } from "../history/time-texts.js";
 import { useExposureRef, useOptionView } from "../option-view/OptionExtensionsProvider.js";
 import {
   OptionBadges,
@@ -43,6 +45,16 @@ export interface OptionRowProps {
   onGrade: (value: number) => void;
   /** The option's comment thread, shown when the comments toggle is expanded or in the lightbox. */
   comments: React.ReactNode;
+  /** Time tooltips (FR-028): on the viewer's own stars and on the average. */
+  timeTexts?: OptionTimeTexts;
+  /** Each participant's current grade, shown in the detail view when `isOwner` (FR-029). */
+  ratings?: ParticipantRating[];
+  isOwner?: boolean;
+}
+
+export interface OptionTimeTexts {
+  ownGrade?: string;
+  average?: string;
 }
 
 function getHostname(url: string): string {
@@ -88,6 +100,9 @@ export const OptionRow: React.FC<OptionRowProps> = ({
   canGrade,
   onGrade,
   comments,
+  timeTexts,
+  ratings,
+  isOwner = false,
 }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -182,21 +197,30 @@ export const OptionRow: React.FC<OptionRowProps> = ({
 
               {/* Rating row: Stars + Text label */}
               <div className="flex flex-row items-center gap-2 flex-wrap">
-                <GradeInput
-                  value={myGrade}
-                  optionId={option.id}
-                  label={`Your rating for ${option.title}`}
-                  showMeta={false}
-                  size="lg"
-                  disabled={!canGrade}
-                  onChange={onGrade}
-                  className="items-start"
-                />
-                <span className="text-xs leading-4 text-muted-foreground dark:text-[#A1A1AB] tabular-nums font-normal pl-0.5">
-                  {averageGrade !== undefined && gradeCount > 0
-                    ? `${averageGrade.toFixed(1)} avg · ${gradeCount} ${gradeCount === 1 ? "rating" : "ratings"}`
-                    : "No ratings yet"}
-                </span>
+                <TimeTooltip text={timeTexts?.ownGrade}>
+                  {(describedBy) => (
+                    <div className="inline-flex">
+                      <GradeInput
+                        value={myGrade}
+                        optionId={option.id}
+                        label={`Your rating for ${option.title}`}
+                        showMeta={false}
+                        size="lg"
+                        disabled={!canGrade}
+                        onChange={onGrade}
+                        className="items-start"
+                        describedBy={timeTexts?.ownGrade ? describedBy : undefined}
+                      />
+                    </div>
+                  )}
+                </TimeTooltip>
+                <TimeTooltip text={timeTexts?.average} focusable>
+                  <span className="rounded text-xs leading-4 text-muted-foreground dark:text-[#A1A1AB] tabular-nums font-normal pl-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {averageGrade !== undefined && gradeCount > 0
+                      ? `${averageGrade.toFixed(1)} avg · ${gradeCount} ${gradeCount === 1 ? "rating" : "ratings"}`
+                      : "No ratings yet"}
+                  </span>
+                </TimeTooltip>
               </div>
               <OptionBadges view={view} />
             </div>
@@ -284,6 +308,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         canGrade={canGrade}
         onGrade={onGrade}
         comments={comments}
+        timeTexts={timeTexts}
+        ratings={isOwner ? ratings : undefined}
       />
     </li>
   );
@@ -301,6 +327,9 @@ interface OptionLightboxProps {
   canGrade: boolean;
   onGrade: (value: number) => void;
   comments: React.ReactNode;
+  timeTexts?: OptionTimeTexts;
+  /** Owner only: each participant's current grade. */
+  ratings?: ParticipantRating[];
 }
 
 function OptionLightbox({
@@ -315,6 +344,8 @@ function OptionLightbox({
   canGrade,
   onGrade,
   comments,
+  timeTexts,
+  ratings,
 }: OptionLightboxProps) {
   const view = useOptionView(option, "detail");
   const exposureRef = useExposureRef(option.id);
@@ -386,27 +417,38 @@ function OptionLightbox({
                 <span>Average Score</span>
                 <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
               </div>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {gradeCount > 0
-                  ? `${gradeCount} ${gradeCount === 1 ? "rating submitted" : "ratings submitted"}`
-                  : "No ratings recorded yet"}
-              </p>
+              <TimeTooltip text={timeTexts?.average} focusable side="bottom">
+                <p className="w-fit rounded text-xs text-muted-foreground tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {gradeCount > 0
+                    ? `${gradeCount} ${gradeCount === 1 ? "rating submitted" : "ratings submitted"}`
+                    : "No ratings recorded yet"}
+                </p>
+              </TimeTooltip>
             </div>
           </div>
 
           <div className="flex flex-col sm:items-end gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">Your Rating:</span>
-            <GradeInput
-              value={myGrade}
-              optionId={option.id}
-              label={`Your rating for ${option.title}`}
-              showMeta={false}
-              size="lg"
-              disabled={!canGrade}
-              onChange={onGrade}
-            />
+            <TimeTooltip text={timeTexts?.ownGrade} side="bottom">
+              {(describedBy) => (
+                <div className="inline-flex">
+                  <GradeInput
+                    value={myGrade}
+                    optionId={option.id}
+                    label={`Your rating for ${option.title}`}
+                    showMeta={false}
+                    size="lg"
+                    disabled={!canGrade}
+                    onChange={onGrade}
+                    describedBy={timeTexts?.ownGrade ? describedBy : undefined}
+                  />
+                </div>
+              )}
+            </TimeTooltip>
           </div>
         </div>
+
+        {ratings && <OwnerRatings ratings={ratings} />}
 
         {/* Lightbox Body */}
         <div className="p-6 space-y-6">
@@ -559,6 +601,30 @@ function OptionLightbox({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Owner-only disclosure: each participant's current grade with its time (FR-029). */
+function OwnerRatings({ ratings }: { ratings: ParticipantRating[] }) {
+  return (
+    <details className="group/ratings px-6 py-3 bg-card border-b border-border text-sm">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronDown
+          className="h-4 w-4 text-muted-foreground transition-transform group-open/ratings:rotate-180 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+        {`Ratings (${ratings.length})`}
+      </summary>
+      {ratings.length > 0 ? (
+        <ul className="mt-2 space-y-1 pl-6 text-muted-foreground tabular-nums">
+          {ratings.map((r) => (
+            <li key={`${r.name}:${r.at}`}>{ratingLine(r)}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 pl-6 text-muted-foreground">No ratings yet.</p>
+      )}
+    </details>
   );
 }
 
