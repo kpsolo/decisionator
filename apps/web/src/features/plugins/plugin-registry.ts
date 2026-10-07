@@ -85,8 +85,8 @@ function withBuiltins(stored: InstalledPlugin[]): { plugins: InstalledPlugin[]; 
   for (const m of [...BUILTIN_MANIFESTS, ...devManifests]) {
     const index = plugins.findIndex((p) => p.id === m.id);
     if (index < 0) {
-      // Development examples start disabled unless listed in deci.devPlugins.
-      plugins.push(builtinRecord(m, !devManifests.includes(m)));
+      // Development examples are only offered when listed in deci.devPlugins, and start enabled.
+      plugins.push(builtinRecord(m, true));
       changed = true;
     } else {
       const existing = plugins[index] as InstalledPlugin;

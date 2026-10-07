@@ -400,7 +400,7 @@ survives export → restore, and is hidden while disabled but kept).
   
   Write tests first in `packages/node/test/contract/agentic-api.test.ts`. Update
   `specs/001-decision-engine-core/contracts/agentic-api.md` (minor bump) and add a changeset.
-- [ ] T043 [US3] Write `apps/web/e2e/option-properties.spec.ts` (dev plugins enabled through
+- [x] T043 [US3] Write `apps/web/e2e/option-properties.spec.ts` (dev plugins enabled through
   localStorage):
   - the owner sets "Cost per person" to 420, and "abc" is refused with "enter a number";
   - a live guest sees "Cost per person: 420" read-only;
@@ -435,7 +435,7 @@ the dot back).
   - a contribution that names `title`, `grade` or `comments` is ignored (it is not in the
     schema);
   - disabling removes contributions on the next render.
-- [ ] T046 [US4] Add tests to `apps/web/e2e/option-properties.spec.ts`:
+- [x] T046 [US4] Add tests to `apps/web/e2e/option-properties.spec.ts`:
   - with "unread bar" enabled, unseen cards show the bar instead of the dot, on the card and in
     the lightbox;
   - with both marker plugins enabled, Settings switches between them;
@@ -567,7 +567,7 @@ all as not seen" changes only her marks).
   - tests: a guest self reset is accepted; any other reset → `invalid`; an owner reset reaches
     guests through the broadcast;
   - `apps/web/src/features/live/GuestSession.tsx` sends list resets through the existing batching.
-- [ ] T070 [US6] Write e2e `apps/web/e2e/history-reset.spec.ts`:
+- [x] T070 [US6] Write e2e `apps/web/e2e/history-reset.spec.ts`:
   - the owner plus two live guests, each with their own device secret;
   - the owner resets Tom, and the averages update for everyone within 1 s;
   - "Reset all votes" for round 1;

@@ -280,9 +280,9 @@ export function ProjectViewPage() {
               )}
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <span>{storeLabel}</span>
-                <span aria-hidden="true">Â·</span>
+                <span aria-hidden="true">·</span>
                 <span>{`Role: ${snapshot.role}`}</span>
-                <span aria-hidden="true">Â·</span>
+                <span aria-hidden="true">·</span>
                 <span className="[overflow-wrap:anywhere]">{currentUser}</span>
               </p>
             </div>
@@ -326,13 +326,13 @@ export function ProjectViewPage() {
                       }
                     >
                       <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      Live sessionâ€¦
+                      Live session…
                     </DropdownMenuItem>
                   )}
                   {isOwner && (
                     <DropdownMenuItem onSelect={() => setShowReset(true)}>
                       <RotateCcw className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      Resetâ€¦
+                      Reset…
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
