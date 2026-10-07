@@ -603,12 +603,12 @@ shown; the outcome names Weighted grades).
   - `chosenStrategy(snapshot)`, falling back to Borda with `{ topN: voting.topN }`;
   - `strategyName(id)`;
   - tests in `strategies.test.ts`.
-- [ ] T073 [US7] Add an owner-only "Decision method" picker to `ProjectVotePage`
+- [x] T073 [US7] Add an owner-only "Decision method" picker to `ProjectVotePage`
   (`apps/web/src/app/pages.tsx`), with the strategy settings form:
   - while voting is open with ballots, warn "{n} people have already voted. Changing the method
     now may change the result.";
   - save with `store.updateMeta(ref, { strategy })`.
-- [ ] T074 [US7] Show "Decided by: {name}" with the one-line description on the vote page, in
+- [x] T074 [US7] Show "Decided by: {name}" with the one-line description on the vote page, in
   `apps/web/src/features/live/GuestSession.tsx` and in `ResultsView.tsx`.
 - [ ] T075 [US7] `handleCloseAndTally` in `apps/web/src/app/pages.tsx`:
   - use `chosenStrategy`;
@@ -635,7 +635,7 @@ reopening, and Adopt records exactly one outcome).
   - `differsFromChosen`;
   - a repeated call gives the same seed;
   - an unrunnable strategy gives its `check()` reason.
-- [ ] T077 [US8] Create `apps/web/src/features/decide/CompareStrategiesDialog.tsx`:
+- [x] T077 [US8] Create `apps/web/src/features/decide/CompareStrategiesDialog.tsx`:
   - a table with Strategy, Winner, Top 3, and Seed or Reason;
   - the text "Winner differs from the chosen method";
   - an owner-only "Adopt" that appends the reproduced outcome through the existing
