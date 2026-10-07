@@ -160,6 +160,9 @@ test("paste → vote → rank → change ranking system → export → restore",
       "Comments",
       "Outcomes",
       "Contributions",
+      "Properties",
+      "History",
+      "Resets",
     ]);
     expect(sheets.get("Ranking")?.[1]?.[1]).toBe(weightedWinner);
     expect(sheets.get("Ballots")?.[1]?.slice(-3)).toEqual(["Barcelona", "Lisbon", "Alps lodge"]);
