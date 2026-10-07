@@ -689,5 +689,236 @@ export function runProjectStoreContractTests(factory: ProjectStoreFactory): void
         expect(snap.properties?.find((p) => p.plugin === STATUS)?.value).toBe("seen");
       });
     });
+
+    describe("history and resets (v1.4.0)", () => {
+      const OPT_A = "01J00000000000000000000001";
+      const OPT_B = "01J00000000000000000000002";
+      const STATUS = "org.decisionator.option-status";
+      const options = [OPT_A, OPT_B].map((id, idx) => ({
+        id,
+        order: idx + 1,
+        title: `Option ${idx + 1}`,
+        description: "",
+        status: "active" as const,
+        tags: [],
+        pros: [],
+        cons: [],
+        links: [],
+        at: "2026-10-05T00:00:00Z",
+        by: "alice@example.com",
+      }));
+      const tom = { onBehalfOf: { participantId: "peer:tom", displayName: "Tom" } };
+      const gina = { onBehalfOf: { participantId: "peer:gina", displayName: "Gina" } };
+      const seen = (value: string): Entry => ({
+        kind: "property",
+        optionId: OPT_A,
+        plugin: STATUS,
+        key: "seen",
+        scope: "person",
+        value,
+      });
+      const selfSeenReset = (participantId: string): Entry => ({
+        kind: "reset",
+        scope: "participant",
+        participantId,
+        targets: ["properties"],
+        plugin: STATUS,
+        key: "seen",
+      });
+
+      async function ownerProject(password?: string) {
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const store = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await store.createProject(
+          { title: "History Project", options },
+          password ? { password } : undefined
+        );
+        return { store, ref };
+      }
+
+      it("keeps a superseded grade in history", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 3 }]);
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 4 }]);
+        const snap = await store.openProject(ref);
+        expect(snap.grades.map((g) => g.value)).toEqual([4]);
+        expect(snap.history?.grades.map((g) => g.value)).toEqual([3]);
+      });
+
+      it("resets one participant's grades and ballots and leaves everyone else's", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 5 }]);
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 4 }], gina);
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 2 }], tom);
+        await store.append(ref, [{ kind: "ranking", round: 1, ranking: [OPT_A, OPT_B] }], tom);
+        await store.append(ref, [
+          {
+            kind: "reset",
+            scope: "participant",
+            participantId: "peer:tom",
+            targets: ["grades", "ballots"],
+          },
+        ]);
+        // Entries recorded after the reset count again.
+        await store.append(ref, [{ kind: "grade", optionId: OPT_B, value: 1 }], tom);
+
+        const snap = await store.openProject(ref);
+        expect(
+          snap.grades
+            .filter((g) => g.optionId === OPT_A)
+            .map((g) => g.by)
+            .sort()
+        ).toEqual(["alice@example.com", "peer:gina"]);
+        expect(snap.grades.find((g) => g.optionId === OPT_B)?.by).toBe("peer:tom");
+        expect(snap.rankings).toHaveLength(0);
+        expect(snap.history?.grades.map((g) => g.by)).toContain("peer:tom");
+        expect(snap.history?.rankings.map((r) => r.by)).toEqual(["peer:tom"]);
+        expect(snap.history?.resets[0]).toMatchObject({
+          scope: "participant",
+          participantId: "peer:tom",
+          by: "alice@example.com",
+        });
+      });
+
+      it("resets all grades and one round's ballots, keeping other rounds and outcomes", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 4 }], gina);
+        await store.append(ref, [{ kind: "ranking", round: 1, ranking: [OPT_A] }], gina);
+        await store.append(ref, [{ kind: "ranking", round: 2, ranking: [OPT_B] }], gina);
+        const outcome = {
+          strategy: { id: "org.decisionator.strategy.owner-pick", version: "1.0.0" },
+          settings: {},
+          inputs: { options: [{ id: OPT_A, title: "Option 1" }] },
+          result: { winner: OPT_A, order: [{ optionId: OPT_A }] },
+          tieBreak: "none" as const,
+          triggeredBy: "alice@example.com",
+          at: "2026-10-06T00:00:00Z",
+        };
+        await store.append(ref, [{ kind: "outcome", outcome }]);
+        await store.append(ref, [
+          { kind: "reset", scope: "all", targets: ["grades", "ballots"], round: 1 },
+        ]);
+
+        const snap = await store.openProject(ref);
+        expect(snap.grades).toHaveLength(0);
+        expect(snap.rankings.map((r) => r.round)).toEqual([2]);
+        expect(snap.outcomes).toHaveLength(1);
+      });
+
+      it("lets a collaborator reset only their own property values", async () => {
+        const { store: alice, ref } = await ownerProject();
+        await alice.append(ref, [seen("seen_auto")]);
+        await alice.share(ref, { inviteUsers: [{ email: "bob@example.com", role: "contribute" }] });
+        fakeGoogleState.setCurrentUser("bob@example.com");
+        const bob = await factory({ currentUserEmail: "bob@example.com" });
+        await bob.append(ref, [seen("seen")]);
+
+        await expect(bob.append(ref, [selfSeenReset("alice@example.com")])).rejects.toThrow(
+          /PERMISSION_DENIED/
+        );
+        await expect(
+          bob.append(ref, [{ kind: "reset", scope: "all", targets: ["grades"] }])
+        ).rejects.toThrow(/PERMISSION_DENIED/);
+        await bob.append(ref, [selfSeenReset("bob@example.com")]);
+
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const snap = await alice.openProject(ref);
+        expect((snap.properties ?? []).map((p) => p.by)).toEqual(["alice@example.com"]);
+      });
+
+      it("accepts a delegated reset of the delegate's own values only", async () => {
+        const { store, ref } = await ownerProject();
+        await store.append(ref, [seen("seen_auto")], gina);
+        await expect(store.append(ref, [selfSeenReset("peer:tom")], gina)).rejects.toThrow(
+          /PERMISSION_DENIED/
+        );
+        await store.append(ref, [selfSeenReset("peer:gina")], gina);
+        const snap = await store.openProject(ref);
+        expect(snap.properties ?? []).toHaveLength(0);
+        expect(snap.history?.resets[0]?.by).toBe("peer:gina");
+      });
+
+      it("refuses an invalid reset and writes nothing from that call", async () => {
+        const { store, ref } = await ownerProject();
+        await expect(
+          store.append(ref, [
+            { kind: "grade", optionId: OPT_A, value: 3 },
+            { kind: "reset", scope: "participant", targets: ["grades"] } as Entry,
+          ])
+        ).rejects.toThrow(/^INVALID_ARGUMENT/);
+        const snap = await store.openProject(ref);
+        expect(snap.grades).toHaveLength(0);
+      });
+
+      it("keeps history and resets on a password-protected project", async () => {
+        const password = "correct-horse-battery-staple";
+        const { store, ref } = await ownerProject(password);
+        await store.openProject(ref, { password });
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 3 }]);
+        await store.append(ref, [{ kind: "grade", optionId: OPT_A, value: 5 }]);
+        await store.append(ref, [{ kind: "reset", scope: "all", targets: ["grades"] }]);
+
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const fresh = await factory({ currentUserEmail: "alice@example.com" });
+        const snap = await fresh.openProject(ref, { password });
+        expect(snap.grades).toHaveLength(0);
+        expect(snap.history?.grades.map((g) => g.value)).toEqual([3, 5]);
+        expect(snap.history?.resets).toHaveLength(1);
+      });
+    });
+
+    describe("strategy meta (v1.4.0)", () => {
+      it("stores the chosen strategy with its author and keeps the last 20 changes", async () => {
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const store = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await store.createProject({ title: "Strategy Project" });
+        for (let i = 0; i < 22; i++) {
+          await store.updateMeta(ref, {
+            strategy: {
+              id: i % 2 ? "org.decisionator.strategy.weighted" : "org.decisionator.strategy.borda",
+              version: "0.1.0",
+              settings: { topN: 3 },
+            },
+          });
+        }
+        const snap = await store.openProject(ref);
+        expect(snap.project.strategy).toMatchObject({
+          id: "org.decisionator.strategy.weighted",
+          version: "0.1.0",
+          settings: { topN: 3 },
+          by: "alice@example.com",
+        });
+        expect(snap.project.strategy?.at).toBeTruthy();
+        expect(snap.project.strategyChanges).toHaveLength(20);
+      });
+
+      it("refuses a strategy change by a non-owner", async () => {
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const alice = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await alice.createProject({ title: "Strategy Project" });
+        await alice.share(ref, { inviteUsers: [{ email: "bob@example.com", role: "contribute" }] });
+        fakeGoogleState.setCurrentUser("bob@example.com");
+        const bob = await factory({ currentUserEmail: "bob@example.com" });
+        await expect(
+          bob.updateMeta(ref, {
+            strategy: { id: "org.decisionator.strategy.random", version: "0.1.0", settings: {} },
+          })
+        ).rejects.toThrow(/PERMISSION_DENIED/);
+      });
+
+      it("round-trips the strategy on a password-protected project", async () => {
+        const password = "correct-horse-battery-staple";
+        fakeGoogleState.setCurrentUser("alice@example.com");
+        const store = await factory({ currentUserEmail: "alice@example.com" });
+        const ref = await store.createProject({ title: "Strategy Project" }, { password });
+        await store.openProject(ref, { password });
+        await store.updateMeta(ref, {
+          strategy: { id: "org.decisionator.strategy.weighted", version: "0.1.0", settings: {} },
+        });
+        const fresh = await factory({ currentUserEmail: "alice@example.com" });
+        const snap = await fresh.openProject(ref, { password });
+        expect(snap.project.strategy?.id).toBe("org.decisionator.strategy.weighted");
+      });
+    });
   });
 }

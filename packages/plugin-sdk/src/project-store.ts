@@ -1,6 +1,7 @@
 import type {
   Comment,
   Contribution,
+  EntryHistory,
   Grade,
   Option,
   OutcomeRecord,
@@ -8,6 +9,7 @@ import type {
   PropertyScalar,
   PropertyValue,
   Ranking,
+  ResetFields,
 } from "@decisionator/core";
 
 export type ParticipantRole = "owner" | "contribute" | "view";
@@ -45,6 +47,8 @@ export interface ProjectSnapshot {
   contributions?: Contribution[];
   /** Effective plugin-defined option property values (contract v1.4.0). */
   properties?: PropertyValue[];
+  /** Superseded and cleared entries plus every reset, oldest first (contract v1.4.0). */
+  history?: EntryHistory;
   role: ParticipantRole;
   /**
    * Stored records the store skipped because they failed validation (contract v1.3.0), e.g.
@@ -68,7 +72,8 @@ export type Entry =
       scope: "shared" | "person";
       /** `null` clears the value. */
       value: PropertyScalar;
-    };
+    }
+  | ({ kind: "reset" } & ResetFields);
 
 /**
  * A participant whose entries the project owner records, e.g. a guest in a live session or the
@@ -100,7 +105,10 @@ export type OptionOp =
   | { op: "update"; option: Partial<Option> & { id: string } }
   | { op: "remove"; id: string };
 
-export type MetaPatch = Partial<Pick<Project, "title" | "description" | "voting">>;
+export type MetaPatch = Partial<Pick<Project, "title" | "description" | "voting">> & {
+  /** Chosen decision strategy; the store stamps `at`/`by` and appends to `strategyChanges`. */
+  strategy?: { id: string; version: string; settings: Record<string, unknown> };
+};
 
 export interface ShareRequest {
   linkSharing?: {

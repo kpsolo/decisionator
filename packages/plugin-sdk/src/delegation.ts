@@ -9,11 +9,27 @@ export const DELEGATABLE_ENTRY_KINDS: ReadonlySet<Entry["kind"]> = new Set([
   "comment",
   "ranking",
   "property",
+  "reset",
 ]);
 
-function isDelegatable(e: Entry): boolean {
+function isDelegatable(e: Entry, delegateId: string): boolean {
   if (!DELEGATABLE_ENTRY_KINDS.has(e.kind)) return false;
-  return e.kind !== "property" || e.scope === "person";
+  if (e.kind === "property") return e.scope === "person";
+  if (e.kind === "reset") return isSelfPropertyReset(e, delegateId);
+  return true;
+}
+
+/** The only reset a non-owner (or a delegate) may append: clearing their own property values. */
+export function isSelfPropertyReset(e: Entry, self: string): boolean {
+  return (
+    e.kind === "reset" &&
+    e.scope === "participant" &&
+    e.participantId === self &&
+    e.targets.length === 1 &&
+    e.targets[0] === "properties" &&
+    typeof e.plugin === "string" &&
+    typeof e.key === "string"
+  );
 }
 
 export const DELEGATE_ID_MAX_LENGTH = 200;
@@ -69,9 +85,14 @@ export function resolveDelegatedAuthor(
     throw new Error("PERMISSION_DENIED: Only the project owner may append on behalf of others");
   }
 
-  const refused = entries.find((e) => !isDelegatable(e));
+  const refused = entries.find((e) => !isDelegatable(e, participantId));
   if (refused) {
-    const what = refused.kind === "property" ? "shared 'property'" : `'${refused.kind}'`;
+    const what =
+      refused.kind === "property"
+        ? "shared 'property'"
+        : refused.kind === "reset"
+          ? "'reset' entries other than clearing the delegate's own properties"
+          : `'${refused.kind}'`;
     throw new Error(`PERMISSION_DENIED: ${what} entries cannot be appended on behalf of others`);
   }
 

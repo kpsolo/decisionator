@@ -41,6 +41,21 @@ export const ProjectSchema = z.object({
     topN: 3,
     liveResults: true,
   }),
+  /** Chosen decision strategy (ProjectStore 1.4.0); absent = Borda count with voting.topN. */
+  strategy: z
+    .object({
+      id: z.string().min(1).max(200),
+      version: z.string().min(1).max(40),
+      settings: z.record(z.unknown()).default({}),
+      at: z.string().optional(),
+      by: z.string().optional(),
+    })
+    .optional(),
+  /** The last 20 strategy changes, oldest first. */
+  strategyChanges: z
+    .array(z.object({ id: z.string(), at: z.string(), by: z.string() }))
+    .max(20)
+    .optional(),
   createdAt: z.string().optional(),
   formatVersion: z.union([z.literal(1), z.literal(2)]).default(1),
 });

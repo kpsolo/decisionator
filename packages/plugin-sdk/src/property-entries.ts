@@ -2,8 +2,11 @@ import {
   PROPERTY_KEY_PATTERN,
   PROPERTY_VALUE_MAX_BYTES,
   type PropertyValue,
+  type Reset,
+  ResetFieldsSchema,
   propertyValueBytes,
 } from "@decisionator/core";
+import { isSelfPropertyReset } from "./delegation.js";
 import type { Entry } from "./project-store.js";
 
 type PropertyEntry = Extract<Entry, { kind: "property" }>;
@@ -74,4 +77,72 @@ export function propertyRecord(
     scope: e.scope,
     value: e.value,
   };
+}
+
+type ResetEntry = Extract<Entry, { kind: "reset" }>;
+
+/**
+ * Checks `reset` entries before anything is written (contract `history-resets` rules 4 and 5).
+ * `self` is the author the store will stamp (the signed-in user, or the delegate).
+ */
+export function checkResetEntries(
+  entries: readonly Entry[],
+  ctx: { isOwner: boolean; self: string }
+): void {
+  for (const e of entries) {
+    if (e.kind !== "reset") continue;
+    const { kind: _kind, ...fields } = e;
+    const parsed = ResetFieldsSchema.safeParse(fields);
+    if (!parsed.success) {
+      throw new Error(
+        `INVALID_ARGUMENT: invalid reset (${parsed.error.issues[0]?.message ?? "bad shape"})`
+      );
+    }
+    if (!ctx.isOwner && !isSelfPropertyReset(e, ctx.self)) {
+      throw new Error(
+        "PERMISSION_DENIED: only the project owner may reset votes or other people's values"
+      );
+    }
+  }
+}
+
+/** The stored record for a checked reset entry. */
+export function resetRecord(
+  e: ResetEntry,
+  stamp: { id: string; at: string; by: string; byName?: string }
+): Reset {
+  const { kind: _kind, ...fields } = e;
+  return {
+    id: stamp.id,
+    at: stamp.at,
+    by: stamp.by,
+    ...(stamp.byName ? { byName: stamp.byName } : {}),
+    scope: fields.scope,
+    targets: [...fields.targets],
+    ...(fields.participantId !== undefined ? { participantId: fields.participantId } : {}),
+    ...(fields.round !== undefined ? { round: fields.round } : {}),
+    ...(fields.plugin !== undefined ? { plugin: fields.plugin, key: fields.key } : {}),
+  } as Reset;
+}
+
+/** Strategy meta update: stamps the choice and keeps the last 20 changes (contract v1.4.0). */
+export function applyStrategyPatch<
+  P extends {
+    strategy?: {
+      id: string;
+      version: string;
+      settings: Record<string, unknown>;
+      at?: string;
+      by?: string;
+    };
+    strategyChanges?: { id: string; at: string; by: string }[];
+  },
+>(
+  project: P,
+  patch: { id: string; version: string; settings: Record<string, unknown> },
+  by: string,
+  at: string
+): P {
+  const changes = [...(project.strategyChanges ?? []), { id: patch.id, at, by }].slice(-20);
+  return { ...project, strategy: { ...patch, at, by }, strategyChanges: changes };
 }
