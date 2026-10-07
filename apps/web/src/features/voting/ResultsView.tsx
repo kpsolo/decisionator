@@ -1,8 +1,9 @@
-import type { Option, OutcomeRecord, Ranking } from "@decisionator/core";
+import { type Option, type OutcomeRecord, type Ranking, latestOutcome } from "@decisionator/core";
 import { Award, History, Trophy } from "lucide-react";
 import type React from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Card, CardContent, CardHeader } from "../../components/ui/card.js";
+import { strategyName } from "../decide/StrategyChooser.js";
 import { VerifyButton } from "./VerifyButton.js";
 
 export interface ResultsViewProps {
@@ -23,8 +24,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   isOpen,
 }) => {
   const optionMap = new Map(options.map((o) => [o.id, o]));
-  const latestOutcome =
-    outcomes.find((o) => (o.round ?? 1) === currentRound) || outcomes[outcomes.length - 1];
+  // Re-deciding with another strategy appends an outcome; the newest one is in force.
+  const current = latestOutcome(outcomes, currentRound);
 
   if (isOpen && !liveResults) {
     const roundBallotCount = rankings.filter((r) => (r.round ?? 1) === currentRound).length;
@@ -42,7 +43,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     );
   }
 
-  if (!latestOutcome) {
+  if (!current) {
     return (
       <Card className="max-w-xl mx-auto border-border bg-card text-center py-12 shadow-xs">
         <CardContent className="space-y-3">
@@ -55,7 +56,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     );
   }
 
-  const winnerOption = optionMap.get(latestOutcome.result.winner);
+  const winnerOption = optionMap.get(current.result.winner);
 
   return (
     <div className="space-y-6 max-w-xl mx-auto">
@@ -66,10 +67,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 text-foreground font-bold text-xs uppercase tracking-wider">
                 <Trophy className="h-4 w-4 text-rating" aria-hidden="true" />
-                <span>{`Round ${latestOutcome.round ?? 1} Winner`}</span>
+                <span>{`Round ${current.round ?? 1} Winner`}</span>
               </div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                {winnerOption?.title || latestOutcome.result.winner}
+                {winnerOption?.title || current.result.winner}
               </h2>
               {winnerOption?.description && (
                 <p className="text-sm text-muted-foreground leading-relaxed">
@@ -78,18 +79,24 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               )}
             </div>
 
-            <VerifyButton outcome={latestOutcome} />
+            <VerifyButton outcome={current} />
           </div>
 
           <div className="flex items-center gap-4 text-xs text-muted-foreground border-t border-border/80 pt-3 flex-wrap">
             <span>
+              Ranked by:{" "}
+              <strong className="font-medium text-foreground">
+                {strategyName(current.strategy.id)}
+              </strong>
+            </span>
+            <span>
               Tie-Break Used:{" "}
-              <strong className="font-medium text-foreground">{latestOutcome.tieBreak}</strong>
+              <strong className="font-medium text-foreground">{current.tieBreak}</strong>
             </span>
             <span>
               Decided:{" "}
               <strong className="font-medium text-foreground">
-                {new Date(latestOutcome.at).toLocaleDateString()}
+                {new Date(current.at).toLocaleDateString()}
               </strong>
             </span>
           </div>
@@ -105,7 +112,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           </h4>
         </CardHeader>
         <CardContent className="space-y-2">
-          {latestOutcome.result.order.map((item, idx) => {
+          {current.result.order.map((item, idx) => {
             const opt = optionMap.get(item.optionId);
             return (
               <div
@@ -152,7 +159,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <CardHeader>
             <h4 className="text-sm font-semibold leading-none tracking-tight flex items-center gap-2">
               <History className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              <span>{`Round History (${outcomes.length} rounds)`}</span>
+              <span>{`Decision History (${outcomes.length} outcomes)`}</span>
             </h4>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -164,6 +171,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                 <span className="text-foreground">
                   Round {out.round ?? 1}: Winner{" "}
                   <strong>{optionMap.get(out.result.winner)?.title || out.result.winner}</strong>
+                  <span className="text-muted-foreground"> · {strategyName(out.strategy.id)}</span>
                 </span>
                 <span className="text-muted-foreground">
                   {new Date(out.at).toLocaleDateString()}

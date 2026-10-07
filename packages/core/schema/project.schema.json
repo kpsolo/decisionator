@@ -112,7 +112,7 @@
         },
         "formatVersion": {
           "type": "number",
-          "const": 1,
+          "enum": [1, 2],
           "default": 1
         }
       },

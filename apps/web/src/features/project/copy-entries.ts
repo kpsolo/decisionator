@@ -1,4 +1,4 @@
-import type { Comment, Grade, OutcomeRecord, Ranking } from "@decisionator/core";
+import type { Comment, Contribution, Grade, OutcomeRecord, Ranking } from "@decisionator/core";
 import type { Entry, ProjectRef, ProjectStore } from "@decisionator/plugin-sdk";
 
 export interface EntriesToCopy {
@@ -6,13 +6,15 @@ export interface EntriesToCopy {
   comments: Comment[];
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
+  contributions?: Contribution[];
 }
 
 /**
  * Re-creates grades, comments and rankings in `ref` under their original authors. Entries of
  * other participants are appended on their behalf (ProjectStore contract v1.2.0), so moving a
  * project keeps one vote per collaborator instead of collapsing them all into the mover's.
- * Outcomes are always recorded by the signed-in user.
+ * Outcomes and contributions are recorded as-is by the signed-in user (they carry their own
+ * author fields).
  */
 export async function copyEntriesAsAuthors(
   targetStore: ProjectStore,
@@ -59,6 +61,16 @@ export async function copyEntriesAsAuthors(
     await targetStore.append(
       ref,
       source.outcomes.map((outcome) => ({ kind: "outcome" as const, outcome }))
+    );
+  }
+
+  if (source.contributions?.length) {
+    await targetStore.append(
+      ref,
+      source.contributions.map((contribution) => ({
+        kind: "contribution" as const,
+        contribution,
+      }))
     );
   }
 }

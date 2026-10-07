@@ -1,4 +1,3 @@
-import { type ProjectExportV1, ProjectExportV1Schema } from "@decisionator/core";
 import type { ProjectSnapshot, ProjectStore } from "@decisionator/plugin-sdk";
 import { AlertCircle, ArrowRightLeft, CheckCircle2, Download, FileUp } from "lucide-react";
 import type React from "react";
@@ -21,6 +20,12 @@ import {
   DialogTrigger,
 } from "../../components/ui/dialog.js";
 import { copyEntriesAsAuthors } from "./copy-entries.js";
+import {
+  PROJECT_FILE_ACCEPT,
+  downloadProjectExport,
+  readProjectFile,
+  restoreProject,
+} from "./project-file.js";
 
 export interface MoveProjectProps {
   currentStore: ProjectStore;
@@ -39,50 +44,17 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [fileInputJson, setFileInputJson] = useState<string>("");
+  const [importFile, setImportFile] = useState<File | null>(null);
 
-  const handleExportToFile = () => {
-    if (!currentSnapshot) return;
-    const bundle: ProjectExportV1 = {
-      format: "decisionator.project/v1",
-      exportedAt: new Date().toISOString(),
-      project: currentSnapshot.project,
-      options: currentSnapshot.options,
-      grades: currentSnapshot.grades,
-      comments: currentSnapshot.comments,
-      rankings: currentSnapshot.rankings,
-      outcomes: currentSnapshot.outcomes,
-    };
-
-    const jsonStr = JSON.stringify(bundle, null, 2);
-    const blob = new Blob([jsonStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${currentSnapshot.project.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.decisionator.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleExportToFile = (format: "json" | "xlsx") => {
+    if (currentSnapshot) downloadProjectExport(currentSnapshot, format);
   };
 
-  const handleImportJson = async (jsonString: string) => {
+  const handleImportFile = async (file: File) => {
     try {
       setMoving(true);
       setError(null);
-      const parsed = JSON.parse(jsonString);
-      const validated = ProjectExportV1Schema.parse(parsed);
-
-      const newRef = await targetStore.createProject({
-        title: validated.project.title,
-        description: validated.project.description,
-        voting: validated.project.voting,
-        options: validated.options,
-      });
-
-      // Keep every collaborator's votes and comments under their own name.
-      await copyEntriesAsAuthors(targetStore, newRef, validated);
-
+      const newRef = await restoreProject(targetStore, await readProjectFile(file));
       setSuccess(`Project migrated to ${targetStore.id} successfully!`);
       if (onMoved) {
         onMoved(newRef);
@@ -95,14 +67,7 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      setFileInputJson(text);
-    };
-    reader.readAsText(file);
+    setImportFile(e.target.files?.[0] ?? null);
   };
 
   const handleDirectTransfer = async () => {
@@ -215,15 +180,24 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
                   file for backup or import elsewhere.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
+              <CardContent className="flex flex-wrap gap-2 p-4 pt-0">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={handleExportToFile}
+                  onClick={() => handleExportToFile("json")}
                   leftIcon={<Download className="h-4 w-4" aria-hidden />}
                 >
                   Download JSON Bundle
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExportToFile("xlsx")}
+                  leftIcon={<Download className="h-4 w-4" aria-hidden />}
+                >
+                  Download Excel (.xlsx)
                 </Button>
               </CardContent>
             </Card>
@@ -234,23 +208,24 @@ export const MoveProject: React.FC<MoveProjectProps> = ({
               <CardTitle className="text-sm font-semibold">Option C: Import from File</CardTitle>
               <CardDescription className="text-xs">
                 Import a <code className="font-mono text-xs">decisionator.project/v1</code> JSON
-                bundle into {targetStore.id}.
+                bundle or <code className="font-mono text-xs">.xlsx</code> export into{" "}
+                {targetStore.id}.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 pt-0 space-y-3">
               <input
                 type="file"
-                accept=".json,application/json"
-                aria-label="Project JSON bundle file"
+                accept={PROJECT_FILE_ACCEPT}
+                aria-label="Project export file (.json or .xlsx)"
                 onChange={handleFileUpload}
                 className="text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border file:border-input file:text-xs file:font-medium file:bg-background hover:file:bg-accent cursor-pointer"
               />
-              {fileInputJson && (
+              {importFile && (
                 <div>
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => handleImportJson(fileInputJson)}
+                    onClick={() => handleImportFile(importFile)}
                     disabled={moving}
                     isLoading={moving}
                     leftIcon={<FileUp className="h-4 w-4" aria-hidden />}

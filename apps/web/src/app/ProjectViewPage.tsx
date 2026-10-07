@@ -5,6 +5,7 @@ import {
   Bot,
   Download,
   Eye,
+  FileSpreadsheet,
   Layers,
   MoreHorizontal,
   Radio,
@@ -33,9 +34,9 @@ import { CommentThread } from "../features/comments/CommentThread.js";
 import { OptionRow } from "../features/grading/OptionRow.js";
 import { useLiveShare } from "../features/live/LiveShareContext.js";
 import { DeleteProject } from "../features/project/DeleteProject.js";
-import { downloadProjectExport } from "../features/project/ExportButton.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
 import { SkippedRowsNotice } from "../features/project/SkippedRowsNotice.js";
+import { downloadProjectExport } from "../features/project/project-file.js";
 import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
 import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
@@ -316,6 +317,10 @@ export function ProjectViewPage() {
                 <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
                   <Download className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   Export Project (JSON)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot, "xlsx")}>
+                  <FileSpreadsheet className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Export Project (Excel / Google Sheets)
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

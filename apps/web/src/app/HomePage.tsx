@@ -1,4 +1,4 @@
-import { ProjectExportV1Schema } from "@decisionator/core";
+import { XLSX_MIME } from "@decisionator/core";
 import type { ProjectSummary } from "@decisionator/plugin-sdk";
 import type { FileProjectStore } from "@decisionator/store-file";
 import { ArrowRight, Clock, FileJson, FolderOpen, Sparkles } from "lucide-react";
@@ -16,7 +16,11 @@ import {
   CardTitle,
 } from "../components/ui/card.js";
 import { Skeleton } from "../components/ui/skeleton.js";
-import { copyEntriesAsAuthors } from "../features/project/copy-entries.js";
+import {
+  PROJECT_FILE_ACCEPT,
+  readProjectFile,
+  restoreProject,
+} from "../features/project/project-file.js";
 import { getStorageManager } from "../storage/storage-manager.js";
 import { getDatabase } from "../sync/db.js";
 
@@ -61,29 +65,24 @@ export function HomePage() {
     loadProjects();
   }, []);
 
-  const handleOpenJsonContent = async (jsonText: string, fileHandle?: FileSystemFileHandle) => {
+  /**
+   * Restores a project from an exported `.json` bundle or `.xlsx` workbook into local storage.
+   * A JSON file opened through the File System Access API stays linked: later changes are
+   * written back to it. Workbooks are only read.
+   */
+  const handleOpenFile = async (file: File, fileHandle?: FileSystemFileHandle) => {
     try {
       setError(null);
-      const parsed = JSON.parse(jsonText);
-      const validated = ProjectExportV1Schema.parse(parsed);
+      const bundle = await readProjectFile(file);
 
       const sm = getStorageManager();
       const fileStore = (sm.getStore("file") ||
         sm.getStore("org.decisionator.store.file")) as FileProjectStore;
 
-      const ref = await fileStore.createProject({
-        title: validated.project.title,
-        description: validated.project.description,
-        options: validated.options,
-        voting: validated.project.voting,
-      });
-
-      if (fileHandle) {
+      const ref = await restoreProject(fileStore, bundle);
+      if (fileHandle && !/\.xlsx$/i.test(file.name)) {
         fileStore.setFileHandle(ref.id, fileHandle);
       }
-
-      // Restore votes, comments and outcomes under their original authors.
-      await copyEntriesAsAuthors(fileStore, ref, validated);
 
       navigate(`/p/file/${ref.id}`);
     } catch (err: unknown) {
@@ -101,15 +100,16 @@ export function HomePage() {
         ).showOpenFilePicker({
           types: [
             {
-              description: "Deci Project Files (*.decisionator.json, *.json)",
-              accept: { "application/json": [".json", ".decisionator.json"] },
+              description: "Deci project files (*.json, *.xlsx)",
+              accept: {
+                "application/json": [".json", ".decisionator.json"],
+                [XLSX_MIME]: [".xlsx"],
+              },
             },
           ],
         });
         if (handle) {
-          const file = await handle.getFile();
-          const text = await file.text();
-          await handleOpenJsonContent(text, handle);
+          await handleOpenFile(await handle.getFile(), handle);
           return;
         }
       }
@@ -122,20 +122,16 @@ export function HomePage() {
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const text = await file.text();
-      await handleOpenJsonContent(text);
-    }
+    if (file) await handleOpenFile(file);
+    // Let the same file be picked again after an error.
+    e.target.value = "";
   };
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragActive(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) {
-      const text = await file.text();
-      await handleOpenJsonContent(text);
-    }
+    if (file) await handleOpenFile(file);
   };
 
   return (
@@ -178,7 +174,8 @@ export function HomePage() {
               type="file"
               ref={fileInputRef}
               onChange={handleFileInputChange}
-              accept=".json,.decisionator.json"
+              accept={PROJECT_FILE_ACCEPT}
+              aria-label="Project file to open"
               className="hidden"
             />
           </div>
@@ -201,11 +198,15 @@ export function HomePage() {
       >
         <FileJson className="h-5 w-5 opacity-70" />
         <span className="text-sm font-medium">
-          Tip: Drag and drop any{" "}
+          Tip: Drag and drop an exported{" "}
           <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-foreground">
-            .decisionator.json
+            .json
           </code>{" "}
-          file here to open it immediately.
+          or{" "}
+          <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-foreground">
+            .xlsx
+          </code>{" "}
+          project file here to restore it.
         </span>
       </div>
 

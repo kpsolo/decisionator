@@ -257,12 +257,15 @@ export function ProjectResultsPage() {
   const [snapshot, setSnapshot] = React.useState<ProjectSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [currentUser, setCurrentUser] = React.useState("");
 
   React.useEffect(() => {
     if (!fileId) return;
     async function load() {
       try {
         setLoading(true);
+        const identity = await store.signIn({ interactive: false });
+        setCurrentUser(identity.participantId);
         const snap = await store.openProject(projectRef);
         setSnapshot(snap);
       } catch (err: unknown) {
@@ -316,12 +319,12 @@ export function ProjectResultsPage() {
           snapshot={snapshot}
           store={store}
           projectRef={projectRef}
-          currentUser={snapshot.project.title}
+          currentUser={currentUser}
           isOwner={true}
           onOutcomeCreated={(newOutcome) => {
             setSnapshot({
               ...snapshot,
-              outcomes: [newOutcome, ...snapshot.outcomes],
+              outcomes: [...snapshot.outcomes, newOutcome],
             });
           }}
         />

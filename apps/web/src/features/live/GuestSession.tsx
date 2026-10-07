@@ -32,7 +32,7 @@ import { Skeleton } from "../../components/ui/skeleton.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { CommentThread } from "../comments/CommentThread.js";
 import { OptionRow } from "../grading/OptionRow.js";
-import { downloadProjectExport } from "../project/ExportButton.js";
+import { downloadProjectExport } from "../project/project-file.js";
 import { RankBallot } from "../voting/RankBallot.js";
 import { ResultsView } from "../voting/ResultsView.js";
 import {

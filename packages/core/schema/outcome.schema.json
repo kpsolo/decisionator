@@ -93,7 +93,9 @@
                 "required": ["optionId", "average", "count"],
                 "additionalProperties": false
               }
-            }
+            },
+            "settings": {},
+            "runInput": {}
           },
           "required": ["options"],
           "additionalProperties": false
@@ -129,7 +131,7 @@
                     "minimum": 0
                   }
                 },
-                "required": ["optionId", "points", "firstPlaces"],
+                "required": ["optionId"],
                 "additionalProperties": false
               }
             },

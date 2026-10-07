@@ -53,6 +53,9 @@ export const OutcomeRecordSchema = z.object({
         })
       )
       .optional(),
+    /** Strategy settings and run input as given to `decide`; verification re-runs with them. */
+    settings: z.unknown().optional(),
+    runInput: z.unknown().optional(),
   }),
   result: z.object({
     winner: z.string().min(1),

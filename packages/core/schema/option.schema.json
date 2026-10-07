@@ -13,7 +13,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["active", "removed"],
+          "enum": ["active", "removed", "proposed"],
           "default": "active"
         },
         "title": {

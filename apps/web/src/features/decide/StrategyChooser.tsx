@@ -1,4 +1,4 @@
-import { runTally } from "@decisionator/core";
+import { latestOutcome, runTally } from "@decisionator/core";
 import type { Option, OutcomeRecord, Project } from "@decisionator/core";
 import type { ProjectRef, ProjectSnapshot, ProjectStore } from "@decisionator/plugin-sdk";
 import { bordaStrategy } from "@decisionator/strategy-borda";
@@ -67,6 +67,13 @@ export const BUILTIN_STRATEGIES: StrategyDescriptor[] = [
   },
 ];
 
+/** Display name of a strategy id; unknown (third-party) ids are shown as-is. */
+export function strategyName(id: string): string {
+  return BUILTIN_STRATEGIES.find((s) => s.id === id)?.name ?? id;
+}
+
+const DEFAULT_STRATEGY_ID = "org.decisionator.strategy.random";
+
 export interface StrategyChooserProps {
   snapshot: ProjectSnapshot;
   /** Store and project the outcome is recorded in (whatever backend holds the project). */
@@ -85,9 +92,13 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
   isOwner,
   onOutcomeCreated,
 }) => {
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string>(
-    "org.decisionator.strategy.random"
-  );
+  // Start from the ranking system currently in force (the latest outcome's), if built in.
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string>(() => {
+    const current = latestOutcome(snapshot.outcomes, snapshot.project.voting?.round)?.strategy.id;
+    return BUILTIN_STRATEGIES.some((s) => s.id === current) && current
+      ? current
+      : DEFAULT_STRATEGY_ID;
+  });
   const [selectedOptionId, setSelectedOptionId] = useState<string>(snapshot.options[0]?.id || "");
   const [includeUngraded, setIncludeUngraded] = useState<boolean>(false);
   const [running, setRunning] = useState(false);

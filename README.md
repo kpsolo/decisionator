@@ -99,8 +99,10 @@ Once open locally or at the public GitHub Pages URL:
    - Drag and drop options to rank your ballot.
    - Click **Close voting** to calculate the deterministic Borda count result.
    - Click **Verify** to confirm reproducibility ("Reproduced ✓").
-5. **Local-First & Migration**:
-   - Open **Move / Export Project** to download the `decisionator.project/v1` JSON bundle or transfer between Google Sheets and Local-First (Automerge 3) mode.
+5. **Export & Restore** ([docs/project-export.md](docs/project-export.md)):
+   - On **Results**, decide with a ranking system (Borda, weighted, random, owner pick); decide again with another one to change the ranking in force.
+   - Project menu **⋯ → Export Project (JSON)** or **Export Project (Excel / Google Sheets)** downloads options, grades, ballots, comments, outcomes and contributions.
+   - On the home page, **Open from File…** with the `.json` or `.xlsx` file restores the project (votes stay under their original authors; outcomes still verify).
 
 ---
 

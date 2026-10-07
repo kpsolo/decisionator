@@ -106,3 +106,21 @@ export function getEffectiveBallots(
 
   return result;
 }
+
+/**
+ * The most recent outcome of `round` (by `at`; on equal times the later-recorded one), or of the
+ * whole project when no outcome belongs to that round. Re-deciding with another strategy appends
+ * an outcome, so the latest one is the ranking currently in force.
+ */
+export function latestOutcome<T extends { round?: number; at: string }>(
+  outcomes: readonly T[],
+  round?: number
+): T | undefined {
+  const pickLatest = (list: readonly T[]) =>
+    list.reduce<T | undefined>((best, o) => (!best || o.at >= best.at ? o : best), undefined);
+  if (round !== undefined) {
+    const inRound = pickLatest(outcomes.filter((o) => (o.round ?? 1) === round));
+    if (inRound) return inRound;
+  }
+  return pickLatest(outcomes);
+}

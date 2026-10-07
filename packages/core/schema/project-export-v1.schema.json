@@ -123,7 +123,7 @@
             },
             "formatVersion": {
               "type": "number",
-              "const": 1,
+              "enum": [1, 2],
               "default": 1
             }
           },
@@ -144,7 +144,7 @@
               },
               "status": {
                 "type": "string",
-                "enum": ["active", "removed"],
+                "enum": ["active", "removed", "proposed"],
                 "default": "active"
               },
               "title": {
@@ -240,6 +240,11 @@
                 "type": "string",
                 "minLength": 1
               },
+              "byName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
               "optionId": {
                 "type": "string",
                 "minLength": 1
@@ -270,13 +275,17 @@
                 "type": "string",
                 "minLength": 1
               },
+              "byName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
               "optionId": {
                 "type": "string",
                 "minLength": 1
               },
               "body": {
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 10000
               },
               "replaces": {
@@ -307,6 +316,11 @@
               "by": {
                 "type": "string",
                 "minLength": 1
+              },
+              "byName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
               },
               "round": {
                 "type": "integer",
@@ -420,7 +434,9 @@
                       "required": ["optionId", "average", "count"],
                       "additionalProperties": false
                     }
-                  }
+                  },
+                  "settings": {},
+                  "runInput": {}
                 },
                 "required": ["options"],
                 "additionalProperties": false
@@ -456,7 +472,7 @@
                           "minimum": 0
                         }
                       },
-                      "required": ["optionId", "points", "firstPlaces"],
+                      "required": ["optionId"],
                       "additionalProperties": false
                     }
                   },
@@ -490,6 +506,102 @@
             "required": ["strategy", "inputs", "result", "triggeredBy", "at"],
             "additionalProperties": false
           }
+        },
+        "contributions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "at": {
+                "type": "string",
+                "minLength": 1
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1
+              },
+              "targetKind": {
+                "type": "string",
+                "enum": ["project", "option", "idea"]
+              },
+              "targetId": {
+                "type": "string",
+                "default": ""
+              },
+              "type": {
+                "type": "string",
+                "enum": ["note", "research", "pros_cons", "link"]
+              },
+              "body": {
+                "type": "string",
+                "maxLength": 65536
+              },
+              "pros": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50
+              },
+              "cons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string",
+                      "pattern": "^https?:\\/\\/"
+                    },
+                    "accessedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["url"],
+                  "additionalProperties": false
+                },
+                "maxItems": 20
+              },
+              "author": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["human", "agent"]
+                  },
+                  "agentName": {
+                    "type": "string"
+                  },
+                  "onBehalfOf": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind"],
+                "additionalProperties": false
+              },
+              "reviewStatus": {
+                "type": "string",
+                "enum": ["pending", "accepted", "edited", "dismissed"],
+                "default": "pending"
+              }
+            },
+            "required": ["id", "at", "by", "targetKind", "type", "body", "author"],
+            "additionalProperties": false
+          },
+          "default": []
         }
       },
       "required": [
