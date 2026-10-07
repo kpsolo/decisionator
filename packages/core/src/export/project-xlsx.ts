@@ -1,5 +1,6 @@
 import type { ZodError } from "zod";
 import type { Option } from "../model/option.js";
+import { PropertyScalarSchema, PropertyValueSchema } from "../model/property.js";
 import { computeOptionStats } from "../stats/aggregate.js";
 import { latestOutcome } from "../voting/rounds.js";
 import {
@@ -21,7 +22,7 @@ import {
  * as `.xlsx` — restores the project. Layout: `docs/project-export.md`.
  *
  * Columns are found by header name, so their order may change and extra columns are ignored.
- * Outcomes and contributions keep their full record as JSON (split over `Record (JSON)` columns
+ * Outcomes, contributions and option properties keep their full record as JSON (split over `Record (JSON)` columns
  * when longer than one cell can hold), so restored outcomes still verify.
  */
 
@@ -34,6 +35,7 @@ export const XLSX_SHEETS = {
   comments: "Comments",
   outcomes: "Outcomes",
   contributions: "Contributions",
+  properties: "Properties",
 } as const;
 
 export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -319,6 +321,24 @@ export function createProjectWorkbook(bundle: ProjectExportV1): Uint8Array {
         ]
       ),
     },
+    {
+      name: XLSX_SHEETS.properties,
+      widths: [36, 34, 20, 9, 30, 28, 20, 24, 60],
+      rows: withJsonRecords(
+        ["Option", "Plugin", "Key", "Scope", "Value", "By", "By name", "At"],
+        bundle.properties,
+        (p) => [
+          title.get(p.optionId) ?? p.optionId,
+          p.plugin,
+          p.key,
+          p.scope,
+          p.value,
+          p.by,
+          p.byName,
+          p.at,
+        ]
+      ),
+    },
   ];
   return writeWorkbook(sheets);
 }
@@ -377,6 +397,55 @@ function jsonRecord(row: Map<string, string>, sheet: string, index: number): unk
   } catch {
     throw new Error(`${sheet} row ${index + 2}: "${RECORD_JSON}" is missing or not valid JSON`);
   }
+}
+
+/** Typed scalar from a Value cell: JSON literals (number, boolean, null) when they parse, else text. */
+function scalarCell(v: string | undefined): unknown {
+  if (v === undefined) return null;
+  // Boolean cells read back as TRUE / FALSE.
+  if (/^(true|false)$/i.test(v)) return v.toLowerCase() === "true";
+  try {
+    const parsed = PropertyScalarSchema.safeParse(JSON.parse(v));
+    if (parsed.success) return parsed.data;
+  } catch {
+    // Plain text.
+  }
+  return v;
+}
+
+/**
+ * A Properties row. The `Record (JSON)` column keeps exact JSON types; rows added or edited by
+ * hand without it are read from the named columns, with Option matched by title or ID.
+ */
+function propertyRow(
+  r: Map<string, string>,
+  i: number,
+  idByTitle: Map<string, string>,
+  fallbackAt: string
+): unknown {
+  const hasJson = [...r.entries()].some(
+    ([k, v]) => k.startsWith(RECORD_JSON.toLowerCase()) && v.trim() !== ""
+  );
+  if (hasJson) {
+    try {
+      const record = jsonRecord(r, XLSX_SHEETS.properties, i);
+      if (PropertyValueSchema.safeParse(record).success) return record;
+    } catch {
+      // Broken JSON: fall back to the named columns.
+    }
+  }
+  const option = text(r, "Option")?.trim();
+  return {
+    id: `prop_sheet_${i + 1}`,
+    optionId: option ? (idByTitle.get(option.toLowerCase()) ?? option) : undefined,
+    plugin: text(r, "Plugin"),
+    key: text(r, "Key"),
+    scope: text(r, "Scope"),
+    value: scalarCell(text(r, "Value")),
+    by: text(r, "By"),
+    byName: text(r, "By name"),
+    at: text(r, "At") ?? fallbackAt,
+  };
 }
 
 function describeZodError(err: ZodError): string {
@@ -518,6 +587,10 @@ export function readProjectWorkbook(bytes: Uint8Array): ProjectExportV1 {
     ),
     contributions: table(sheets.get(XLSX_SHEETS.contributions)).map((r, i) =>
       jsonRecord(r, XLSX_SHEETS.contributions, i)
+    ),
+    // Workbooks written before option properties have no Properties sheet → [].
+    properties: table(sheets.get(XLSX_SHEETS.properties)).map((r, i) =>
+      propertyRow(r, i, idByTitle, exportedAt)
     ),
   };
 

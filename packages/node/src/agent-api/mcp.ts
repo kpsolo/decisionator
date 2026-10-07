@@ -1,12 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GrantManager } from "./grants.js";
+import { agentOptionProperties, agentSetOptionProperty } from "./rest.js";
 import {
   AGENT_RULES_TEXT,
   AddContributionInputSchema,
   AgentHelloInputSchema,
   CompleteRequestInputSchema,
   ProposeOptionInputSchema,
+  SetOptionPropertyInputSchema,
   UpdateContributionInputSchema,
 } from "./schemas.js";
 import type { AgentStateStore } from "./state.js";
@@ -21,7 +23,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   const { grantManager, stateStore } = options;
   const server = new McpServer({
     name: "decisionator-agent-mcp",
-    version: "1.0.0",
+    version: "1.1.0",
   });
 
   const getToken = (extra: unknown): string => {
@@ -143,6 +145,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         })),
         acceptedContributions: accepted,
         sourceRefs: project?.sourceRefs || [],
+        ...agentOptionProperties(stateStore, auth.grant.projectId, auth.grant.target),
       };
 
       return {
@@ -384,6 +387,47 @@ export function createMcpServer(options: McpServerOptions): McpServer {
             text: JSON.stringify({ id: newOption.id, title: newOption.title, status: "proposed" }),
           },
         ],
+      };
+    }
+  );
+
+  // 7a. get_option_properties
+  server.tool(
+    "get_option_properties",
+    "Gets the option property declarations of enabled plugins and the shared values of the options in scope. Per-person values are never included.",
+    {},
+    async (_args, extra) => {
+      const token = getToken(extra);
+      const auth = grantManager.verifyAccess(token, "read");
+      if (!auth.valid || !auth.grant) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `[${auth.status}] ${auth.code}: ${auth.message}` }],
+        };
+      }
+      const result = agentOptionProperties(stateStore, auth.grant.projectId, auth.grant.target);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+      };
+    }
+  );
+
+  // 7b. set_option_property
+  server.tool(
+    "set_option_property",
+    "Sets a shared option property value declared by an enabled plugin (null clears it). Person-scoped properties cannot be set by agents.",
+    SetOptionPropertyInputSchema.shape,
+    async (args, extra) => {
+      const token = getToken(extra);
+      const result = agentSetOptionProperty(grantManager, stateStore, token, args);
+      if (!result.ok) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `[${result.status}] ${result.code}: ${result.message}` }],
+        };
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.value) }],
       };
     }
   );

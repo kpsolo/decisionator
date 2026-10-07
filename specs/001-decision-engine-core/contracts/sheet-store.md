@@ -8,7 +8,7 @@ Normative layout of a project stored as a Google Sheet. It implements
 | Item | Value |
 |------|-------|
 | OAuth | Google Identity Services token model, scope `drive.file` only, token in memory |
-| APIs | Drive v3 (`files.create`, `files.get`, `files.list`, `permissions.*`, `about.get`), Sheets v4 (`spreadsheets.create`, `values.batchGet`, `values.append`, `values.batchUpdate`; `spreadsheets.get` and `spreadsheets.batchUpdate` only for the v1 to v2 migration), Picker (`setFileIds`) |
+| APIs | Drive v3 (`files.create`, `files.get`, `files.list`, `permissions.*`, `about.get`), Sheets v4 (`spreadsheets.create`, `values.batchGet`, `values.append`, `values.batchUpdate`; `spreadsheets.get` and `spreadsheets.batchUpdate` only for the migrations), Picker (`setFileIds`) |
 | File tag | Drive `appProperties`: `decisionator=project`, `formatVersion=1` |
 | Share link | `https://kpsolo.github.io/decisionator/#/p/<fileId>` (base URL configurable, R28) |
 
@@ -28,6 +28,7 @@ account email, stamped by the store.
 | `rankings` | `id`, `at`, `by`, `payload` | contributors | **Append-only.** `payload` = `{"ranking": [optionId…], "round": n, "byName"?: string}`. The latest row per (`by`, `round`) counts. |
 | `outcomes` | `id`, `at`, `by`, `payload` | owner | **Append-only.** `payload` = an OutcomeRecord ([data-model.md](../data-model.md)). |
 | `contributions` | `id`, `at`, `by`, `targetKind`, `targetId`, `payload` | agents & contributors | **Append-only.** Added in format v2 (US5). `payload` = `{type, body, pros?, cons?, sources[], author, reviewStatus: "pending" | "accepted" | "edited" | "dismissed"}`. |
+| `properties` | `id`, `at`, `by`, `optionId`, `payload` | owner (`shared`), contributors (`person`) | **Append-only.** Added in layout 2.3.0 (feature 005, option-properties contract). `payload` = `{"plugin": id, "key": key, "scope": "shared" \| "person", "value": string \| number \| boolean \| null, "byName"?: string}`. The latest row per (`plugin`, `key`, `optionId`) counts for `shared`, per (`by`, `plugin`, `key`, `optionId`) for `person`; on an equal `at` the later row wins. `value: null` clears the value. Only the owner may append `shared` rows. |
 
 **`meta` keys**:
 - `formatVersion` (`1` or `2`)
@@ -40,11 +41,18 @@ account email, stamped by the store.
 When opening a project with `formatVersion = 1`:
 0. A `values.batchGet` that names a missing tab fails as a whole, so when the full read is rejected
    the store lists the tabs (`spreadsheets.get?fields=sheets.properties.title`) and, if only
-   `contributions` is missing, reads the other tabs.
+   tabs added since format v1 (`contributions`, `properties`) are missing, reads the other tabs.
 1. If the `contributions` tab does not exist, the store appends `contributions` to the spreadsheet tabs via `spreadsheets.batchUpdate` with the header row `["id", "at", "by", "targetKind", "targetId", "payload"]`.
 2. The store updates `meta.formatVersion` to `2`, writing that row in place (never `meta!A:B`
    from the top, which would overwrite the header).
 3. If the user lacks write permission to update tabs (e.g. view-only collaborator), the store treats `contributions` as an empty list without failing.
+
+### Properties tab migration (layout 2.3.0)
+When opening a project that has no `properties` tab (created before layout 2.3.0), the store
+detects it as in step 0 above, and an owner or contributor adds it with `spreadsheets.batchUpdate`
+(`addSheet`) and the header row `["id", "at", "by", "optionId", "payload"]`, in the same calls
+as the v1 to v2 migration when both apply. `formatVersion` stays `2`: the change is additive. A
+viewer cannot add the tab and sees no properties.
 
 In password mode, readable `meta` values reveal nothing about the content beyond counts and
 timestamps. The `by` column (participants' emails), `optionId` columns and `at` timestamps stay
@@ -56,6 +64,8 @@ or a payload that does not decrypt) is skipped and reported in `ProjectSnapshot.
 case: direct edits in Google Sheets). An invalid `voting` meta value falls back to the defaults
 and is reported as `meta row <n>`. A row in
 a contributor tab whose `by` does not match a known participant is still shown, but flagged.
+
+**Visibility of per-person properties**: Per-person values are shown in the app only to their author, but anyone with access to the spreadsheet can read the raw properties tab, as with grades.
 
 ## Sync and quota budget (research R23)
 
@@ -91,6 +101,7 @@ used to import into local mode in US7.
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.3.0 | 2026-10-07 | Add the `properties` tab (`id`, `at`, `by`, `optionId`, `payload`) for plugin-defined option properties (project-store contract v1.4.0); added by migration when missing on open, `formatVersion` stays 2; encrypted in password mode and by `enablePassword` like the other payload tabs; per-person values are readable in the raw tab |
 | 2.2.0 | 2026-10-06 | Skipped rows reported in `ProjectSnapshot.warnings` (project-store contract v1.3.0); v1 to v2 migration lists tabs and adds `contributions` with `spreadsheets.batchUpdate` (`addSheet`) and writes the `formatVersion` row in place; `enablePassword` encrypts every content tab, `contributions` included |
 | 2.1.0 | 2026-10-06 | `grades`, `comments` and `rankings` payloads may carry `byName`, the display name of a delegated author (project-store contract v1.2.0). The column layout is unchanged; readers ignore a missing or malformed `byName` |
 | 2.0.0 | 2026-10-05 | Add `contributions` tab and automatic migration from v1 for agent and research contributions (US5) |

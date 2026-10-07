@@ -8,6 +8,7 @@ export const TAB_HEADERS = {
   rankings: ["id", "at", "by", "payload"],
   outcomes: ["id", "at", "by", "payload"],
   contributions: ["id", "at", "by", "targetKind", "targetId", "payload"],
+  properties: ["id", "at", "by", "optionId", "payload"],
 } as const;
 
 export type SheetTabName = keyof typeof TAB_HEADERS;
@@ -47,6 +48,7 @@ export async function createProjectSpreadsheet(
     "rankings",
     "outcomes",
     "contributions",
+    "properties",
   ];
 
   // 1. Create spreadsheet with all required tabs
@@ -99,6 +101,7 @@ export async function createProjectSpreadsheet(
     { range: "rankings!A:D", values: [[...TAB_HEADERS.rankings]] },
     { range: "outcomes!A:D", values: [[...TAB_HEADERS.outcomes]] },
     { range: "contributions!A:F", values: [[...TAB_HEADERS.contributions]] },
+    { range: "properties!A:E", values: [[...TAB_HEADERS.properties]] },
   ];
 
   await client.batchUpdateValues(spreadsheetId, initialData);

@@ -1,4 +1,4 @@
-# Contract: Project Store — v1.3.0
+# Contract: Project Store — v1.4.0
 
 The extension point that keeps project storage pluggable (spec FR-011, Principle I).
 - MVP implementation: `store-google-sheets` ([sheet-store.md](./sheet-store.md)).
@@ -33,7 +33,15 @@ type Entry =
   | { kind: "comment"; optionId: string; body: string; hidden?: boolean; replaces?: string }
   | { kind: "ranking"; ranking: string[] }                       // ordered option ids, length ≤ topN
   | { kind: "outcome"; outcome: OutcomeRecord }
-  | { kind: "contribution"; contribution: Contribution };
+  | { kind: "contribution"; contribution: Contribution }
+  | {                                                            // v1.4.0: option property value
+      kind: "property";
+      optionId: string;
+      plugin: string;                                            // id of the declaring plugin
+      key: string;                                               // /^[a-z][a-z0-9_]{0,39}$/
+      scope: "shared" | "person";
+      value: string | number | boolean | null;                   // null clears the value
+    };
 
 interface Delegate {
   participantId: string;      // stamped as `by`; non-blank, at most 200 characters
@@ -57,6 +65,10 @@ of the snapshot instead of failing `openProject`. Since v1.3.0 the store reports
 optional `ProjectSnapshot.warnings: string[]`, naming where it is stored and why it was skipped
 (Google Sheets: `"<tab> row <n>: <reason>"`). The field is absent when nothing was skipped, and the
 UI shows it to the user.
+
+Since v1.4.0 `ProjectSnapshot` also carries `properties?: PropertyValue[]` (`@decisionator/core`):
+the effective option property values, each `{ id, at, by, byName?, optionId, plugin, key, scope,
+value }`. See [option-properties.md](../../005-option-status-properties/contracts/option-properties.md).
 
 ## Rules
 
@@ -98,6 +110,28 @@ UI shows it to the user.
    or the owner's own email, is a no-op. A store that cannot revoke an individual (for example
    Google while link sharing stays on, research R21) throws `NOT_SUPPORTED` before changing
    anything (rule 3).
+8. **Option properties (v1.4.0).** Plugins declare option properties; their values are stored as
+   `property` entries.
+   1. `append(ref, [{ kind: "property", optionId, plugin, key, scope, value }])` records a value.
+      The store stamps `id`, `at` and `by`, and keeps `byName` as for grades.
+   2. Stores check shape only: the field types above, a JSON-serialized `value` of at most 2 KiB,
+      and an existing `optionId`. Otherwise the error message starts with `INVALID_ARGUMENT`.
+      Type checks against plugin declarations happen in the host (`checkPropertyValue`), because
+      stores do not know the plugins. The plugin SDK exports `checkPropertyEntries` and
+      `propertyRecord` for store authors.
+   3. Latest wins: per (`plugin`, `key`, `optionId`) for `shared`, per (`by`, `plugin`, `key`,
+      `optionId`) for `person` (`propertySlot` in `@decisionator/core`). `value: null` stays as the
+      newest entry and clears the value.
+   4. `shared` values may be appended only by the owner. A non-owner append of `shared` is refused
+      with `PERMISSION_DENIED`.
+   5. `onBehalfOf` is allowed for `property` only with `scope: "person"`. Otherwise the call is
+      refused with `PERMISSION_DENIED`.
+   6. `openProject` returns `properties: PropertyValue[]`, effective values only. Values of
+      plugins the host does not know are returned unchanged.
+   7. Password-protected projects store `value` encrypted, as they do for comment bodies.
+
+   As for delegation, the store validates the whole call before writing: a rejected call writes
+   nothing.
 
 ## Contract test kit
 
@@ -118,12 +152,18 @@ covers:
   password-protected project;
 - sharing (v1.2.1): a non-owner (`view` or `contribute`) calling `share` to invite, change a role,
   remove a collaborator or toggle link sharing gets `PERMISSION_DENIED` and changes nothing, and
-  the owner's `removeUsers` revokes only the named collaborators.
+  the owner's `removeUsers` revokes only the named collaborators;
+- option properties (v1.4.0): latest-wins per slot for `shared` and `person` values, `null`
+  clearing a value, delegated `person` values under the delegate's id with `byName`,
+  `PERMISSION_DENIED` for delegated or non-owner `shared` values, `INVALID_ARGUMENT` for
+  malformed entries, unknown options and values over 2 KiB (nothing written), values of unknown
+  plugins returned unchanged, and a round trip through a password-protected project.
 
 ## Changelog
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.4.0 (unreleased) | 2026-10-07 | Add the `property` entry kind and `ProjectSnapshot.properties`: plugin-declared option property values, `shared` (owner only) or `person` (per participant), latest-wins per slot, `null` clears, delegation only for `person`, encrypted in password mode (rule 8). Contract kit covers rules 8.1–8.6 |
 | 1.3.0 (unreleased) | 2026-10-06 | Add optional `ProjectSnapshot.warnings`: records skipped because they failed validation, so the UI can name them |
 | 1.2.1 (unreleased) | 2026-10-06 | `share` is owner-only: non-owners get `PERMISSION_DENIED` (rule 7). `removeUsers` must revoke the named collaborators; Google refuses it with `NOT_SUPPORTED` while link sharing stays on. Contract kit covers both |
 | 1.2.0 (unreleased) | 2026-10-06 | Add delegated append: `append(ref, entries, { onBehalfOf })` lets the owner record grades, comments and rankings for another participant (live-session guests, moved projects); new optional `byName` on grades, comments and rankings; latest-wins keyed on the stamped author (rule 6) |

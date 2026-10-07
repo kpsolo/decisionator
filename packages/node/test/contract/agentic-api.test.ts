@@ -57,6 +57,63 @@ describe("Agentic API Contract Tests (T097)", () => {
       },
     ],
     sourceRefs: [{ id: "src_1", title: "Lease details", url: "https://example.com/lease" }],
+    optionProperties: [
+      {
+        plugin: "acme.pipeline",
+        key: "stage",
+        label: "Stage",
+        type: "choice" as const,
+        choices: [
+          { value: "lead", label: "Lead" },
+          { value: "won", label: "Won" },
+        ],
+        scope: "shared" as const,
+        cardBadge: true,
+        hidden: false,
+      },
+      {
+        plugin: "acme.pipeline",
+        key: "favourite",
+        label: "Favourite",
+        type: "boolean" as const,
+        scope: "person" as const,
+        cardBadge: false,
+        hidden: false,
+      },
+    ],
+    properties: [
+      {
+        id: "pv_1",
+        at: "2026-10-05T11:00:00Z",
+        by: "owner_1",
+        optionId: "opt_downtown",
+        plugin: "acme.pipeline",
+        key: "stage",
+        scope: "shared" as const,
+        value: "lead",
+      },
+      {
+        id: "pv_2",
+        at: "2026-10-05T11:01:00Z",
+        by: "p_alice",
+        byName: "Alice",
+        optionId: "opt_downtown",
+        plugin: "acme.pipeline",
+        key: "favourite",
+        scope: "person" as const,
+        value: true,
+      },
+      {
+        id: "pv_3",
+        at: "2026-10-05T11:02:00Z",
+        by: "owner_1",
+        optionId: "opt_suburbs",
+        plugin: "acme.pipeline",
+        key: "stage",
+        scope: "shared" as const,
+        value: "won",
+      },
+    ],
   };
 
   beforeEach(() => {
@@ -609,12 +666,273 @@ describe("Agentic API Contract Tests (T097)", () => {
         "update_contribution",
         "propose_option",
         "complete_request",
+        "get_option_properties",
+        "set_option_property",
       ];
 
       for (const op of expectedOperations) {
         expect(openApiOpIds).toContain(op);
         expect(mcpToolNames).toContain(op);
       }
+    });
+  });
+
+  describe("Option Properties (005 FR-017)", () => {
+    const propsGrant = (
+      permissions: Array<"read" | "contribute" | "propose_options">,
+      target: { kind: "project" } | { kind: "option"; optionId: string } = { kind: "project" }
+    ) => {
+      const { token, grant } = grantManager.createGrant({
+        projectId: "proj_1",
+        instruction: "Track the pipeline stage",
+        target,
+        permissions,
+      });
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-Agent-Name": "StageBot",
+      };
+      return { token, grant, headers };
+    };
+
+    const put = (
+      headers: Record<string, string>,
+      optionId: string,
+      plugin: string,
+      key: string,
+      body: unknown
+    ) =>
+      app.request(`/api/v1/options/${optionId}/properties/${plugin}/${key}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+    type Ctx = {
+      optionProperties: Array<{ plugin: string; key: string; scope: string }>;
+      properties: Array<{
+        optionId: string;
+        key: string;
+        scope: string;
+        value: unknown;
+        by: string;
+        byName?: string;
+      }>;
+    };
+
+    it("GET /context returns declarations and shared values only, never person values", async () => {
+      const { headers } = propsGrant(["read"]);
+      const res = await app.request("/api/v1/context", { headers });
+      expect(res.status).toBe(200);
+      const ctx = (await res.json()) as Ctx;
+      expect(ctx.optionProperties.map((d) => `${d.plugin}/${d.key}`).sort()).toEqual([
+        "acme.pipeline/favourite",
+        "acme.pipeline/stage",
+      ]);
+      expect(ctx.properties.length).toBe(2);
+      expect(ctx.properties.every((v) => v.scope === "shared")).toBe(true);
+      expect(JSON.stringify(ctx)).not.toContain("p_alice");
+    });
+
+    it("GET /context is empty for a project without declarations", async () => {
+      stateStore.setProject("proj_2", {
+        title: "Plain",
+        options: [],
+        contributions: [],
+        sourceRefs: [],
+      });
+      const { token } = grantManager.createGrant({
+        projectId: "proj_2",
+        instruction: "Read",
+        target: { kind: "project" },
+        permissions: ["read"],
+      });
+      const res = await app.request("/api/v1/context", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const ctx = (await res.json()) as Ctx;
+      expect(ctx.optionProperties).toEqual([]);
+      expect(ctx.properties).toEqual([]);
+    });
+
+    it("GET /properties (get_option_properties) returns declarations and shared values", async () => {
+      const { headers } = propsGrant(["read"]);
+      const res = await app.request("/api/v1/properties", { headers });
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as Ctx;
+      expect(json.optionProperties.length).toBe(2);
+      expect(json.properties.length).toBe(2);
+      expect(json.properties.every((v) => v.scope === "shared")).toBe(true);
+    });
+
+    it("PUT sets a shared value attributed to the agent, latest wins, and is audited", async () => {
+      const { grant, headers } = propsGrant(["read", "contribute"]);
+      const res = await put(headers, "opt_downtown", "acme.pipeline", "stage", { value: "won" });
+      expect(res.status).toBe(200);
+      const stored = (await res.json()) as {
+        id: string;
+        at: string;
+        by: string;
+        byName?: string;
+        optionId: string;
+        plugin: string;
+        key: string;
+        scope: string;
+        value: unknown;
+      };
+      expect(stored.value).toBe("won");
+      expect(stored.scope).toBe("shared");
+      expect(stored.optionId).toBe("opt_downtown");
+      expect(stored.by).toBe(`agent:${grant.id}`);
+      expect(stored.byName).toBe("StageBot");
+
+      const ctx = (await (await app.request("/api/v1/context", { headers })).json()) as Ctx;
+      const downtown = ctx.properties.filter(
+        (v) => v.optionId === "opt_downtown" && v.key === "stage"
+      );
+      expect(downtown.length).toBe(1);
+      expect(downtown[0]?.value).toBe("won");
+      expect(downtown[0]?.byName).toBe("StageBot");
+
+      const event = auditLog.getEvents().find((e) => e.type === "agent_property_set");
+      expect(event?.details.grantId).toBe(grant.id);
+      expect(event?.details.optionId).toBe("opt_downtown");
+      expect(event?.details.key).toBe("stage");
+    });
+
+    it("PUT with null clears the value", async () => {
+      const { headers } = propsGrant(["contribute"]);
+      const res = await put(headers, "opt_suburbs", "acme.pipeline", "stage", { value: null });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { value: unknown }).value).toBeNull();
+    });
+
+    it("PUT refuses a bad value with the validation message (400)", async () => {
+      const { headers } = propsGrant(["contribute"]);
+      const res = await put(headers, "opt_downtown", "acme.pipeline", "stage", { value: "lost" });
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: string; message: string };
+      expect(json.error).toBe("INVALID_PARAMS");
+      expect(json.message).toBe("Stage: choose one of Lead, Won");
+
+      const missing = await put(headers, "opt_downtown", "acme.pipeline", "stage", {});
+      expect(missing.status).toBe(400);
+    });
+
+    it("PUT refuses a person property (403)", async () => {
+      const { headers } = propsGrant(["contribute"]);
+      const res = await put(headers, "opt_downtown", "acme.pipeline", "favourite", {
+        value: true,
+      });
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as { error: string; message: string };
+      expect(json.error).toBe("NOT_PERMITTED_FOR_AGENTS");
+      expect(json.message).toBe("Only the person it belongs to can set this property.");
+    });
+
+    it("PUT returns 404 for an unknown option or an undeclared property", async () => {
+      const { headers } = propsGrant(["contribute"]);
+      const r1 = await put(headers, "opt_nowhere", "acme.pipeline", "stage", { value: "won" });
+      expect(r1.status).toBe(404);
+      const r2 = await put(headers, "opt_downtown", "acme.pipeline", "budget", { value: 1 });
+      expect(r2.status).toBe(404);
+      const r3 = await put(headers, "opt_downtown", "other.plugin", "stage", { value: "won" });
+      expect(r3.status).toBe(404);
+    });
+
+    it("PUT requires the contribute permission (403, audited)", async () => {
+      const { grant, headers } = propsGrant(["read"]);
+      const res = await put(headers, "opt_downtown", "acme.pipeline", "stage", { value: "won" });
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: string }).error).toBe("NOT_PERMITTED_FOR_AGENTS");
+      const event = auditLog.getEvents().find((e) => e.type === "agent_refused_permission");
+      expect(event?.details.grantId).toBe(grant.id);
+      expect(event?.details.requiredPermission).toBe("contribute");
+    });
+
+    it("option-scoped grants see and set only their option", async () => {
+      const { headers } = propsGrant(["read", "contribute"], {
+        kind: "option",
+        optionId: "opt_downtown",
+      });
+      const ctx = (await (await app.request("/api/v1/context", { headers })).json()) as Ctx;
+      expect(ctx.properties.map((v) => v.optionId)).toEqual(["opt_downtown"]);
+
+      const out = await put(headers, "opt_suburbs", "acme.pipeline", "stage", { value: "lead" });
+      expect(out.status).toBe(403);
+      expect(((await out.json()) as { error: string }).error).toBe("OUT_OF_SCOPE");
+
+      const ok = await put(headers, "opt_downtown", "acme.pipeline", "stage", { value: "won" });
+      expect(ok.status).toBe(200);
+    });
+
+    it("MCP get_option_properties and set_option_property follow the same rules", async () => {
+      const { token, grant } = grantManager.createGrant({
+        projectId: "proj_1",
+        instruction: "MCP stage tracking",
+        target: { kind: "project" },
+        permissions: ["read", "contribute"],
+      });
+      grantManager.setAgentName(grant.id, "McpStage");
+      const server = createMcpServer({ grantManager, stateStore, defaultToken: token });
+      const client = new Client({ name: "mcp-props", version: "1.0.0" });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const getText = (res: unknown): string =>
+        (res as { content: Array<{ text: string }> }).content[0]?.text ?? "";
+
+      const getRes = await client.callTool({ name: "get_option_properties", arguments: {} });
+      expect(getRes.isError).toBeFalsy();
+      const got = JSON.parse(getText(getRes)) as Ctx;
+      expect(got.optionProperties.length).toBe(2);
+      expect(got.properties.every((v) => v.scope === "shared")).toBe(true);
+
+      const setRes = await client.callTool({
+        name: "set_option_property",
+        arguments: {
+          optionId: "opt_downtown",
+          plugin: "acme.pipeline",
+          key: "stage",
+          value: "won",
+        },
+      });
+      expect(setRes.isError).toBeFalsy();
+      const stored = JSON.parse(getText(setRes)) as { value: unknown; by: string; byName: string };
+      expect(stored.value).toBe("won");
+      expect(stored.by).toBe(`agent:${grant.id}`);
+      expect(stored.byName).toBe("McpStage");
+
+      const personRes = await client.callTool({
+        name: "set_option_property",
+        arguments: {
+          optionId: "opt_downtown",
+          plugin: "acme.pipeline",
+          key: "favourite",
+          value: true,
+        },
+      });
+      expect(personRes.isError).toBe(true);
+      expect(getText(personRes)).toContain("[403]");
+      expect(getText(personRes)).toContain("Only the person it belongs to can set this property.");
+
+      const badRes = await client.callTool({
+        name: "set_option_property",
+        arguments: { optionId: "opt_downtown", plugin: "acme.pipeline", key: "stage", value: 3 },
+      });
+      expect(badRes.isError).toBe(true);
+      expect(getText(badRes)).toContain("[400]");
+      expect(getText(badRes)).toContain("Stage: choose one of Lead, Won");
+
+      const missingRes = await client.callTool({
+        name: "set_option_property",
+        arguments: { optionId: "opt_gone", plugin: "acme.pipeline", key: "stage", value: "won" },
+      });
+      expect(missingRes.isError).toBe(true);
+      expect(getText(missingRes)).toContain("[404]");
+
+      await client.close();
+      await server.close();
     });
   });
 

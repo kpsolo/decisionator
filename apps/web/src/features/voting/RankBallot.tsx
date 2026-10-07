@@ -22,6 +22,7 @@ import { useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { ExposureBox } from "../option-view/OptionPlaces.js";
 
 export interface RankBallotProps {
   options: Option[];
@@ -226,7 +227,7 @@ export const RankBallot: React.FC<RankBallotProps> = ({
                 const opt = optionMap.get(id);
                 if (!opt) return null;
                 return (
-                  <div key={opt.id}>
+                  <ExposureBox key={opt.id} optionId={opt.id}>
                     <SortableOptionItem
                       option={opt}
                       rank={index + 1}
@@ -246,7 +247,7 @@ export const RankBallot: React.FC<RankBallotProps> = ({
                         </span>
                       </div>
                     )}
-                  </div>
+                  </ExposureBox>
                 );
               })}
             </div>

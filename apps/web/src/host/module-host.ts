@@ -24,7 +24,7 @@ export const HOST_PLATFORM_VERSIONS: HostPlatformVersions = {
   runtime: "1.0.0",
   strategy: "1.1.0",
   ideaSource: "1.0.0",
-  projectStore: "1.2.1",
+  projectStore: "1.4.0",
   uiSlot: "1.0.0",
 };
 

@@ -63,4 +63,61 @@ describe("copyEntriesAsAuthors", () => {
       { entries: [{ kind: "outcome", outcome }] },
     ]);
   });
+
+  it("re-appends person property values under their author and shared ones as the mover", async () => {
+    const { store, calls } = recordingStore("me@example.com");
+    const value = (
+      id: string,
+      at: string,
+      by: string,
+      scope: "shared" | "person",
+      v: string | number | boolean | null,
+      byName?: string
+    ) => ({
+      id,
+      at,
+      by,
+      ...(byName ? { byName } : {}),
+      optionId: "o1",
+      plugin: scope === "person" ? "org.decisionator.option-status" : "org.example.budget",
+      key: scope === "person" ? "seen" : "cost",
+      scope,
+      value: v,
+    });
+
+    await copyEntriesAsAuthors(
+      store,
+      { store: "test", id: "p1" },
+      {
+        grades: [],
+        comments: [],
+        rankings: [],
+        outcomes: [],
+        properties: [
+          value("p1", "2026-10-06T00:00:02Z", "guest:ana", "person", "seen_auto", "Ana"),
+          value("p2", "2026-10-06T00:00:01Z", "me@example.com", "person", null),
+          value("p3", "2026-10-06T00:00:03Z", "bob@example.com", "shared", 1200),
+          value("p4", "2026-10-06T00:00:00Z", "me@example.com", "shared", false),
+        ],
+      }
+    );
+
+    const entry = (scope: "shared" | "person", v: string | number | boolean | null) => ({
+      kind: "property",
+      optionId: "o1",
+      plugin: scope === "person" ? "org.decisionator.option-status" : "org.example.budget",
+      key: scope === "person" ? "seen" : "cost",
+      scope,
+      value: v,
+    });
+    expect(calls).toEqual([
+      { entries: [entry("person", null)] },
+      {
+        entries: [entry("person", "seen_auto")],
+        opts: { onBehalfOf: { participantId: "guest:ana", displayName: "Ana" } },
+      },
+      // Shared values, oldest first, by the signed-in user whoever set them.
+      { entries: [entry("shared", false), entry("shared", 1200)] },
+    ]);
+  });
 });

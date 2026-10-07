@@ -30,9 +30,35 @@ async function seededProject() {
     [
       { kind: "grade", optionId: "bcn", value: 4 },
       { kind: "ranking", ranking: ["bcn", "lis"], round: 1 },
+      {
+        kind: "property",
+        optionId: "lis",
+        plugin: "org.decisionator.option-status",
+        key: "seen",
+        scope: "person",
+        value: "seen_auto",
+      },
     ],
     { onBehalfOf: { participantId: "guest:ana", displayName: "Ana" } }
   );
+  await store.append(ref, [
+    {
+      kind: "property",
+      optionId: "bcn",
+      plugin: "org.example.budget",
+      key: "cost",
+      scope: "shared",
+      value: 1200,
+    },
+    {
+      kind: "property",
+      optionId: "lis",
+      plugin: "org.example.budget",
+      key: "approved",
+      scope: "shared",
+      value: false,
+    },
+  ]);
   const snap = await store.openProject(ref);
   const outcome = await runTally({
     snapshot: snap,
@@ -74,12 +100,15 @@ function comparable(snapshot: Awaited<ReturnType<FileProjectStore["openProject"]
     rankings: strip(bundle.rankings),
     outcomes: bundle.outcomes,
     contributions: bundle.contributions,
+    properties: [...bundle.properties]
+      .map(({ id: _id, at: _at, ...rest }) => rest)
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
   };
 }
 
 describe("project export files", () => {
   it.each(["json", "xlsx"] as const)(
-    "restores options, votes, comments, outcomes and contributions from %s",
+    "restores options, votes, comments, outcomes, contributions and properties from %s",
     async (format) => {
       const original = await seededProject();
       const bundle = snapshotToExport(original);
@@ -97,6 +126,23 @@ describe("project export files", () => {
       expect(restored.outcomes[0]?.inputs).toMatchObject({ settings: { topN: 3 } });
       // Guest entries keep their author instead of becoming the restorer's.
       expect(restored.rankings.find((r) => r.by === "guest:ana")?.byName).toBe("Ana");
+      // A guest's person value stays the guest's; shared values keep their JSON types.
+      const props = restored.properties ?? [];
+      expect(props).toHaveLength(3);
+      expect(props.find((p) => p.scope === "person")).toMatchObject({
+        by: "guest:ana",
+        byName: "Ana",
+        optionId: "lis",
+        plugin: "org.decisionator.option-status",
+        key: "seen",
+        value: "seen_auto",
+      });
+      expect(props.filter((p) => p.scope === "shared").map((p) => [p.by, p.key, p.value])).toEqual(
+        expect.arrayContaining([
+          [OWNER, "cost", 1200],
+          [OWNER, "approved", false],
+        ])
+      );
     }
   );
 

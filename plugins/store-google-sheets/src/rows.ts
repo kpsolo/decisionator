@@ -9,6 +9,8 @@ import {
   OptionSchema,
   type OutcomeRecord,
   OutcomeRecordSchema,
+  type PropertyValue,
+  PropertyValueSchema,
   type Ranking,
   RankingSchema,
 } from "@decisionator/core";
@@ -396,5 +398,55 @@ export async function decodeContributionRow(
     return {
       warning: `contributions row ${rowIndex}: invalid JSON payload (${errorMessage(err)})`,
     };
+  }
+}
+
+/**
+ * Property Row Codec
+ * Tab: properties (id, at, by, optionId, payload), payload `{plugin, key, scope, value, byName?}`
+ */
+export async function decodePropertyRow(
+  row: string[],
+  rowIndex: number,
+  payloadHook?: PayloadHook
+): Promise<RowDecodeResult<PropertyValue>> {
+  const [id, at, by, optionId, rawPayload] = row;
+  if (!rawPayload) {
+    return { warning: `properties row ${rowIndex}: empty payload column` };
+  }
+
+  let jsonStr = rawPayload;
+  if (payloadHook) {
+    try {
+      jsonStr = await payloadHook(rawPayload);
+    } catch (err: unknown) {
+      return {
+        warning: `properties row ${rowIndex}: failed to decrypt payload (${errorMessage(err)})`,
+      };
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const parseRes = PropertyValueSchema.safeParse({
+      id: id || "",
+      at: at || "",
+      by: by || "",
+      optionId: optionId || "",
+      ...byNameField(parsed),
+      plugin: parsed?.plugin,
+      key: parsed?.key,
+      scope: parsed?.scope,
+      // A missing value is not a clear: only an explicit `null` is.
+      value: parsed?.value,
+    });
+    if (!parseRes.success) {
+      return {
+        warning: `properties row ${rowIndex}: validation failed (${parseRes.error.issues.map((i) => i.message).join(", ")})`,
+      };
+    }
+    return { entity: parseRes.data };
+  } catch (err: unknown) {
+    return { warning: `properties row ${rowIndex}: invalid JSON payload (${errorMessage(err)})` };
   }
 }

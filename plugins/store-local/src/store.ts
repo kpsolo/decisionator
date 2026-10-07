@@ -6,6 +6,7 @@ import {
   type Option,
   type OutcomeRecord,
   type Project,
+  type PropertyValue,
   type Ranking,
   checkVerifier,
   decrypt,
@@ -13,6 +14,7 @@ import {
   encrypt,
   generateSalt,
   makeVerifier,
+  propertySlot,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -31,6 +33,8 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  checkPropertyEntries,
+  propertyRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
@@ -49,6 +53,15 @@ async function openSealed(value: string, key: CryptoKey): Promise<string> {
 
 async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
   return body === "" ? "" : encrypt(body, key);
+}
+
+/** Property values of protected projects are stored as an encrypted JSON string. */
+async function openPropertyValue(
+  value: PropertyValue["value"],
+  key: CryptoKey
+): Promise<PropertyValue["value"]> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return JSON.parse(await decrypt(value, key)) as PropertyValue["value"];
 }
 
 export interface AutomergeProjectDoc {
@@ -76,6 +89,8 @@ export interface AutomergeProjectDoc {
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
   contributions: Contribution[];
+  /** Option property values, latest per slot (ProjectStore v1.4.0). Missing in older docs. */
+  properties?: PropertyValue[];
   collaborators: {
     email: string;
     role: ParticipantRole;
@@ -224,6 +239,7 @@ export class LocalProjectStore implements ProjectStore {
       rankings: [],
       outcomes: [],
       contributions: [],
+      properties: [],
       collaborators: [{ email: this.currentUser, role: "owner" }],
     };
 
@@ -263,6 +279,7 @@ export class LocalProjectStore implements ProjectStore {
     let finalDesc = doc.meta.description;
     let finalOptions: Option[] = doc.options;
     let finalComments: Comment[] = doc.comments;
+    let finalProperties: PropertyValue[] = doc.properties ?? [];
 
     if (doc.meta.protected) {
       const cryptoKey = await this.unlock(ref.id, doc, opts?.password);
@@ -279,6 +296,12 @@ export class LocalProjectStore implements ProjectStore {
       );
       finalComments = await Promise.all(
         doc.comments.map(async (c) => ({ ...c, body: await openSealed(c.body, cryptoKey) }))
+      );
+      finalProperties = await Promise.all(
+        finalProperties.map(async (p) => ({
+          ...p,
+          value: await openPropertyValue(p.value, cryptoKey),
+        }))
       );
     }
 
@@ -305,6 +328,7 @@ export class LocalProjectStore implements ProjectStore {
       rankings: doc.rankings,
       outcomes: doc.outcomes,
       contributions: doc.contributions,
+      properties: finalProperties,
       role,
     };
   }
@@ -345,6 +369,10 @@ export class LocalProjectStore implements ProjectStore {
       }
       // Validates the whole call before anything is written.
       const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+      checkPropertyEntries(entries, {
+        optionIds: new Set(doc.options.map((o) => o.id)),
+        isOwner: role === "owner",
+      });
       const by = delegated?.by ?? this.currentUser;
       // Automerge rejects `undefined` values, so the key is omitted when there is no name.
       const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
@@ -354,6 +382,12 @@ export class LocalProjectStore implements ProjectStore {
       const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
       const bodies = await Promise.all(
         entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
+      );
+      // Property values are sealed as JSON strings, also up front.
+      const values = await Promise.all(
+        entries.map((e) =>
+          e.kind === "property" && key ? encrypt(JSON.stringify(e.value), key) : null
+        )
       );
 
       const now = new Date().toISOString();
@@ -409,6 +443,26 @@ export class LocalProjectStore implements ProjectStore {
             d.outcomes.push(entry.outcome);
           } else if (entry.kind === "contribution") {
             d.contributions.push(entry.contribution);
+          } else if (entry.kind === "property") {
+            // Latest wins per slot, in place. `propertyRecord` omits `byName` when absent, and
+            // a cleared value is stored as `null`, never `undefined`.
+            const record = propertyRecord(
+              { ...entry, value: values[i] ?? entry.value },
+              {
+                id: `p_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                at: now,
+                by,
+                ...byName,
+              }
+            );
+            if (!d.properties) d.properties = [];
+            const slot = propertySlot(record);
+            const idx = d.properties.findIndex((p) => propertySlot(p) === slot);
+            if (idx !== -1) {
+              d.properties[idx] = record;
+            } else {
+              d.properties.push(record);
+            }
           }
         }
       });

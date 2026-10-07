@@ -4,6 +4,7 @@ import type React from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Card, CardContent, CardHeader } from "../../components/ui/card.js";
 import { strategyName } from "../decide/StrategyChooser.js";
+import { ExposureBox } from "../option-view/OptionPlaces.js";
 import { VerifyButton } from "./VerifyButton.js";
 
 export interface ResultsViewProps {
@@ -115,8 +116,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           {current.result.order.map((item, idx) => {
             const opt = optionMap.get(item.optionId);
             return (
-              <div
+              <ExposureBox
                 key={item.optionId}
+                optionId={item.optionId}
                 className={`flex items-center justify-between p-3 rounded-lg border text-sm transition-colors ${
                   idx === 0
                     ? "border-rating/40 bg-rating/10 font-semibold"
@@ -147,7 +149,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                     )}
                   </div>
                 )}
-              </div>
+              </ExposureBox>
             );
           })}
         </CardContent>

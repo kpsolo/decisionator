@@ -1,11 +1,14 @@
-import type {
-  Comment,
-  Contribution,
-  Grade,
-  Option,
-  OutcomeRecord,
-  Project,
-  Ranking,
+import {
+  type Comment,
+  type Contribution,
+  type Grade,
+  type Option,
+  type OutcomeRecord,
+  type Project,
+  type PropertyScalar,
+  type PropertyValue,
+  type Ranking,
+  effectivePropertyValues,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -24,6 +27,7 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  checkPropertyEntries,
   readStoredByName,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
@@ -51,6 +55,16 @@ async function openSealed(value: string, key: CryptoKey): Promise<string> {
 
 async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
   return body === "" ? "" : encrypt(body, key);
+}
+
+/** Property values of protected projects are stored as their JSON, encrypted. */
+async function sealPropertyValue(value: PropertyScalar, key: CryptoKey): Promise<string> {
+  return encrypt(JSON.stringify(value), key);
+}
+
+async function openPropertyValue(value: PropertyScalar, key: CryptoKey): Promise<PropertyScalar> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return JSON.parse(await decrypt(value, key)) as PropertyScalar;
 }
 
 export interface FirebaseConfig {
@@ -206,13 +220,16 @@ export class FirestoreProjectStore implements ProjectStore {
         });
       }
 
-      const { grades, comments, rankings, outcomes, contributions } = this.buildEntries(
+      const { grades, comments, rankings, outcomes, contributions, properties } = this.buildEntries(
         entryList,
         doc.voting.round
       );
 
       const decryptedComments = await Promise.all(
         comments.map(async (c) => ({ ...c, body: await openSealed(c.body, key) }))
+      );
+      const decryptedProperties = await Promise.all(
+        properties.map(async (p) => ({ ...p, value: await openPropertyValue(p.value, key) }))
       );
 
       return {
@@ -229,11 +246,12 @@ export class FirestoreProjectStore implements ProjectStore {
         rankings,
         outcomes,
         contributions,
+        properties: decryptedProperties,
         role,
       };
     }
 
-    const { grades, comments, rankings, outcomes, contributions } = this.buildEntries(
+    const { grades, comments, rankings, outcomes, contributions, properties } = this.buildEntries(
       entryList,
       doc.voting.round
     );
@@ -252,6 +270,7 @@ export class FirestoreProjectStore implements ProjectStore {
       rankings,
       outcomes,
       contributions,
+      properties,
       role,
     };
   }
@@ -294,12 +313,19 @@ export class FirestoreProjectStore implements ProjectStore {
     const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
     const by = delegated?.by ?? this.currentUser;
     const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
+    checkPropertyEntries(entries, {
+      optionIds: new Set((this.options.get(ref.id) ?? new Map()).keys()),
+      isOwner: role === "owner",
+    });
 
     // Protected projects keep comment bodies encrypted, so writes need the session key.
     // Bodies are sealed before anything is written, so a failure leaves no partial append.
     const key = doc.protected ? this.requireKey(ref.id) : undefined;
     const bodies = await Promise.all(
       entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
+    );
+    const sealedValues = await Promise.all(
+      entries.map((e) => (e.kind === "property" && key ? sealPropertyValue(e.value, key) : null))
     );
 
     const now = new Date().toISOString();
@@ -358,6 +384,20 @@ export class FirestoreProjectStore implements ProjectStore {
           kind: "contribution",
           contribution: e.contribution,
           by: this.currentUser,
+          at: now,
+        });
+        sentCount++;
+      } else if (e.kind === "property") {
+        entryList.push({
+          id: entryId,
+          kind: "property",
+          optionId: e.optionId,
+          plugin: e.plugin,
+          key: e.key,
+          scope: e.scope,
+          value: sealedValues[i] ?? e.value,
+          by,
+          ...byName,
           at: now,
         });
         sentCount++;
@@ -552,6 +592,7 @@ export class FirestoreProjectStore implements ProjectStore {
     const rankings: Ranking[] = [];
     const outcomes: OutcomeRecord[] = [];
     const contributions: Contribution[] = [];
+    const properties: PropertyValue[] = [];
 
     // Latest-wins map for grades, keyed on (by, optionId). JSON keys keep ids that contain ':'
     // (e.g. "peer:a") from colliding.
@@ -597,6 +638,18 @@ export class FirestoreProjectStore implements ProjectStore {
         outcomes.push(e.outcome);
       } else if (e.kind === "contribution") {
         contributions.push(e.contribution);
+      } else if (e.kind === "property") {
+        properties.push({
+          id: e.id,
+          at: e.at,
+          by: e.by,
+          ...nameOf(e.byName),
+          optionId: e.optionId,
+          plugin: e.plugin,
+          key: e.key,
+          scope: e.scope,
+          value: e.value,
+        });
       }
     }
 
@@ -606,6 +659,7 @@ export class FirestoreProjectStore implements ProjectStore {
       rankings: Array.from(latestRankings.values()),
       outcomes,
       contributions,
+      properties: effectivePropertyValues(properties),
     };
   }
 }

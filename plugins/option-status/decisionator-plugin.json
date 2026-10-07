@@ -1,0 +1,51 @@
+{
+  "manifestVersion": 1,
+  "id": "org.decisionator.option-status",
+  "name": "Option status",
+  "version": "0.1.0",
+  "description": "Marks each option \"Seen\" for you once it has been on your screen for a few seconds, and shows the ones you have not seen yet like unread mail. Only you see your marks.",
+  "platform": {
+    "runtime": "^1.0.0",
+    "optionProperties": "^1.0.0",
+    "optionView": "^1.0.0"
+  },
+  "main": "dist/index.js",
+  "provides": {
+    "optionProperties": [
+      {
+        "key": "seen",
+        "label": "Seen",
+        "type": "choice",
+        "scope": "person",
+        "hidden": true,
+        "choices": [
+          { "value": "seen", "label": "Seen" },
+          { "value": "seen_auto", "label": "Seen" },
+          { "value": "not_seen", "label": "Not seen" }
+        ]
+      }
+    ],
+    "optionView": {
+      "places": ["marker", "footer", "list"],
+      "replaces": ["marker"]
+    },
+    "exposure": true
+  },
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "autoMark": {
+        "type": "boolean",
+        "title": "Mark options as seen automatically",
+        "default": true
+      },
+      "seconds": {
+        "type": "integer",
+        "title": "Seconds an option must stay on screen",
+        "minimum": 1,
+        "maximum": 300,
+        "default": 5
+      }
+    }
+  }
+}

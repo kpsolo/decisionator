@@ -1,11 +1,13 @@
-import type {
-  Comment,
-  Contribution,
-  Grade,
-  Option,
-  OutcomeRecord,
-  Project,
-  Ranking,
+import {
+  type Comment,
+  type Contribution,
+  type Grade,
+  type Option,
+  type OutcomeRecord,
+  type Project,
+  type PropertyValue,
+  type Ranking,
+  propertySlot,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -24,6 +26,8 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  checkPropertyEntries,
+  propertyRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 
@@ -56,7 +60,7 @@ function newId(prefix: string): string {
 }
 
 /**
- * Example ProjectStore (contract v1.2.0) that keeps everything in memory. It shows the rules a
+ * Example ProjectStore (contract v1.4.0) that keeps everything in memory. It shows the rules a
  * store must follow: author stamping, roles, latest-wins, delegated append and soft delete.
  */
 export class MemoryProjectStore implements ProjectStore {
@@ -133,6 +137,7 @@ export class MemoryProjectStore implements ProjectStore {
     const rankings = new Map<string, Ranking>();
     const outcomes: OutcomeRecord[] = [];
     const contributions: Contribution[] = [];
+    const properties = new Map<string, PropertyValue>();
 
     for (const entry of data.entries) {
       const author = {
@@ -168,6 +173,10 @@ export class MemoryProjectStore implements ProjectStore {
         outcomes.push(entry.outcome);
       } else if (entry.kind === "contribution") {
         contributions.push(entry.contribution);
+      } else if (entry.kind === "property") {
+        // Latest wins per (plugin, key, option), and per author too for person scope
+        const record = propertyRecord(entry, author);
+        properties.set(propertySlot(record), record);
       }
     }
 
@@ -179,6 +188,7 @@ export class MemoryProjectStore implements ProjectStore {
       rankings: [...rankings.values()],
       outcomes,
       contributions,
+      properties: [...properties.values()],
       role: this.roleOf(data) ?? "view",
     };
   }
@@ -191,6 +201,11 @@ export class MemoryProjectStore implements ProjectStore {
     }
     // Validates the whole call (delegate, owner, entry kinds) before anything is written.
     const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+    // Property shape, known option and shared-only-by-owner (contract v1.4.0).
+    checkPropertyEntries(entries, {
+      optionIds: new Set(data.options.map((o) => o.id)),
+      isOwner: role === "owner",
+    });
     const at = new Date().toISOString();
 
     for (const entry of entries) {

@@ -4,6 +4,7 @@ import { CommentSchema, GradeSchema, RankingSchema } from "../model/entries.js";
 import { OptionSchema } from "../model/option.js";
 import { OutcomeRecordSchema } from "../model/outcome.js";
 import { ProjectSchema } from "../model/project.js";
+import { PropertyValueSchema } from "../model/property.js";
 
 export const PROJECT_EXPORT_FORMAT = "decisionator.project/v1";
 
@@ -18,6 +19,8 @@ export const ProjectExportV1Schema = z.object({
   outcomes: z.array(OutcomeRecordSchema),
   /** Agent / human contributions (notes, research, pros & cons). Absent in pre-0.2 bundles. */
   contributions: z.array(ContributionSchema).optional().default([]),
+  /** Plugin option property values, shared and per person (latest per slot). Absent before 005. */
+  properties: z.array(PropertyValueSchema).optional().default([]),
 });
 
 export type ProjectExportV1 = z.infer<typeof ProjectExportV1Schema>;

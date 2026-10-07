@@ -108,6 +108,60 @@ function sampleBundle(): ProjectExportV1 {
         reviewStatus: "accepted",
       },
     ],
+    properties: [
+      {
+        id: "p1",
+        at: AT,
+        by: "owner@device",
+        optionId: "opt_lis",
+        plugin: "org.example.budget",
+        key: "cost",
+        scope: "shared",
+        value: 1200,
+      },
+      {
+        id: "p2",
+        at: AT,
+        by: "owner@device",
+        optionId: "opt_bcn",
+        plugin: "org.example.budget",
+        key: "approved",
+        scope: "shared",
+        value: false,
+      },
+      {
+        id: "p3",
+        at: AT,
+        by: "guest:ana",
+        byName: "Ana",
+        optionId: "opt_lis",
+        plugin: "org.decisionator.option-status",
+        key: "seen",
+        scope: "person",
+        value: "seen_auto",
+      },
+      {
+        id: "p4",
+        at: AT,
+        by: "guest:ana",
+        byName: "Ana",
+        optionId: "opt_bcn",
+        plugin: "org.decisionator.option-status",
+        key: "seen",
+        scope: "person",
+        value: null,
+      },
+      {
+        id: "p5",
+        at: AT,
+        by: "owner@device",
+        optionId: "opt_bcn",
+        plugin: "org.example.budget",
+        key: "note",
+        scope: "shared",
+        value: "42",
+      },
+    ],
   });
 }
 
@@ -210,6 +264,86 @@ describe("project workbook (.xlsx)", () => {
     expect(() => readProjectWorkbook(strToU8("not a zip"))).toThrow(/not a valid \.xlsx/);
     const other = writeWorkbook([{ name: "Sheet1", rows: [["a"]] }]);
     expect(() => readProjectWorkbook(other)).toThrow(/Not a Deci project workbook/);
+  });
+
+  it("keeps shared and person property values with their JSON types", () => {
+    const bundle = sampleBundle();
+    const fromXlsx = readProjectWorkbook(createProjectWorkbook(bundle));
+    const fromJson = ProjectExportV1Schema.parse(JSON.parse(JSON.stringify(bundle)));
+    for (const restored of [fromXlsx, fromJson]) {
+      expect(restored.properties).toEqual(bundle.properties);
+      expect(restored.properties.map((p) => p.value)).toEqual([
+        1200,
+        false,
+        "seen_auto",
+        null,
+        "42",
+      ]);
+    }
+
+    const sheet = readWorkbook(createProjectWorkbook(bundle)).get(XLSX_SHEETS.properties) ?? [];
+    expect(sheet[0]?.slice(0, 9)).toEqual([
+      "Option",
+      "Plugin",
+      "Key",
+      "Scope",
+      "Value",
+      "By",
+      "By name",
+      "At",
+      "Record (JSON)",
+    ]);
+    expect(sheet[3]?.slice(0, 7)).toEqual([
+      "Lisbon",
+      "org.decisionator.option-status",
+      "seen",
+      "person",
+      "seen_auto",
+      "guest:ana",
+      "Ana",
+    ]);
+  });
+
+  it("reads hand-added Properties rows without a JSON record", () => {
+    const bundle = sampleBundle();
+    bundle.properties = [];
+    const sheets = readWorkbook(createProjectWorkbook(bundle));
+    const rows = (name: string) => sheets.get(name) ?? [];
+    const edited = writeWorkbook([
+      ...[...sheets.keys()]
+        .filter((name) => name !== XLSX_SHEETS.properties)
+        .map((name) => ({ name, rows: rows(name) })),
+      {
+        name: XLSX_SHEETS.properties,
+        rows: [
+          ["Option", "Plugin", "Key", "Scope", "Value", "By"],
+          ["Lisbon", "org.example.budget", "cost", "shared", 900, "owner@device"],
+          ["opt_bcn", "org.example.budget", "approved", "shared", true, "owner@device"],
+          ["Barcelona", "org.example.budget", "note", "shared", "cheap", "owner@device"],
+        ],
+      },
+    ]);
+    const restored = readProjectWorkbook(edited);
+    expect(restored.properties.map((p) => [p.optionId, p.key, p.value])).toEqual([
+      ["opt_lis", "cost", 900],
+      ["opt_bcn", "approved", true],
+      ["opt_bcn", "note", "cheap"],
+    ]);
+  });
+
+  it("older files without properties still load", () => {
+    const { properties: _omit, ...legacy } = sampleBundle();
+    expect(ProjectExportV1Schema.parse(legacy).properties).toEqual([]);
+
+    const sheets = readWorkbook(createProjectWorkbook(sampleBundle()));
+    const old = writeWorkbook(
+      [...sheets.keys()]
+        .filter((name) => name !== XLSX_SHEETS.properties)
+        .map((name) => ({ name, rows: sheets.get(name) ?? [] }))
+    );
+    const restored = readProjectWorkbook(old);
+    expect(restored.properties).toEqual([]);
+    expect(restored.options).toHaveLength(3);
   });
 
   it("older JSON bundles without contributions still parse", () => {

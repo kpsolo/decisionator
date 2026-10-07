@@ -1,4 +1,4 @@
-# Contract: Live Share (in-page session) — v2.1.0
+# Contract: Live Share (in-page session) — v3.0.0
 
 Plugin ID: `org.decisionator.share.inpage` · package `@decisionator/share-inpage`
 
@@ -74,25 +74,31 @@ Frames are strings:
 Either side pings every 5 s and closes the link after 15 s without hearing anything. Guests
 accept messages up to 16 MiB; the host accepts guest messages up to 16 MiB reassembled.
 
-## Session protocol (version 2)
+## Session protocol (version 3)
 
 Guest → host:
 
 ```ts
-{ t: "hello",  proto: 2, key: string /* 64 hex */, name: string /* 1..80 */ }
+{ t: "hello",  proto: 3, key: string /* 64 hex */, name: string /* 1..80 */ }
 { t: "submit", id: string, entries: GuestEntry[] /* 1..50 */ }
 { t: "bye" }
 
 type GuestEntry =
   | { kind: "grade";   optionId: string; value: 1 | 2 | 3 | 4 | 5 }
   | { kind: "comment"; optionId: string; body: string /* 1..10000 */; replaces?: string }
-  | { kind: "ranking"; ranking: string[] /* unique */; round: number };
+  | { kind: "ranking"; ranking: string[] /* unique */; round: number }
+  | { kind: "property"; optionId: string; plugin: string; key: string;
+      scope: "shared" | "person";              // the host accepts "person" only
+      value: string | number | boolean | null  /* JSON ≤ 2 KiB; null clears */ };
 ```
+
+A `hello` whose `proto` differs from the host's (for example a proto 2 guest meeting a proto 3
+host) gets `error protocol_mismatch` and the link closes.
 
 Host → guest:
 
 ```ts
-{ t: "welcome",  proto: 2, participantId, name, role: "contribute" | "view", rev, snapshot }
+{ t: "welcome",  proto: 3, participantId, name, role: "contribute" | "view", rev, snapshot }
 { t: "snapshot", rev, snapshot }            // ignored unless rev increases
 { t: "ack", id, ok: true }
 { t: "ack", id, ok: false, code: "invalid" | "read_only" | "voting_closed" | "rate_limited" | "store_failed", message }
@@ -120,7 +126,11 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
    - grades and comments only on `active` options;
    - `replaces` only for the guest's own comment on the same option;
    - rankings only while voting is `open`, for the current round, unique, ≤ `topN`, active
-     options only.
+     options only;
+   - option properties (contract `option-properties`) only on `active` options, only with
+     `scope: "person"`, and only with a `value` of at most 2 KiB as JSON
+     (`PROPERTY_VALUE_MAX_BYTES`); otherwise `invalid` with "That change is not allowed.".
+     Accepted values are recorded under the guest, latest-wins per guest, option, plugin and key.
 3. Accepted entries are written with `append(ref, entries, { onBehalfOf: { participantId, displayName } })`.
    The guest gets `ack ok` only after the store call resolved; a failure is reported as
    `store_failed` with the store's message.
@@ -130,7 +140,9 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
    - `role` is the session role, never `owner`;
    - `contributions` removed; removed options dropped; hidden comments' bodies emptied;
    - `project.kdf` and `project.ref` removed;
-   - while voting is open and `liveResults` is off, only the guest's own rankings.
+   - while voting is open and `liveResults` is off, only the guest's own rankings;
+   - `properties`: every `shared` value, and only the guest's own `person` values (never the
+     owner's or another guest's).
 6. Display names are unique among connected participants: on `hello` the host compares the
    trimmed name case-insensitively with the other participants that have open links and, on a
    clash, appends the lowest free number (`"Gina"` → `"Gina 2"`). The result is sent as
@@ -161,7 +173,7 @@ another asks to end the first. A protected project must be unlocked in the tab b
 - `plugins/share-inpage/test/host-guest.test.ts`: host and guests over in-memory links —
   attribution, identity stability, unique display names, serialized concurrent writes,
   validation (including grades and comments while voting is closed), view-only, store failure,
-  redaction, roster, session full, closing, reconnect, give-up, protocol mismatch, rate limit.
+  redaction, option properties (person-only, size cap, per-guest redaction), roster, session full, closing, reconnect, give-up, protocol mismatch, rate limit.
 - `plugins/share-inpage/test/transport.test.ts`: sealing, topic derivation, framing and chunking,
   heartbeat timeout, signaling room authentication/dedupe/staleness, Nostr event signing,
   subscribe/publish/queue/reconnect.
@@ -171,6 +183,7 @@ another asks to end the first. A protected project must be unlocked in the tab b
 
 | Version | Date | Change |
 |---------|------|--------|
+| 3.0.0 | 2026-10-07 | Wire `proto` 3: new `property` guest entry for person-scoped option properties (active options only, `scope: "person"`, value ≤ 2 KiB, else `invalid`); snapshots carry `properties` redacted to shared values plus the guest's own person values. Proto 2 peers get `protocol_mismatch` |
 | 2.1.0 | 2026-10-07 | Host assigns unique display names (`"Gina 2"`) and returns them in `welcome.name`; the guest shows that name. Wire `proto` stays 2: no message shape changes |
 | 2.0.0 | 2026-10-06 | Network transport (WebRTC star + encrypted Nostr/BroadcastChannel signaling), per-guest attribution through delegated append, acks, heartbeat and reconnect, host-side validation and redaction, app-level session lifecycle, stable join links with QR code |
 | 1.0.0 | 2026-10-06 | BroadcastChannel-only prototype (002) |

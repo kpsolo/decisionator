@@ -387,3 +387,89 @@ describe("LiveShareHost + LiveShareGuest", () => {
     expect(limited.length).toBeGreaterThan(0);
   });
 });
+
+describe("option properties over live share (proto 3)", () => {
+  const STATUS = { plugin: "status-personal", key: "status" } as const;
+
+  it("records a guest's person-scoped property under the guest", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "seen" },
+    ]);
+
+    expect(project.appendCalls).toHaveLength(1);
+    expect(project.appendCalls[0]?.participant).toMatchObject({
+      participantId: alice.getState().participantId,
+      displayName: "Alice",
+    });
+    expect(project.appendCalls[0]?.entries).toEqual([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "seen" },
+    ]);
+    expect(project.state.properties).toMatchObject([
+      { by: alice.getState().participantId, optionId: "a", scope: "person", value: "seen" },
+    ]);
+
+    // Latest wins per guest and option.
+    await alice.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "done" },
+    ]);
+    expect(project.state.properties?.map((p) => p.value)).toEqual(["done"]);
+  });
+
+  it("refuses shared properties, removed options and oversized values", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+
+    await expect(
+      alice.submit([{ kind: "property", optionId: "a", ...STATUS, scope: "shared", value: "x" }])
+    ).rejects.toMatchObject({ code: "invalid", message: "That change is not allowed." });
+    await expect(
+      alice.submit([
+        { kind: "property", optionId: "gone", ...STATUS, scope: "person", value: "seen" },
+      ])
+    ).rejects.toMatchObject({ code: "invalid" });
+    await expect(
+      alice.submit([
+        { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "x".repeat(2100) },
+      ])
+    ).rejects.toMatchObject({ code: "invalid" });
+    expect(project.appendCalls).toHaveLength(0);
+  });
+
+  it("shows each guest shared values and only their own person values", async () => {
+    const project = new FakeProject();
+    const { host } = await startHost(project);
+    await project.ownerAppend([
+      { kind: "property", optionId: "a", plugin: "cost", key: "eur", scope: "shared", value: 12 },
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "owner-private" },
+    ]);
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    await alice.submit([
+      { kind: "property", optionId: "b", ...STATUS, scope: "person", value: "alice-private" },
+    ]);
+    await bob.submit([
+      { kind: "property", optionId: "c", ...STATUS, scope: "person", value: "bob-mark" },
+    ]);
+    await until(() => (bob.getState().snapshot?.properties?.length ?? 0) >= 2);
+    await until(() => (alice.getState().snapshot?.properties?.length ?? 0) >= 2);
+
+    const bobSees = bob.getState().snapshot?.properties?.map((p) => p.value);
+    expect(bobSees?.sort()).toEqual([12, "bob-mark"].sort());
+    const aliceSees = alice.getState().snapshot?.properties?.map((p) => p.value);
+    expect(aliceSees?.sort()).toEqual([12, "alice-private"].sort());
+    for (const seen of [bobSees, aliceSees]) expect(seen).not.toContain("owner-private");
+  });
+
+  it("turns away a guest speaking protocol 2", async () => {
+    expect(PROTOCOL_VERSION).toBe(3);
+    const { host } = await startHost();
+    const link = connectPair((l) => host.accept(l));
+    const got: unknown[] = [];
+    link.onMessage((m) => got.push(m));
+    link.send({ t: "hello", proto: 2, key: "k".repeat(64), name: "Old" });
+    await flush();
+    expect(got[0]).toMatchObject({ t: "error", code: "protocol_mismatch" });
+  });
+});

@@ -5,6 +5,8 @@ import type {
   Option,
   OutcomeRecord,
   Project,
+  PropertyScalar,
+  PropertyScope,
   Ranking,
 } from "@decisionator/core";
 import type { ParticipantRole } from "@decisionator/plugin-sdk";
@@ -91,5 +93,18 @@ export type FirestoreEntryDoc =
       kind: "contribution";
       contribution: Contribution;
       by: string;
+      at: string;
+    }
+  | {
+      id: string;
+      kind: "property";
+      optionId: string;
+      plugin: string;
+      key: string;
+      scope: PropertyScope;
+      /** In protected projects: the JSON of the value, encrypted (`enc:v1:`). */
+      value: PropertyScalar;
+      by: string;
+      byName?: string;
       at: string;
     };

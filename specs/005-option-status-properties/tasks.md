@@ -17,7 +17,7 @@ changes, and the spec defines an independent test per story.
 
 ## Phase 1: Setup
 
-- [ ] T001 Scaffold the built-in plugin package `plugins/option-status/`:
+- [x] T001 Scaffold the built-in plugin package `plugins/option-status/`:
   - `package.json` (`@decisionator/option-status`, deps `@decisionator/core` and
     `@decisionator/plugin-sdk`, scripts as in `plugins/strategy-borda/package.json`);
   - `tsconfig.json`;
@@ -27,7 +27,7 @@ changes, and the spec defines an independent test per story.
 - [ ] T002 [P] Scaffold `examples/plugin-option-cost/` (`README.md`, `decisionator-plugin.json`,
   `src/index.ts`, `test/`) and `examples/plugin-unread-bar/` (same files), following
   `examples/plugin-strategy-example/`.
-- [ ] T003 Wire the new packages into the workspace:
+- [x] T003 Wire the new packages into the workspace:
   - aliases for `@decisionator/option-status` in `vitest.config.ts`,
     `apps/web/vitest.config.ts`, `apps/web/vite.config.ts` and the tsconfig `paths` used by
     `apps/web`;
@@ -43,7 +43,7 @@ store, and the host plumbing. No story can be shown without them.
 
 ### Tests first (expected to fail until the matching implementation lands)
 
-- [ ] T004 [P] Write `packages/core/test/property.test.ts` for `checkPropertyValue` and the
+- [x] T004 [P] Write `packages/core/test/property.test.ts` for `checkPropertyValue` and the
   definition schema:
   - key `^[a-z][a-z0-9_]{0,39}$`;
   - label "1–40 chars";
@@ -56,7 +56,7 @@ store, and the host plumbing. No story can be shown without them.
     - `date`: `YYYY-MM-DD` that is a real calendar date (2026-02-30 is refused);
   - "`null` is always accepted";
   - `default` must itself pass.
-- [ ] T005 Add property cases to `runProjectStoreContractTests` in
+- [x] T005 Add property cases to `runProjectStoreContractTests` in
   `packages/plugin-sdk/testing/project-store-kit.ts`, per contracts/option-properties.md
   "Storage" rules 1–6:
   - latest wins per `(plugin, key, optionId)` for `shared` and per
@@ -69,7 +69,7 @@ store, and the host plumbing. No story can be shown without them.
   - a serialized `value` over 2 KiB is refused;
   - an unknown `optionId` is refused;
   - password-protected projects round-trip the value.
-- [ ] T006 [P] Write `packages/plugin-sdk/test/option-view.test.ts` for `validateContribution`:
+- [x] T006 [P] Write `packages/plugin-sdk/test/option-view.test.ts` for `validateContribution`:
   - `badges` "≤ 3, text ≤ 24";
   - `footer` "≤ 3";
   - `sections` "detail view only, ≤ 2";
@@ -77,7 +77,7 @@ store, and the host plumbing. No story can be shown without them.
   - tones in `neutral | info | success | warning | danger | primary`;
   - list `summary` "≤ 40 chars";
   - invalid parts are dropped per place while valid places are kept.
-- [ ] T007 [P] Write `apps/web/src/features/option-view/exposure-tracker.test.ts` (fake clock),
+- [x] T007 [P] Write `apps/web/src/features/option-view/exposure-tracker.test.ts` (fake clock),
   per data-model.md ExposureTracker:
   - 4 999 ms is not emitted, 5 000 ms is;
   - leaving resets;
@@ -89,7 +89,7 @@ store, and the host plumbing. No story can be shown without them.
 
 ### Core and SDK
 
-- [ ] T008 Create `packages/core/src/model/property.ts`:
+- [x] T008 Create `packages/core/src/model/property.ts`:
   - `OptionPropertyDefinitionSchema` and `PropertyValueSchema` per data-model.md;
   - `PropertyScalar`;
   - `checkPropertyValue(def, value): { ok: true } | { ok: false; message }`, with messages like
@@ -97,7 +97,7 @@ store, and the host plumbing. No story can be shown without them.
   - `effectivePropertyValues(entries)` (latest-wins helper reused by stores and the host).
   
   Export them from `packages/core/src/model/index.ts`. T004 should pass.
-- [ ] T009 In `packages/plugin-sdk/src/project-store.ts`:
+- [x] T009 In `packages/plugin-sdk/src/project-store.ts`:
   - add `{ kind: "property"; optionId; plugin; key; scope: "shared" | "person"; value }` to
     `Entry`;
   - add `properties?: PropertyValue[]` to `ProjectSnapshot`.
@@ -105,7 +105,7 @@ store, and the host plumbing. No story can be shown without them.
   In `packages/plugin-sdk/src/delegation.ts`, add `property` to `DELEGATABLE_ENTRY_KINDS`, valid
   only when `scope === "person"` (otherwise `PERMISSION_DENIED`), and add a unit test in
   `packages/plugin-sdk/test/delegation.test.ts`.
-- [ ] T010 [P] Create `packages/plugin-sdk/src/option-view.ts`:
+- [x] T010 [P] Create `packages/plugin-sdk/src/option-view.ts`:
   - the zod schemas for `OptionViewContribution`, `OptionListContribution`, `Block` and `Tone`
     (data-model.md);
   - `validateContribution` returning `{ value, droppedPlaces }`.
@@ -128,18 +128,18 @@ store, and the host plumbing. No story can be shown without them.
 
 ### Stores (each makes the T005 kit pass for that store)
 
-- [ ] T012 [P] `plugins/store-file/src/file-store.ts`:
+- [x] T012 [P] `plugins/store-file/src/file-store.ts`:
   - `StoredFileProject.properties` (missing → `[]`);
   - the `append` branch with the shape checks and owner check;
   - latest-wins in place;
   - encryption of `value` in password mode, as for comment bodies;
   - included in `openProject` and file sync.
-- [ ] T013 [P] `plugins/store-local/src/store.ts`: an Automerge `properties` list (store `null`,
+- [x] T013 [P] `plugins/store-local/src/store.ts`: an Automerge `properties` list (store `null`,
   never `undefined`), the append branch and `openProject`.
-- [ ] T014 [P] `plugins/store-firestore/src/collections.ts`: a `property` member of
+- [x] T014 [P] `plugins/store-firestore/src/collections.ts`: a `property` member of
   `FirestoreEntryDoc`. `plugins/store-firestore/src/firestore-store.ts`: the `append` branch,
   plus latest-wins in `buildEntries`.
-- [ ] T015 [P] Google Sheets:
+- [x] T015 [P] Google Sheets:
   - `plugins/store-google-sheets/src/layout.ts`: tab `properties[id,at,by,optionId,payload]`,
     in `TAB_HEADERS` and the create list;
   - `src/sheet-store.ts`:
@@ -151,7 +151,7 @@ store, and the host plumbing. No story can be shown without them.
     `"properties row <n>: ..."`;
   - extend `plugins/store-google-sheets/test/` with a migration test against the fake Google
     backend.
-- [ ] T016 [P] `examples/plugin-store-memory/src/`: property support so its
+- [x] T016 [P] `examples/plugin-store-memory/src/`: property support so its
   `test/contract.test.ts` passes.
 - [ ] T017 Update the contract documents:
   - `specs/001-decision-engine-core/contracts/project-store.md` → 1.4.0 (rules 1–7 from
@@ -164,14 +164,14 @@ store, and the host plumbing. No story can be shown without them.
 
 ### Host plumbing (`apps/web`)
 
-- [ ] T018 `apps/web/src/features/plugins/plugin-registry.ts`:
+- [x] T018 `apps/web/src/features/plugins/plugin-registry.ts`:
   - add `subscribe(cb)`, notifying on `updatePlugin` and on `storage` events;
   - merge built-in manifests that are missing from an existing stored registry, keeping user
     `enabled` and `settings` choices.
   
   Test both in `apps/web/src/features/plugins/plugin-registry.test.ts` (in-memory localStorage
   stub).
-- [ ] T019 Create `apps/web/src/features/option-view/builtins.ts`, mapping manifest id → in-process
+- [x] T019 Create `apps/web/src/features/option-view/builtins.ts`, mapping manifest id → in-process
   `PluginDefinition`; it starts empty and is filled in T029.
 
   Create `apps/web/src/features/option-view/OptionExtensionsProvider.tsx`. It:
@@ -189,9 +189,9 @@ store, and the host plumbing. No story can be shown without them.
     that replaces `marker`);
   - computes `exposureMs` across plugins and dispatches `onOptionExposed` batches at most once a
     second.
-- [ ] T020 [P] Create `apps/web/src/features/option-view/exposure-tracker.ts`: the pure
+- [x] T020 [P] Create `apps/web/src/features/option-view/exposure-tracker.ts`: the pure
   `ExposureTracker` (research R5, data-model.md). T007 should pass.
-- [ ] T021 Create `apps/web/src/features/option-view/useExposure.ts`:
+- [x] T021 Create `apps/web/src/features/option-view/useExposure.ts`:
   - one shared `IntersectionObserver` (`root: null`, thresholds `[0, 0.5, 1]`);
   - `document.visibilitychange` and window `blur`/`focus` → `pageVisible`;
   - a 250 ms `tick` interval only while something is on screen;
@@ -208,7 +208,7 @@ store, and the host plumbing. No story can be shown without them.
   
   Add static-markup tests in `apps/web/src/features/option-view/OptionPlaces.test.tsx`
   (`renderToStaticMarkup`), including the fallback notice.
-- [ ] T023 `apps/web/src/features/grading/OptionRow.tsx`:
+- [x] T023 `apps/web/src/features/grading/OptionRow.tsx`:
   - on the card: render `OptionMarker`, `OptionBadges` (next to the number badge and title) and
     `OptionFooter`, and attach `exposureRef(option.id)` to the `<li>`;
   - in `OptionLightbox`:
@@ -217,7 +217,7 @@ store, and the host plumbing. No story can be shown without them.
     - `OptionFooter` in the footer;
     - `exposureRef` on the dialog content.
   - The title, `GradeInput` and comments stay untouched (FR-022).
-- [ ] T024 [P] Attach `exposureRef(option.id)` to option rows in
+- [x] T024 [P] Attach `exposureRef(option.id)` to option rows in
   `apps/web/src/features/voting/RankBallot.tsx` (`SortableOptionItem`) and
   `apps/web/src/features/voting/ResultsView.tsx`.
 - [ ] T025 `apps/web/src/app/ProjectViewPage.tsx`:
@@ -243,7 +243,7 @@ a count and an "Only not seen" filter; marks are private, including for live gue
 **Independent Test**: spec US1 (12 options; 3 kept 6 s → "Seen"; 4–6 scrolled fast → new;
 "9 not seen yet"; the filter lists 4–12).
 
-- [ ] T026 [P] [US1] Write `plugins/option-status/test/option-status.test.ts` against
+- [x] T026 [P] [US1] Write `plugins/option-status/test/option-status.test.ts` against
   data-model.md "Personal option status":
   - transitions:
     - none → `seen_auto` on exposure;
@@ -256,7 +256,7 @@ a count and an "Only not seen" filter; marks are private, including for live gue
   - the summary "N not seen yet" over active options, hidden at 0;
   - the filter `where: { key: "seen", in: [null, "not_seen"] }`;
   - `exposureMs` = `seconds × 1000`, and `null` when `autoMark` is false.
-- [ ] T027 [US1] Write `plugins/option-status/decisionator-plugin.json`:
+- [x] T027 [US1] Write `plugins/option-status/decisionator-plugin.json`:
   - id `org.decisionator.option-status`, name "Option status";
   - `provides.optionProperties`:
     `[{ key: "seen", label: "Seen", type: "choice", scope: "person", hidden: true,
@@ -265,14 +265,14 @@ a count and an "Only not seen" filter; marks are private, including for live gue
   - `provides.exposure: true`;
   - `settingsSchema`: `autoMark` (boolean, default `true`) and `seconds` (integer, 1–300,
     default 5).
-- [ ] T028 [US1] Implement `plugins/option-status/src/index.ts`: the `PluginDefinition` with
+- [x] T028 [US1] Implement `plugins/option-status/src/index.ts`: the `PluginDefinition` with
   `optionView`, `optionList`, `onOptionAction` (`mark-seen`, `mark-not-seen`),
   `onOptionExposed` (batch `setValues` to `seen_auto`, skipping options manually set to
   `not_seen` in this instance) and `exposureMs`. T026 should pass.
-- [ ] T029 [US1] Register the built-in: add the manifest to `BUILTIN_MANIFESTS` in
+- [x] T029 [US1] Register the built-in: add the manifest to `BUILTIN_MANIFESTS` in
   `apps/web/src/features/plugins/plugin-registry.ts` (enabled by default), and the definition to
   `apps/web/src/features/option-view/builtins.ts`.
-- [ ] T030 [P] [US1] Write the live-share tests first, in
+- [x] T030 [P] [US1] Write the live-share tests first, in
   `plugins/share-inpage/test/host-guest.test.ts`:
   - a guest `property` (`scope: "person"`) is accepted and recorded under the guest;
   - `scope: "shared"` → `invalid` "That change is not allowed.";
@@ -282,7 +282,7 @@ a count and an "Only not seen" filter; marks are private, including for live gue
     values;
   - the owner's own `person` values never reach guests;
   - a v2 `hello` → `protocol_mismatch`.
-- [ ] T031 [US1] Implement the live-share part:
+- [x] T031 [US1] Implement the live-share part:
   - `plugins/share-inpage/src/protocol.ts`: `PROTOCOL_VERSION = 3` and the `property` member of
     `GuestEntrySchema`;
   - `src/policy.ts`: an explicit `property` branch in `checkSubmission` (no more falling into
@@ -373,7 +373,7 @@ survives export → restore, and is hidden while disabled but kept).
   - `cardBadge` values added to `OptionBadges`.
   
   Extend `OptionPlaces.test.tsx`.
-- [ ] T040 [P] [US3] Export:
+- [x] T040 [P] [US3] Export:
   - `packages/core/src/export/project-v1.ts`: `properties` (optional, default `[]`), with
     `packages/core/schema/project-export-v1.schema.json` mirrored;
   - `packages/core/src/export/project-xlsx.ts`: a "Properties" sheet with columns Option,
@@ -381,7 +381,7 @@ survives export → restore, and is hidden while disabled but kept).
     `readProjectWorkbook`;
   - round-trip tests in `packages/core/test/`;
   - update `docs/project-export.md`.
-- [ ] T041 [US3] Restore and Move:
+- [x] T041 [US3] Restore and Move:
   - `apps/web/src/features/project/copy-entries.ts`: `EntriesToCopy.properties`; re-append
     `person` values grouped by `by` with `onBehalfOf`, and `shared` values as the signed-in
     owner;
@@ -389,7 +389,7 @@ survives export → restore, and is hidden while disabled but kept).
     `snapshotToExport`;
   - extend `copy-entries.test.ts` and `project-file.test.ts` (JSON and xlsx), including a guest
     `seen` mark restored under the guest.
-- [ ] T042 [P] [US3] Agent API in `packages/node/src/agent-api/`:
+- [x] T042 [P] [US3] Agent API in `packages/node/src/agent-api/`:
   - `state.ts`: declarations and shared values;
   - `rest.ts`:
     - `GET /context` adds `optionProperties` and shared `properties`;

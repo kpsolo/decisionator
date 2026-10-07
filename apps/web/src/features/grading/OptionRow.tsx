@@ -20,6 +20,16 @@ import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "../../components/ui/dialog.js";
 import { cn } from "../../lib/utils.js";
+import { useExposureRef, useOptionView } from "../option-view/OptionExtensionsProvider.js";
+import {
+  OptionBadges,
+  OptionFooter,
+  OptionMarker,
+  OptionMarkerFrame,
+  OptionSections,
+  PropertySection,
+  markerTitleClass,
+} from "../option-view/OptionPlaces.js";
 import { GradeInput } from "./GradeInput.js";
 
 export interface OptionRowProps {
@@ -82,6 +92,10 @@ export const OptionRow: React.FC<OptionRowProps> = ({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const commentsId = useId();
+  // Plugin places (contract option-view): marker, badges and footer. Title, grading and
+  // comments below stay host-owned.
+  const view = useOptionView(option, "card");
+  const exposureRef = useExposureRef(option.id);
 
   const handleCardClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -97,6 +111,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
 
   return (
     <li
+      ref={exposureRef}
+      data-option-id={option.id}
       className={cn(
         "group relative flex flex-col items-start p-5 w-full rounded-[14px] transition-all duration-200 cursor-pointer",
         // Light mode
@@ -115,6 +131,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         }
       }}
     >
+      <OptionMarkerFrame view={view} />
       {/* Top container: Left content + Right action buttons */}
       <div className="flex flex-col sm:flex-row items-start justify-between gap-6 w-full">
         {/* Left container: Badge + Text content */}
@@ -139,7 +156,13 @@ export const OptionRow: React.FC<OptionRowProps> = ({
           <div className="flex flex-col items-start flex-1 min-w-0">
             {/* Title row */}
             <div className="flex flex-row items-center gap-2 min-h-8 w-full py-0.5">
-              <h4 className="text-[20px] sm:text-[22px] font-semibold leading-tight tracking-[-0.45px] text-[#0066CC] dark:text-[#0B84FE] [overflow-wrap:anywhere] truncate">
+              <OptionMarker view={view} />
+              <h4
+                className={cn(
+                  "text-[20px] sm:text-[22px] font-semibold leading-tight tracking-[-0.45px] text-[#0066CC] dark:text-[#0B84FE] [overflow-wrap:anywhere] truncate",
+                  markerTitleClass(view)
+                )}
+              >
                 {option.title}
               </h4>
               <ArrowUpRight
@@ -175,6 +198,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
                     : "No ratings yet"}
                 </span>
               </div>
+              <OptionBadges view={view} />
             </div>
           </div>
         </div>
@@ -235,6 +259,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         </div>
       </div>
 
+      <OptionFooter view={view} option={option} className="mt-3 pl-[54px]" />
+
       {/* Quick comments disclosure below the card */}
       {commentsOpen && (
         <div
@@ -290,12 +316,15 @@ function OptionLightbox({
   onGrade,
   comments,
 }: OptionLightboxProps) {
+  const view = useOptionView(option, "detail");
+  const exposureRef = useExposureRef(option.id);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 rounded-2xl gap-0 border border-border shadow-raised bg-background sm:rounded-2xl">
         {/* Lightbox Header banner */}
-        <div className="p-6 border-b border-border bg-muted/20 space-y-3">
+        <div ref={exposureRef} className="p-6 border-b border-border bg-muted/20 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
+            <OptionMarker view={view} />
             <Badge variant="secondary" className="font-bold tabular-nums">
               Option #{index + 1}
             </Badge>
@@ -315,9 +344,15 @@ function OptionLightbox({
                 {option.status}
               </Badge>
             )}
+            <OptionBadges view={view} />
           </div>
 
-          <DialogTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-snug [overflow-wrap:anywhere]">
+          <DialogTitle
+            className={cn(
+              "text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-snug [overflow-wrap:anywhere]",
+              markerTitleClass(view)
+            )}
+          >
             {option.title}
           </DialogTitle>
 
@@ -500,6 +535,9 @@ function OptionLightbox({
             </section>
           )}
 
+          <PropertySection option={option} />
+          <OptionSections view={view} />
+
           {/* Comments & Discussion */}
           <section className="space-y-3 pt-4 border-t border-border">
             <div className="flex items-center gap-2">
@@ -513,7 +551,8 @@ function OptionLightbox({
         </div>
 
         {/* Lightbox Footer */}
-        <DialogFooter className="p-4 bg-muted/20 border-t border-border sm:justify-end">
+        <DialogFooter className="p-4 bg-muted/20 border-t border-border sm:justify-end sm:items-center">
+          <OptionFooter view={view} option={option} className="sm:mr-auto" />
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>

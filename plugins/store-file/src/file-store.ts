@@ -5,6 +5,7 @@ import {
   type Option,
   type OutcomeRecord,
   type Project,
+  type PropertyValue,
   type Ranking,
   checkVerifier,
   decrypt,
@@ -12,6 +13,7 @@ import {
   encrypt,
   generateSalt,
   makeVerifier,
+  propertySlot,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -30,6 +32,8 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  checkPropertyEntries,
+  propertyRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
@@ -48,6 +52,22 @@ async function openSealed(value: string, key: CryptoKey): Promise<string> {
 
 async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
   return body === "" ? "" : encrypt(body, key);
+}
+
+/** Property values of protected projects are stored as an encrypted JSON string. */
+async function sealPropertyValue(
+  value: PropertyValue["value"],
+  key: CryptoKey | undefined
+): Promise<PropertyValue["value"]> {
+  return key ? encrypt(JSON.stringify(value), key) : value;
+}
+
+async function openPropertyValue(
+  value: PropertyValue["value"],
+  key: CryptoKey
+): Promise<PropertyValue["value"]> {
+  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
+  return JSON.parse(await decrypt(value, key)) as PropertyValue["value"];
 }
 
 function newId(prefix: string): string {
@@ -80,6 +100,8 @@ interface StoredFileProject {
   rankings: Ranking[];
   outcomes: OutcomeRecord[];
   contributions: Contribution[];
+  /** Option property values, latest per slot (ProjectStore v1.4.0). Missing in older docs. */
+  properties?: PropertyValue[];
   collaborators: {
     email: string;
     role: ParticipantRole;
@@ -235,6 +257,7 @@ export class FileProjectStore implements ProjectStore {
       rankings: [],
       outcomes: [],
       contributions: [],
+      properties: [],
       collaborators: [{ email: this.currentUser, role: "owner" }],
     };
 
@@ -273,6 +296,12 @@ export class FileProjectStore implements ProjectStore {
           body: await openSealed(c.body, key),
         }))
       );
+      const decryptedProperties = await Promise.all(
+        (doc.properties ?? []).map(async (p) => ({
+          ...p,
+          value: await openPropertyValue(p.value, key),
+        }))
+      );
 
       return {
         project: {
@@ -288,6 +317,7 @@ export class FileProjectStore implements ProjectStore {
         rankings: [...doc.rankings],
         outcomes: [...doc.outcomes],
         contributions: [...doc.contributions],
+        properties: decryptedProperties,
         role,
       };
     }
@@ -306,6 +336,7 @@ export class FileProjectStore implements ProjectStore {
       rankings: [...doc.rankings],
       outcomes: [...doc.outcomes],
       contributions: [...doc.contributions],
+      properties: [...(doc.properties ?? [])],
       role,
     };
   }
@@ -344,6 +375,10 @@ export class FileProjectStore implements ProjectStore {
       }
       // Validates the whole call before anything is written.
       const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+      checkPropertyEntries(entries, {
+        optionIds: new Set(doc.options.map((o) => o.id)),
+        isOwner: role === "owner",
+      });
       const by = delegated?.by ?? this.currentUser;
       const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
@@ -399,6 +434,19 @@ export class FileProjectStore implements ProjectStore {
           sent++;
         } else if (e.kind === "contribution") {
           doc.contributions.push(e.contribution);
+          sent++;
+        } else if (e.kind === "property") {
+          const record = propertyRecord(
+            { ...e, value: await sealPropertyValue(e.value, key) },
+            { id: newId("prp"), at: now, by, ...byName }
+          );
+          // Latest wins per slot, in place
+          const props = doc.properties ?? [];
+          const slot = propertySlot(record);
+          const idx = props.findIndex((p) => propertySlot(p) === slot);
+          if (idx >= 0) props[idx] = record;
+          else props.push(record);
+          doc.properties = props;
           sent++;
         }
       }
@@ -648,6 +696,7 @@ export class FileProjectStore implements ProjectStore {
           rankings: doc.rankings,
           outcomes: doc.outcomes,
           contributions: doc.contributions,
+          properties: doc.properties ?? [],
         };
         await writable.write(JSON.stringify(exportData, null, 2));
         await writable.close();

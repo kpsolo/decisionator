@@ -602,6 +602,48 @@
             "additionalProperties": false
           },
           "default": []
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "by": {
+                "type": "string"
+              },
+              "byName": {
+                "type": "string"
+              },
+              "optionId": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,39}$"
+              },
+              "scope": {
+                "type": "string",
+                "enum": ["shared", "person"]
+              },
+              "value": {
+                "type": ["string", "number", "boolean", "null"]
+              }
+            },
+            "required": ["id", "at", "by", "optionId", "plugin", "key", "scope", "value"],
+            "additionalProperties": false
+          },
+          "default": []
         }
       },
       "required": [

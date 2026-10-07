@@ -37,6 +37,7 @@ export function baseSnapshot(patch: Partial<ProjectSnapshot> = {}): ProjectSnaps
     rankings: [],
     outcomes: [],
     contributions: [],
+    properties: [],
     role: "owner",
     ...patch,
   };
@@ -116,6 +117,26 @@ export class FakeProject implements HostedProject {
         const round = e.round ?? 1;
         doc.rankings = doc.rankings.filter((r) => !(r.by === by && r.round === round));
         doc.rankings.push({ id: randomId(6), at, by, round, ranking: e.ranking, ...byName });
+      } else if (e.kind === "property") {
+        // Latest-wins per (plugin, key, option) for shared values, and per author too for person.
+        const sameSlot = (p: NonNullable<ProjectSnapshot["properties"]>[number]) =>
+          p.plugin === e.plugin &&
+          p.key === e.key &&
+          p.optionId === e.optionId &&
+          p.scope === e.scope &&
+          (e.scope === "shared" || p.by === by);
+        doc.properties = (doc.properties ?? []).filter((p) => !sameSlot(p));
+        doc.properties.push({
+          id: randomId(6),
+          at,
+          by,
+          optionId: e.optionId,
+          plugin: e.plugin,
+          key: e.key,
+          scope: e.scope,
+          value: e.value,
+          ...byName,
+        });
       }
     }
     this.state = doc;

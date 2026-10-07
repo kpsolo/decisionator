@@ -1,4 +1,4 @@
-# Contract: Agentic API — v1.0.0
+# Contract: Agentic API — v1.1.0
 
 > **Scope: post-MVP (US5).** The MVP supports agents only through the copy-paste [format instruction](./format-instruction.md).
 
@@ -29,12 +29,14 @@ same Zod schemas, so they stay in parity (Principle IV, FR-040).
 |----------|------|-----------|-------------|
 | `agent_hello` | `POST /session` | any | Declares the agent name. Returns the request instruction, target, permissions, expiry, limits and the rules text. |
 | `get_request` | `GET /request` | any | The agent request: instruction, target, status. |
-| `get_context` | `GET /context` | `read` | Project title and description, the options in scope (all options for a project target), **accepted** contributions and source refs. Ballots and other agents' pending contributions are never included. |
+| `get_context` | `GET /context` | `read` | Project title and description, the options in scope (all options for a project target), **accepted** contributions, source refs, `optionProperties` and shared `properties` (see [Option properties](#option-properties-110)). Ballots, per-person property values and other agents' pending contributions are never included. |
 | `list_contributions` | `GET /contributions` | `read` | This request's own contributions and their review status. |
 | `add_contribution` | `POST /contributions` | `contribute` | `{target?, type, body, pros?, cons?, sources[]}`. `target` defaults to the request target and must be inside the scope. Result: `{id, reviewStatus: "pending"}`. |
 | `update_contribution` | `PATCH /contributions/{id}` | `contribute` | Only own contributions that are still `pending`. |
 | `propose_option` | `POST /options` | `propose_options` | `{title, description, sources[]}`. Creates an option with `status: "proposed"`. Valid only when the target is a project. |
 | `complete_request` | `POST /complete` | any | `{summary?}`. Marks the request `completed`, and the grant stops accepting writes. |
+| `get_option_properties` | `GET /properties` | `read` | `{optionProperties, properties}`: the property declarations of enabled plugins and the effective shared values of the options in scope. |
+| `set_option_property` | `PUT /options/{optionId}/properties/{plugin}/{key}` | `contribute` | Body `{value}` (MCP: `{optionId, plugin, key, value}`). Sets a **shared** property value; `null` clears it. Result: the stored `PropertyValue`. |
 
 **No operation** exists to record outcomes, cast ballots, delete content, change sharing or read
 outside the scope (FR-044). Asking for any of these returns `403 NOT_PERMITTED_FOR_AGENTS`.
@@ -65,6 +67,30 @@ outside the scope (FR-044). Asking for any of these returns `403 NOT_PERMITTED_F
   }
 }
 ```
+
+## Option properties (1.1.0)
+
+Plugins declare option properties ([option-properties](../../005-option-status-properties/contracts/option-properties.md)).
+Agents read and write only **shared** values; per-person values belong to people and are never
+exposed to agents.
+
+- `optionProperties`: each declaration of an enabled plugin (`key`, `label`, `type`, `choices?`,
+  `default?`, `scope`, `cardBadge`, `hidden`) plus the declaring `plugin` id.
+- `properties`: effective shared `PropertyValue`s (latest wins per plugin, key and option) of the
+  options in scope. A cleared value stays as `value: null`.
+- `set_option_property` permission is `contribute` (no separate permission); the option must be
+  inside the grant's scope. Values are written directly, not reviewed, and attributed to the agent:
+  `by: "agent:<requestId>"`, `byName` = the declared agent name. Each write is appended to the
+  audit log as `agent_property_set`.
+
+| Case | REST | MCP |
+|------|------|-----|
+| Body without `value` | 400 `INVALID_PARAMS` | schema error |
+| Unknown option, or property not declared by an enabled plugin | 404 `NOT_FOUND` | `[404] NOT_FOUND` tool error |
+| Property with `scope: "person"` | 403 `NOT_PERMITTED_FOR_AGENTS`, "Only the person it belongs to can set this property." (audited as `agent_refused_permission`) | same, as a tool error |
+| Value fails `checkPropertyValue` | 400 `INVALID_PARAMS` with the check's message, e.g. "Stage: choose one of Lead, Won" | same, as a tool error |
+| Value over 2048 bytes as JSON | 413 `TOO_LARGE` | same, as a tool error |
+| Option outside the grant's scope | 403 `OUT_OF_SCOPE` | same, as a tool error |
 
 ## Limits (research R8)
 
@@ -97,4 +123,12 @@ is the only secret in the brief. It is scoped, expires and can be revoked (FR-04
 - expired, revoked and cancelled grants;
 - out-of-scope targets;
 - limits;
-- a check that the MCP tool list and the OpenAPI document expose the same operations.
+- a check that the MCP tool list and the OpenAPI document expose the same operations.- option properties: declarations and shared-only values in context, set/clear, attribution,
+  bad value, person refusal, unknown option or property, scope (1.1.0).
+
+## Changelog
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.1.0 (unreleased) | 2026-10-07 | `get_context` also returns `optionProperties` and shared `properties`. New `get_option_properties` (`GET /properties`) and `set_option_property` (`PUT /options/{optionId}/properties/{plugin}/{key}`, `contribute`): shared values only, checked with `checkPropertyValue`, attributed to the agent, audited as `agent_property_set` (005 FR-017) |
+| 1.0.0 | — | Initial contract |

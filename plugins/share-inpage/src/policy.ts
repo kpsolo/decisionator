@@ -1,3 +1,4 @@
+import { PROPERTY_VALUE_MAX_BYTES, propertyValueBytes } from "@decisionator/core";
 import type { Entry, ProjectSnapshot } from "@decisionator/plugin-sdk";
 import type { AckErrorCode, GuestEntry, LiveRole } from "./protocol.js";
 
@@ -7,7 +8,8 @@ export type SubmissionCheck =
 
 /**
  * Checks a guest's submission against the current project state. Guests may grade and comment on
- * active options, edit their own comments, and rank while voting is open in the current round.
+ * active options, edit their own comments, set their own person-scoped option properties on
+ * active options, and rank while voting is open in the current round.
  */
 export function checkSubmission(
   snapshot: ProjectSnapshot,
@@ -40,7 +42,20 @@ export function checkSubmission(
         body: e.body,
         ...(e.replaces ? { replaces: e.replaces } : {}),
       });
-    } else {
+    } else if (e.kind === "property") {
+      if (!active.has(e.optionId)) return unknownOption();
+      if (e.scope !== "person" || propertyValueBytes(e.value) > PROPERTY_VALUE_MAX_BYTES) {
+        return { ok: false, code: "invalid", message: "That change is not allowed." };
+      }
+      entries.push({
+        kind: "property",
+        optionId: e.optionId,
+        plugin: e.plugin,
+        key: e.key,
+        scope: "person",
+        value: e.value,
+      });
+    } else if (e.kind === "ranking") {
       if (voting?.state !== "open") {
         return { ok: false, code: "voting_closed", message: "Voting is closed." };
       }
@@ -59,6 +74,8 @@ export function checkSubmission(
       }
       if (!e.ranking.every((id) => active.has(id))) return unknownOption();
       entries.push({ kind: "ranking", ranking: [...e.ranking], round: e.round });
+    } else {
+      return { ok: false, code: "invalid", message: "That change is not allowed." };
     }
   }
   return { ok: true, entries };
@@ -70,7 +87,8 @@ function unknownOption(): SubmissionCheck {
 
 /**
  * What one guest may see: no owner-only material (agent drafts, hidden comment text, encryption
- * parameters) and, while live results are off, no one else's ballot.
+ * parameters, other people's person-scoped option properties) and, while live results are off, no
+ * one else's ballot.
  */
 export function redactSnapshotFor(
   snapshot: ProjectSnapshot,
@@ -90,6 +108,9 @@ export function redactSnapshotFor(
       : snapshot.rankings,
     outcomes: snapshot.outcomes,
     contributions: [],
+    properties: (snapshot.properties ?? []).filter(
+      (p) => p.scope === "shared" || p.by === participantId
+    ),
     role,
   };
 }

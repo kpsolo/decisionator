@@ -36,12 +36,14 @@ Google Sheets (or *File → Import* in an existing sheet). To restore after edit
 | Comments, incl. hidden flag | `comments` | Comments | ✓ under the original author |
 | Outcomes: strategy, settings, seed, inputs, result order and points | `outcomes` | Outcomes | ✓ verbatim — *Verify Outcome* still reproduces them |
 | Agent / human contributions | `contributions` | Contributions | ✓ verbatim |
+| Option property values (plugin-defined, e.g. *Seen* status), shared and per person | `properties` | Properties | ✓ per-person values under their author, shared values under the restoring owner |
 | Current ranking (derived) | — | Ranking | — (recomputed) |
 
 Entries by other people (e.g. live-session guests) are re-recorded on their behalf
 (`append(..., { onBehalfOf })`, ProjectStore v1.2.0), so each person keeps one grade per option
-and one ballot per round. Entry IDs and timestamps of grades, ballots and comments are assigned
-anew by the store; outcomes and contributions keep theirs. Password protection is not carried
+and one ballot per round. Per-person option property values go the same way; shared property
+values are recorded by the restoring owner, like outcomes and contributions. Entry IDs and timestamps of grades, ballots, comments and property values are
+assigned anew by the store; outcomes and contributions keep theirs. Password protection is not carried
 over: the export holds the decrypted content, and the restored project is unprotected.
 
 ## JSON bundle: `decisionator.project/v1`
@@ -55,9 +57,18 @@ Schema: `packages/core/schema/project-export-v1.schema.json` (generated from
   "exportedAt": "2026-10-06T10:00:00.000Z",
   "project": { "title": "…", "description": "…", "voting": { "state": "open", "round": 1, "topN": 3, "liveResults": true } },
   "options": [ … ], "grades": [ … ], "comments": [ … ], "rankings": [ … ],
-  "outcomes": [ … ], "contributions": [ … ]
+  "outcomes": [ … ], "contributions": [ … ],
+  "properties": [
+    { "id": "…", "at": "…", "by": "guest:ana", "byName": "Ana", "optionId": "opt_1",
+      "plugin": "org.decisionator.option-status", "key": "seen", "scope": "person", "value": "seen_auto" }
+  ]
 }
 ```
+
+`properties` holds option property values (contract `option-properties`): `scope` is `shared`
+(one value per option) or `person` (one value per option and author, `by`). `value` is a
+string, number, boolean or `null` (a cleared value) and keeps its JSON type. It was added with
+feature 005 and is optional (default `[]`), so the format id stays `decisionator.project/v1`.
 
 `contributions` and the outcome fields `inputs.settings` / `inputs.runInput` were added in
 core 0.2 and are optional, so bundles from older versions still load.
@@ -78,6 +89,7 @@ matched **by header name**, so they can be reordered and extra columns are ignor
 | **Comments** | ID, Option ID, Option, Body, By, By name, At, Replaces, Hidden |
 | **Outcomes** | ID, Round, At, Strategy, Strategy version, Winner ID, Winner, Tie-break, Seed, Triggered by, Explanation, Record (JSON)… |
 | **Contributions** | ID, At, By, Target kind, Target ID, Type, Review status, Body, Record (JSON)… |
+| **Properties** | Option (title), Plugin, Key, Scope (`shared`/`person`), Value, By, By name, At, Record (JSON)… |
 
 Rules for restore:
 
@@ -86,6 +98,11 @@ Rules for restore:
 - Outcomes and contributions are restored from their `Record (JSON)` cell(s); the other columns
   are for reading. A record longer than one cell holds is split over `Record (JSON)`,
   `Record (JSON) 2`, … and joined back in order.
+- Properties rows are restored from `Record (JSON)` when it holds a valid value, so numbers,
+  booleans and `null` keep their type. A row without it (added by hand) is read from the named
+  columns: Option matches a title or an option ID, an empty Value is `null`, and a Value that
+  reads as a number, `TRUE`/`FALSE` or `null` gets that type. Workbooks without a Properties
+  sheet restore with no property values.
 - Rows added by hand may leave ID and time empty. A ballot row with an empty
   `Ranking (option IDs)` is read from its `Choice N` cells, matching option titles.
 - An invalid value is reported with its sheet and row, e.g.
