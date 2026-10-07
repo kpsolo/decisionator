@@ -137,6 +137,15 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
     await expect(host.getByRole("heading", { name: "Friday lunch" })).toBeVisible();
   });
 
+  await test.step("the guest sees the decision method and can compare, read-only", async () => {
+    await expect(guest.getByTestId("decided-by")).toContainText("Decided by: Borda Count Ranking");
+    await guest.getByRole("button", { name: "Compare strategies" }).click();
+    const compare = guest.getByRole("dialog");
+    await expect(compare.getByRole("table", { name: "Strategy comparison" })).toBeVisible();
+    await expect(compare.getByRole("button", { name: /^Adopt/ })).toHaveCount(0);
+    await compare.getByRole("button", { name: "Close" }).last().click();
+  });
+
   await test.step("a second guest with the same name joins under a numbered name", async () => {
     const twin = await context.newPage();
     twin.on("pageerror", (e) => errors.push(e.message));

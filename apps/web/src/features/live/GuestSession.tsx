@@ -31,6 +31,8 @@ import { Input } from "../../components/ui/input.js";
 import { Skeleton } from "../../components/ui/skeleton.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { CommentThread } from "../comments/CommentThread.js";
+import { CompareStrategiesDialog } from "../decide/CompareStrategiesDialog.js";
+import { DecidedBy } from "../decide/DecisionMethod.js";
 import { OptionRow } from "../grading/OptionRow.js";
 import { averageText, ballotText, ownGradeText } from "../history/time-texts.js";
 import { FilterableOptionList } from "../option-view/FilterableOptionList.js";
@@ -450,6 +452,12 @@ function GuestWorkspace({
 
         {voting && (
           <section aria-label="Ballot" className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <DecidedBy snapshot={snapshot} />
+              {(voting.liveResults || voting.state !== "open") && (
+                <CompareStrategiesDialog snapshot={snapshot} canAdopt={false} triggeredBy={me} />
+              )}
+            </div>
             <RankBallot
               options={options}
               topN={voting.topN}
