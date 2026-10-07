@@ -23,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { toast } from "../../components/ui/use-toast.js";
 import { getInstalledPlugins, subscribePlugins } from "../plugins/plugin-registry.js";
@@ -64,10 +65,18 @@ export interface PropertyRow {
   label: string;
 }
 
+/** Current values, readable without re-rendering every consumer when one option changes. */
+interface ValueStore {
+  values(): ValueIndex;
+  meta(): MetaIndex;
+  subscribe(cb: () => void): () => void;
+  /** Changes when any value of this option (for any plugin) changes. */
+  signature(optionId: string): string;
+}
+
 interface Ctx {
   plugins: ActivePlugin[];
-  values: ValueIndex;
-  meta: MetaIndex;
+  store: ValueStore;
   viewerId: string | null;
   isOwner: boolean;
   markerPlugin: string | null;
@@ -169,6 +178,39 @@ export function OptionExtensionsProvider({
   const meta = useMemo(() => indexMeta(visible), [visible]);
   const metaRef = useRef(meta);
   metaRef.current = meta;
+
+  // A stable store over the latest values; consumers subscribe per option.
+  const listeners = useRef(new Set<() => void>());
+  const signatures = useRef(new Map<string, string>());
+  const valueStore = useMemo<ValueStore>(
+    () => ({
+      values: () => valuesRef.current,
+      meta: () => metaRef.current,
+      subscribe: (cb) => {
+        listeners.current.add(cb);
+        return () => listeners.current.delete(cb);
+      },
+      signature: (optionId) => {
+        const cached = signatures.current.get(optionId);
+        if (cached !== undefined) return cached;
+        const parts: unknown[] = [];
+        for (const [pluginId, byOption] of valuesRef.current) {
+          const v = byOption.get(optionId);
+          const m = metaRef.current.get(pluginId)?.get(optionId);
+          if (v || m) parts.push(pluginId, v, m);
+        }
+        const sig = JSON.stringify(parts);
+        signatures.current.set(optionId, sig);
+        return sig;
+      },
+    }),
+    []
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: notify on every values change
+  useEffect(() => {
+    signatures.current.clear();
+    for (const cb of listeners.current) cb();
+  }, [values, meta]);
   const valuesRef = useRef(values);
   valuesRef.current = values;
 
@@ -351,8 +393,7 @@ export function OptionExtensionsProvider({
   const value = useMemo<Ctx>(
     () => ({
       plugins,
-      values,
-      meta,
+      store: valueStore,
       viewerId,
       isOwner,
       markerPlugin: markerPluginId(plugins, markerChoice),
@@ -366,8 +407,7 @@ export function OptionExtensionsProvider({
     }),
     [
       plugins,
-      values,
-      meta,
+      valueStore,
       viewerId,
       isOwner,
       markerChoice,
@@ -434,7 +474,7 @@ function resolve(
   for (const plugin of ctx.plugins) {
     for (const def of plugin.properties) {
       if (!def.cardBadge || def.hidden) continue;
-      const v = ctx.values.get(plugin.id)?.get(option.id)?.[def.key];
+      const v = ctx.store.values().get(plugin.id)?.get(option.id)?.[def.key];
       if (v === undefined || v === null) continue;
       view.badges.push({
         text: `${def.label}: ${displayValue(def, v)}`.slice(0, 40),
@@ -454,10 +494,23 @@ export function displayValue(def: OptionPropertyDefinition, v: PropertyScalar): 
 }
 
 /** What plugins contribute to one option on a card or in the detail view. */
+function useOptionSignature(ctx: Ctx | null, optionId: string): string {
+  return useSyncExternalStore(
+    ctx ? ctx.store.subscribe : noopSubscribe,
+    () => (ctx ? ctx.store.signature(optionId) : ""),
+    () => ""
+  );
+}
+
+const noopSubscribe = () => () => {};
+
 export function useOptionView(option: Option, surface: "card" | "detail"): ResolvedOptionView {
   const ctx = useCtx();
+  const signature = useOptionSignature(ctx, option.id);
   const [asyncResults, setAsyncResults] = useState<Map<string, unknown>>(new Map());
 
+  // `signature` changes exactly when this option's values change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signature is the change trigger
   const syncResults = useMemo(() => {
     const results = new Map<string, unknown>();
     if (!ctx) return results;
@@ -469,8 +522,8 @@ export function useOptionView(option: Option, surface: "card" | "detail"): Resol
           option,
           viewerId: ctx.viewerId ?? "",
           surface,
-          values: ctx.values.get(plugin.id)?.get(option.id) ?? {},
-          valueMeta: ctx.meta.get(plugin.id)?.get(option.id) ?? {},
+          values: ctx.store.values().get(plugin.id)?.get(option.id) ?? {},
+          valueMeta: ctx.store.meta().get(plugin.id)?.get(option.id) ?? {},
           settings: plugin.settings,
           setValue: (key, value) => ctx.setValue(plugin.id, option.id, key, value),
         });
@@ -480,7 +533,7 @@ export function useOptionView(option: Option, surface: "card" | "detail"): Resol
       }
     }
     return results;
-  }, [ctx, option, surface]);
+  }, [ctx, option, surface, signature]);
 
   useEffect(() => {
     let cancelled = false;
@@ -534,6 +587,8 @@ export function usePropertyRows(option: Option): {
   setValue(row: PropertyRow, value: PropertyScalar): Promise<void>;
 } {
   const ctx = useCtx();
+  const signature = useOptionSignature(ctx, option.id);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signature is the change trigger
   const rows = useMemo(() => {
     if (!ctx) return [];
     const keyCount = new Map<string, number>();
@@ -547,14 +602,14 @@ export function usePropertyRows(option: Option): {
         out.push({
           plugin,
           def,
-          value: ctx.values.get(plugin.id)?.get(option.id)?.[def.key],
+          value: ctx.store.values().get(plugin.id)?.get(option.id)?.[def.key],
           editable,
           label: (keyCount.get(def.key) ?? 0) > 1 ? `${def.label} (${plugin.name})` : def.label,
         });
       }
     }
     return out;
-  }, [ctx, option]);
+  }, [ctx, option, signature]);
   const setValue = useCallback(
     async (row: PropertyRow, value: PropertyScalar) => {
       if (!ctx) return;
@@ -577,6 +632,12 @@ export interface ResolvedOptionList {
 /** List summary and filters for the active options shown on a page. */
 export function useOptionList(options: Option[]): ResolvedOptionList {
   const ctx = useCtx();
+  const values = useSyncExternalStore(
+    ctx ? ctx.store.subscribe : noopSubscribe,
+    () => ctx?.store.values() ?? null,
+    () => null
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: values is the change trigger
   return useMemo(() => {
     const result: ResolvedOptionList = {
       summaries: [],
@@ -592,7 +653,7 @@ export function useOptionList(options: Option[]): ResolvedOptionList {
     for (const plugin of ctx.plugins) {
       const hook = plugin.definition.optionList;
       if (!hook) continue;
-      const byOption = ctx.values.get(plugin.id);
+      const byOption = ctx.store.values().get(plugin.id);
       let raw: unknown;
       try {
         raw = hook({
@@ -617,10 +678,10 @@ export function useOptionList(options: Option[]): ResolvedOptionList {
     result.matches = (filterKey, optionId) => {
       const f = filters.get(filterKey);
       if (!f) return true;
-      return filterMatches(f.where, ctx.values.get(f.plugin)?.get(optionId));
+      return filterMatches(f.where, ctx.store.values().get(f.plugin)?.get(optionId));
     };
     return result;
-  }, [ctx, options]);
+  }, [ctx, options, values]);
 }
 
 /** Owner tools for the Reset dialog: shared property declarations and a way to append resets. */

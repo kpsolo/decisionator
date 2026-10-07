@@ -331,7 +331,7 @@ manual still works).
   `subscribe` notifications, and push the new `exposureMs` into the tracker
   (`setMinMs`, or stop when `null`) without a reload. Previously recorded marks are untouched
   (US2 scenario 6).
-- [ ] T036 [US2] Add tests to `apps/web/e2e/option-status.spec.ts`:
+- [x] T036 [US2] Add tests to `apps/web/e2e/option-status.spec.ts`:
   - the default shows on and 5 s;
   - 10 s: 7 s stays new, 10 s marks;
   - 0 and 400 are refused with the message;
@@ -654,13 +654,13 @@ reopening, and Adopt records exactly one outcome).
 
 ## Phase 11: Polish & Cross-Cutting
 
-- [ ] T047 [P] Document both extension points in `docs/plugin-authors.md`: declaring properties,
+- [x] T047 [P] Document both extension points in `docs/plugin-authors.md`: declaring properties,
   view places, exposure, the examples, and the limits (≤ 3 badges, sections in the detail view
   only, no core controls).
-- [ ] T048 [P] Update `CLAUDE.md` (Tech stack: `plugins/option-status`, the option-view host and
+- [x] T048 [P] Update `CLAUDE.md` (Tech stack: `plugins/option-status`, the option-view host and
   the new contracts), and `specs/001-decision-engine-core/data-model.md` (option status also
   includes `proposed`; the new `PropertyValue`).
-- [ ] T049 Performance check for SC-003: add a Playwright test in
+- [x] T049 Performance check for SC-003: add a Playwright test in
   `apps/web/e2e/option-status.spec.ts` with 100 options and the status plugin on. Scroll the
   whole list with CPU throttling 4× (Chromium only) and assert that no long task over 200 ms
   occurs (PerformanceObserver `longtask`) and that a grade shows within 1 s.

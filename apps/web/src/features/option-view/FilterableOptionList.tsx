@@ -40,9 +40,7 @@ export function FilterableOptionList({
         {shown.map(({ o, index }) => renderOption(o, index))}
       </ul>
       {activeFilter && shown.length === 0 && (
-        <p className="text-sm text-muted-foreground" role="status">
-          Nothing left here.
-        </p>
+        <output className="block text-sm text-muted-foreground">Nothing left here.</output>
       )}
     </div>
   );

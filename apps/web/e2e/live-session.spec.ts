@@ -164,9 +164,9 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
   });
 
   await test.step("changes the host refuses are reported and rolled back", async () => {
-    // 30 grade changes at once: more than the host accepts in a burst.
+    // 80 grade changes at once: well over what the host accepts in a burst, even on a busy CPU.
     await guest.evaluate(() => {
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 80; i++) {
         const stars = i % 2 === 0 ? "3 stars" : "4 stars";
         document.querySelectorAll<HTMLInputElement>(`input[aria-label="${stars}"]`)[0]?.click();
       }

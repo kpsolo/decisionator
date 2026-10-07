@@ -120,7 +120,10 @@ export function indexValues(values: readonly PropertyValue[]): ValueIndex {
   for (const v of values) {
     if (v.value === null) continue;
     let byOption = index.get(v.plugin);
-    if (!byOption) index.set(v.plugin, (byOption = new Map()));
+    if (!byOption) {
+      byOption = new Map();
+      index.set(v.plugin, byOption);
+    }
     const record = byOption.get(v.optionId) ?? {};
     record[v.key] = v.value;
     byOption.set(v.optionId, record);
@@ -136,7 +139,10 @@ export function indexMeta(values: readonly PropertyValue[]): MetaIndex {
   for (const v of values) {
     if (v.value === null) continue;
     let byOption = index.get(v.plugin);
-    if (!byOption) index.set(v.plugin, (byOption = new Map()));
+    if (!byOption) {
+      byOption = new Map();
+      index.set(v.plugin, byOption);
+    }
     const record = byOption.get(v.optionId) ?? {};
     record[v.key] = { at: v.at, by: v.by };
     byOption.set(v.optionId, record);
