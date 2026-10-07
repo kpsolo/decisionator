@@ -298,7 +298,7 @@ a count and an "Only not seen" filter; marks are private, including for live gue
     (≤ 50 per submit);
   - on refusal, drop the optimistic values and show the existing "Not saved" toast once per
     flush.
-- [ ] T033 [US1] Write `apps/web/e2e/option-status.spec.ts` (local store, status seconds set to
+- [x] T033 [US1] Write `apps/web/e2e/option-status.spec.ts` (local store, status seconds set to
   1 through localStorage, except one test kept at the 5 s default):
   - every card shows "Not seen" and the header says "12 not seen yet";
   - keeping cards on screen marks them, and the count drops;
@@ -610,7 +610,7 @@ shown; the outcome names Weighted grades).
   - save with `store.updateMeta(ref, { strategy })`.
 - [x] T074 [US7] Show "Decided by: {name}" with the one-line description on the vote page, in
   `apps/web/src/features/live/GuestSession.tsx` and in `ResultsView.tsx`.
-- [ ] T075 [US7] `handleCloseAndTally` in `apps/web/src/app/pages.tsx`:
+- [x] T075 [US7] `handleCloseAndTally` in `apps/web/src/app/pages.tsx`:
   - use `chosenStrategy`;
   - when the strategy is unavailable, show "{name} is not available. Choose another method
     before closing the vote.";
@@ -642,7 +642,7 @@ reopening, and Adopt records exactly one outcome).
     StrategyChooser append path;
   - opened from Results: always for the owner; read-only for others (including the guest view)
     when `liveResults` is on or voting is closed.
-- [ ] T078 [US8] Add e2e tests to `apps/web/e2e/strategy.spec.ts`:
+- [x] T078 [US8] Add e2e tests to `apps/web/e2e/strategy.spec.ts`:
   - 4 strategy rows;
   - the same random seed when reopened;
   - Adopt adds exactly one outcome, and it verifies;
