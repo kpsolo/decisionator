@@ -47,6 +47,18 @@ From `specs/001-decision-engine-core/plan.md` (MVP = US1–US3):
   the owner's tab hosts guests over WebRTC data channels (star); offers go sealed through Nostr
   relays or BroadcastChannel. Guest entries are recorded via `append(..., { onBehalfOf })`
   (ProjectStore v1.2.0). The hosting session lives in `LiveShareProvider`, not in a page.
+- Option properties and option view (feature 005, contracts in
+  `specs/005-option-status-properties/contracts/`): plugins declare typed `optionProperties`
+  (stored as `property` entries, shared or per person) and return declarative contributions for
+  fixed places on the option card, detail view and list. The host
+  (`apps/web/src/features/option-view/OptionExtensionsProvider`) renders them and reports
+  exposure (time on screen). The built-in `plugins/option-status` ("Seen" marks) uses only these
+  hooks. Per-person values are shown only to their author.
+- History and resets (ProjectStore v1.4.0): stores append every grade, ballot and property, and
+  build snapshots with `effectiveEntries` (latest wins plus `reset` entries); superseded entries
+  are in `snapshot.history`. Stamp new entries with `monotonicNow()`.
+- Decision method: `project.strategy` (meta) is chosen by the owner and used by "Close voting";
+  `apps/web/src/features/decide/strategies.ts` and `compare.ts` (input-derived seeds).
 - Google: Identity Services token model, `drive.file` scope only, Drive v3 + Sheets v4 via
   `fetch`, Picker `setFileIds`. Tokens live in memory. Stay under the quota budget in
   `contracts/sheet-store.md`.
