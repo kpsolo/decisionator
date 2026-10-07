@@ -32,6 +32,9 @@ import { Skeleton } from "../../components/ui/skeleton.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { CommentThread } from "../comments/CommentThread.js";
 import { OptionRow } from "../grading/OptionRow.js";
+import { FilterableOptionList } from "../option-view/FilterableOptionList.js";
+import { OptionExtensionsProvider } from "../option-view/OptionExtensionsProvider.js";
+import { createBatcher } from "../option-view/batcher.js";
 import { downloadProjectExport } from "../project/project-file.js";
 import { RankBallot } from "../voting/RankBallot.js";
 import { ResultsView } from "../voting/ResultsView.js";
@@ -287,6 +290,26 @@ function GuestWorkspace({
     }
   };
 
+  // Plugin values (e.g. seen marks) go to the host in batches, at most every 2 s, so they never
+  // trip its rate limit; one "Not saved" toast per failed batch.
+  const batcher = useMemo(
+    () =>
+      createBatcher<GuestEntry>(async (entries) => {
+        try {
+          await guest.submit(entries);
+        } catch (err) {
+          toast({
+            title: "Not saved",
+            description: err instanceof Error ? err.message : String(err),
+            variant: "destructive",
+          });
+          throw err;
+        }
+      }),
+    [guest]
+  );
+  useEffect(() => () => batcher.dispose(), [batcher]);
+
   const options = useMemo(() => snapshot.options.filter((o) => o.status === "active"), [snapshot]);
   const stats = useMemo(
     () => computeOptionStats(snapshot.options, snapshot.grades, comments),
@@ -297,128 +320,137 @@ function GuestWorkspace({
   const myBallot = snapshot.rankings.find((r) => r.by === me && (r.round ?? 1) === round);
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={state.status} />
-          <span className="text-xs text-muted-foreground">{`You're ${myName}`}</span>
-        </div>
-        <h2 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
-          {snapshot.project.title}
-        </h2>
-        {snapshot.project.description && (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {snapshot.project.description}
-          </p>
-        )}
-      </header>
+    <OptionExtensionsProvider
+      viewerId={me || null}
+      isOwner={false}
+      options={snapshot.options}
+      properties={snapshot.properties}
+      appendProperties={(entries) => batcher.add(entries as GuestEntry[])}
+    >
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <header className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={state.status} />
+            <span className="text-xs text-muted-foreground">{`You're ${myName}`}</span>
+          </div>
+          <h2 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
+            {snapshot.project.title}
+          </h2>
+          {snapshot.project.description && (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {snapshot.project.description}
+            </p>
+          )}
+        </header>
 
-      {state.status === "reconnecting" && (
-        <Banner icon={<Loader2 className="h-4 w-4 motion-safe:animate-spin" />} live>
-          Lost the connection to the host. Reconnecting…
-        </Banner>
-      )}
-      {(state.status === "ended" || state.status === "failed") && (
-        <Banner
-          icon={<Unplug className="h-4 w-4" />}
-          action={
-            <div className="flex flex-wrap gap-2">
-              {state.status === "failed" && (
-                <Button size="sm" variant="outline" onClick={() => guest.retry()}>
-                  Reconnect
+        {state.status === "reconnecting" && (
+          <Banner icon={<Loader2 className="h-4 w-4 motion-safe:animate-spin" />} live>
+            Lost the connection to the host. Reconnecting…
+          </Banner>
+        )}
+        {(state.status === "ended" || state.status === "failed") && (
+          <Banner
+            icon={<Unplug className="h-4 w-4" />}
+            action={
+              <div className="flex flex-wrap gap-2">
+                {state.status === "failed" && (
+                  <Button size="sm" variant="outline" onClick={() => guest.retry()}>
+                    Reconnect
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadProjectExport(snapshot)}
+                  leftIcon={<Download className="h-4 w-4" />}
+                >
+                  Save a copy
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => downloadProjectExport(snapshot)}
-                leftIcon={<Download className="h-4 w-4" />}
-              >
-                Save a copy
-              </Button>
-            </div>
-          }
-        >
-          {state.message ?? "The session has ended."} This is the last state you received.
-        </Banner>
-      )}
-
-      <section aria-labelledby="guest-options" className="space-y-2">
-        <h3 id="guest-options" className="text-sm font-medium text-muted-foreground">
-          Rate the options
-        </h3>
-        {disabledReason && live && (
-          <p className="text-sm text-muted-foreground">{disabledReason}</p>
+              </div>
+            }
+          >
+            {state.message ?? "The session has ended."} This is the last state you received.
+          </Banner>
         )}
-        <ul className="space-y-3" aria-label="Options">
-          {options.map((opt, index) => {
-            const stat = stats.get(opt.id);
-            const saved = snapshot.grades.find((g) => g.by === me && g.optionId === opt.id);
-            return (
-              <OptionRow
-                key={opt.id}
-                option={opt}
-                index={index}
-                averageGrade={stat?.average}
-                gradeCount={stat?.count}
-                commentCount={stat?.commentsCount}
-                myGrade={pendingGrades[opt.id] ?? saved?.value}
-                canGrade={canContribute}
-                onGrade={(value) => {
-                  setPendingGrades((p) => ({ ...p, [opt.id]: value }));
-                  submit([
-                    { kind: "grade", optionId: opt.id, value: value as 1 | 2 | 3 | 4 | 5 },
-                  ]).catch(() =>
-                    setPendingGrades((p) => {
-                      const { [opt.id]: _dropped, ...rest } = p;
-                      return rest;
-                    })
-                  );
-                }}
-                comments={
-                  <CommentThread
-                    compact
-                    comments={comments}
-                    pendingIds={pendingIds}
-                    optionId={opt.id}
-                    currentUserId={me}
-                    isOwner={false}
-                    disabled={!canContribute}
-                    disabledReason={disabledReason}
-                    onAddComment={(body) => addComment(opt.id, body)}
-                    onEditComment={(commentId, body) =>
-                      submit([{ kind: "comment", optionId: opt.id, body, replaces: commentId }])
-                    }
-                    onToggleHide={() => {}}
-                  />
-                }
-              />
-            );
-          })}
-        </ul>
-      </section>
 
-      {voting && (
-        <section aria-label="Ballot" className="space-y-4">
-          <RankBallot
+        <section aria-labelledby="guest-options" className="space-y-2">
+          <h3 id="guest-options" className="text-sm font-medium text-muted-foreground">
+            Rate the options
+          </h3>
+          {disabledReason && live && (
+            <p className="text-sm text-muted-foreground">{disabledReason}</p>
+          )}
+          <FilterableOptionList
             options={options}
-            topN={voting.topN}
-            initialRanking={myBallot?.ranking}
-            disabled={!canContribute || voting.state !== "open"}
-            disabledReason={voting.state !== "open" ? "Voting is closed." : disabledReason}
-            onSubmitBallot={(ranking) => submit([{ kind: "ranking", ranking, round }])}
-          />
-          <ResultsView
-            outcomes={snapshot.outcomes}
-            options={snapshot.options}
-            rankings={snapshot.rankings}
-            currentRound={round}
-            liveResults={voting.liveResults}
-            isOpen={voting.state === "open"}
+            renderOption={(opt, index) => {
+              const stat = stats.get(opt.id);
+              const saved = snapshot.grades.find((g) => g.by === me && g.optionId === opt.id);
+              return (
+                <OptionRow
+                  key={opt.id}
+                  option={opt}
+                  index={index}
+                  averageGrade={stat?.average}
+                  gradeCount={stat?.count}
+                  commentCount={stat?.commentsCount}
+                  myGrade={pendingGrades[opt.id] ?? saved?.value}
+                  canGrade={canContribute}
+                  onGrade={(value) => {
+                    setPendingGrades((p) => ({ ...p, [opt.id]: value }));
+                    submit([
+                      { kind: "grade", optionId: opt.id, value: value as 1 | 2 | 3 | 4 | 5 },
+                    ]).catch(() =>
+                      setPendingGrades((p) => {
+                        const { [opt.id]: _dropped, ...rest } = p;
+                        return rest;
+                      })
+                    );
+                  }}
+                  comments={
+                    <CommentThread
+                      compact
+                      comments={comments}
+                      pendingIds={pendingIds}
+                      optionId={opt.id}
+                      currentUserId={me}
+                      isOwner={false}
+                      disabled={!canContribute}
+                      disabledReason={disabledReason}
+                      onAddComment={(body) => addComment(opt.id, body)}
+                      onEditComment={(commentId, body) =>
+                        submit([{ kind: "comment", optionId: opt.id, body, replaces: commentId }])
+                      }
+                      onToggleHide={() => {}}
+                    />
+                  }
+                />
+              );
+            }}
           />
         </section>
-      )}
-    </div>
+
+        {voting && (
+          <section aria-label="Ballot" className="space-y-4">
+            <RankBallot
+              options={options}
+              topN={voting.topN}
+              initialRanking={myBallot?.ranking}
+              disabled={!canContribute || voting.state !== "open"}
+              disabledReason={voting.state !== "open" ? "Voting is closed." : disabledReason}
+              onSubmitBallot={(ranking) => submit([{ kind: "ranking", ranking, round }])}
+            />
+            <ResultsView
+              outcomes={snapshot.outcomes}
+              options={snapshot.options}
+              rankings={snapshot.rankings}
+              currentRound={round}
+              liveResults={voting.liveResults}
+              isOpen={voting.state === "open"}
+            />
+          </section>
+        )}
+      </div>
+    </OptionExtensionsProvider>
   );
 }
 

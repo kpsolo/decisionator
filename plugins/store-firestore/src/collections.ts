@@ -8,6 +8,7 @@ import type {
   PropertyScalar,
   PropertyScope,
   Ranking,
+  ResetTarget,
 } from "@decisionator/core";
 import type { ParticipantRole } from "@decisionator/plugin-sdk";
 
@@ -33,6 +34,13 @@ export interface FirestoreProjectDoc {
     email: string;
     role: ParticipantRole;
   }[];
+  /**
+   * Chosen decision strategy (ProjectStore 1.4.0). In protected projects: its JSON, encrypted
+   * (`enc:v1:`), like the title.
+   */
+  strategy?: NonNullable<Project["strategy"]> | string;
+  /** The last 20 strategy changes. In protected projects: their JSON, encrypted. */
+  strategyChanges?: NonNullable<Project["strategyChanges"]> | string;
 }
 
 export interface FirestoreOptionDoc {
@@ -104,6 +112,19 @@ export type FirestoreEntryDoc =
       scope: PropertyScope;
       /** In protected projects: the JSON of the value, encrypted (`enc:v1:`). */
       value: PropertyScalar;
+      by: string;
+      byName?: string;
+      at: string;
+    }
+  | {
+      id: string;
+      kind: "reset";
+      scope: "all" | "participant";
+      participantId?: string;
+      targets: ResetTarget[];
+      round?: number;
+      plugin?: string;
+      key?: string;
       by: string;
       byName?: string;
       at: string;

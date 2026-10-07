@@ -14,6 +14,7 @@ import {
 } from "../../src/index.js";
 
 const AT = "2026-10-01T10:00:00.000Z";
+const T = (n: number) => `2026-10-01T09:00:0${n}.000Z`;
 
 function sampleBundle(): ProjectExportV1 {
   return createProjectExport({
@@ -162,7 +163,60 @@ function sampleBundle(): ProjectExportV1 {
         value: "42",
       },
     ],
+    history: {
+      grades: [
+        { id: "h1", at: T(1), by: "owner@device", optionId: "opt_lis", value: 2 },
+        { id: "h4", at: T(4), by: "guest:1", byName: "Ana", optionId: "opt_bcn", value: 1 },
+      ],
+      rankings: [
+        { id: "h2", at: T(2), by: "guest:1", byName: "Ana", round: 1, ranking: ["opt_lis"] },
+      ],
+      properties: [
+        {
+          id: "h3",
+          at: T(3),
+          by: "guest:ana",
+          byName: "Ana",
+          optionId: "opt_bcn",
+          plugin: "org.decisionator.option-status",
+          key: "seen",
+          scope: "person",
+          value: "seen",
+        },
+      ],
+    },
+    resets: [
+      {
+        id: "x1",
+        at: T(5),
+        by: "guest:ana",
+        byName: "Ana",
+        scope: "participant",
+        participantId: "guest:ana",
+        targets: ["properties"],
+        plugin: "org.decisionator.option-status",
+        key: "seen",
+      },
+      {
+        id: "x2",
+        at: T(6),
+        by: "owner@device",
+        scope: "all",
+        targets: ["grades", "ballots"],
+        round: 1,
+      },
+    ],
   });
+}
+
+/** The sample workbook with `replace` sheets swapped in (or dropped when `null`). */
+function editedWorkbook(replace: Record<string, (string | number | boolean | null)[][] | null>) {
+  const sheets = readWorkbook(createProjectWorkbook(sampleBundle()));
+  return writeWorkbook(
+    [...sheets.keys()]
+      .filter((name) => replace[name] !== null)
+      .map((name) => ({ name, rows: replace[name] ?? sheets.get(name) ?? [] }))
+  );
 }
 
 describe("project workbook (.xlsx)", () => {
@@ -349,6 +403,107 @@ describe("project workbook (.xlsx)", () => {
   it("older JSON bundles without contributions still parse", () => {
     const { contributions: _omit, ...legacy } = sampleBundle();
     expect(ProjectExportV1Schema.parse(legacy).contributions).toEqual([]);
+  });
+});
+
+describe("project workbook: history and resets", () => {
+  it("writes History in time order and Resets with readable columns", () => {
+    const sheets = readWorkbook(createProjectWorkbook(sampleBundle()));
+    const history = sheets.get(XLSX_SHEETS.history) ?? [];
+    expect(history[0]?.slice(0, 7)).toEqual([
+      "Kind",
+      "Option",
+      "Value",
+      "By",
+      "By name",
+      "At",
+      "Record (JSON)",
+    ]);
+    expect(history.slice(1).map((r) => r.slice(0, 3))).toEqual([
+      ["grade", "Lisbon", "2"],
+      ["ranking", "Round 1", "Lisbon"],
+      ["property", "Barcelona", "seen"],
+      ["grade", "Barcelona", "1"],
+    ]);
+
+    const resets = sheets.get(XLSX_SHEETS.resets) ?? [];
+    expect(resets[0]?.slice(0, 10)).toEqual([
+      "Scope",
+      "Participant",
+      "Targets",
+      "Round",
+      "Plugin",
+      "Key",
+      "By",
+      "By name",
+      "At",
+      "Record (JSON)",
+    ]);
+    expect(resets[2]?.slice(0, 4)).toEqual(["all", "", "grades\nballots", "1"]);
+  });
+
+  it("round-trips history and resets through JSON and the workbook", () => {
+    const bundle = sampleBundle();
+    const fromJson = ProjectExportV1Schema.parse(JSON.parse(JSON.stringify(bundle)));
+    const fromXlsx = readProjectWorkbook(createProjectWorkbook(bundle));
+    for (const restored of [fromJson, fromXlsx]) {
+      expect(restored.history).toEqual(bundle.history);
+      expect(restored.resets).toEqual(bundle.resets);
+    }
+  });
+
+  it("older files without history or resets load with both empty", () => {
+    const { history: _h, resets: _r, ...legacy } = sampleBundle();
+    const parsed = ProjectExportV1Schema.parse(legacy);
+    expect(parsed.history).toEqual({ grades: [], rankings: [], properties: [] });
+    expect(parsed.resets).toEqual([]);
+
+    const restored = readProjectWorkbook(
+      editedWorkbook({ [XLSX_SHEETS.history]: null, [XLSX_SHEETS.resets]: null })
+    );
+    expect(restored.history).toEqual({ grades: [], rankings: [], properties: [] });
+    expect(restored.resets).toEqual([]);
+  });
+
+  it("reads hand-edited rows without a JSON record and skips unreadable history rows", () => {
+    const restored = readProjectWorkbook(
+      editedWorkbook({
+        [XLSX_SHEETS.history]: [
+          ["Kind", "Option", "Value", "By", "At"],
+          ["grade", "Barcelona", 4, "guest:1", T(1)],
+          ["Ranking", "Round 2", "Barcelona\nopt_lis", "guest:1", T(2)],
+          ["property", "Lisbon", "seen", "guest:1", T(3)],
+          ["vote", "Lisbon", 3, "guest:1", T(4)],
+          ["grade", "Lisbon", 9, "guest:1", T(5)],
+        ],
+        [XLSX_SHEETS.resets]: [
+          ["Scope", "Participant", "Targets", "Plugin", "Key", "By"],
+          ["participant", "guest:1", "Grades\nballots", "", "", "owner@device"],
+          ["all", "", "properties", "org.example.budget", "cost", "owner@device"],
+        ],
+      })
+    );
+    expect(restored.history.grades.map((g) => [g.optionId, g.value])).toEqual([["opt_bcn", 4]]);
+    expect(restored.history.rankings.map((r) => [r.round, r.ranking])).toEqual([
+      [2, ["opt_bcn", "opt_lis"]],
+    ]);
+    expect(restored.history.properties).toEqual([]);
+    expect(
+      restored.resets.map((r) => [r.scope, r.participantId, r.targets, r.plugin, r.key])
+    ).toEqual([
+      ["participant", "guest:1", ["grades", "ballots"], undefined, undefined],
+      ["all", undefined, ["properties"], "org.example.budget", "cost"],
+    ]);
+  });
+
+  it("reports an invalid Resets row", () => {
+    const bytes = editedWorkbook({
+      [XLSX_SHEETS.resets]: [
+        ["Scope", "Targets", "By"],
+        ["participant", "grades", "owner@device"],
+      ],
+    });
+    expect(() => readProjectWorkbook(bytes)).toThrow(/Resets row 2/);
   });
 });
 

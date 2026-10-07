@@ -7,7 +7,9 @@ import {
   type Project,
   type PropertyValue,
   type Ranking,
-  propertySlot,
+  type Reset,
+  effectiveEntries,
+  monotonicNow,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -26,8 +28,11 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  applyStrategyPatch,
   checkPropertyEntries,
+  checkResetEntries,
   propertyRecord,
+  resetRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 
@@ -61,7 +66,8 @@ function newId(prefix: string): string {
 
 /**
  * Example ProjectStore (contract v1.4.0) that keeps everything in memory. It shows the rules a
- * store must follow: author stamping, roles, latest-wins, delegated append and soft delete.
+ * store must follow: author stamping, roles, append-only history with resets, delegated append
+ * and soft delete.
  */
 export class MemoryProjectStore implements ProjectStore {
   readonly id = "org.decisionator.examples.store.memory";
@@ -132,12 +138,15 @@ export class MemoryProjectStore implements ProjectStore {
       }
     }
 
-    const grades = new Map<string, Grade>();
+    // Every grade, ballot, property and reset is kept in append order; latest-wins and resets
+    // are applied here (contract `history-resets`).
+    const grades: Grade[] = [];
     const comments: Comment[] = [];
-    const rankings = new Map<string, Ranking>();
+    const rankings: Ranking[] = [];
     const outcomes: OutcomeRecord[] = [];
     const contributions: Contribution[] = [];
-    const properties = new Map<string, PropertyValue>();
+    const properties: PropertyValue[] = [];
+    const resets: Reset[] = [];
 
     for (const entry of data.entries) {
       const author = {
@@ -147,12 +156,7 @@ export class MemoryProjectStore implements ProjectStore {
         ...(entry.byName !== undefined ? { byName: entry.byName } : {}),
       };
       if (entry.kind === "grade") {
-        // Latest wins per (by, optionId)
-        grades.set(JSON.stringify([entry.by, entry.optionId]), {
-          ...author,
-          optionId: entry.optionId,
-          value: entry.value,
-        });
+        grades.push({ ...author, optionId: entry.optionId, value: entry.value });
       } else if (entry.kind === "comment") {
         comments.push({
           ...author,
@@ -162,33 +166,29 @@ export class MemoryProjectStore implements ProjectStore {
           hidden: entry.hidden,
         });
       } else if (entry.kind === "ranking") {
-        // Latest wins per (by, round)
-        const round = entry.round ?? 1;
-        rankings.set(JSON.stringify([entry.by, round]), {
-          ...author,
-          round,
-          ranking: entry.ranking,
-        });
+        rankings.push({ ...author, round: entry.round ?? 1, ranking: entry.ranking });
       } else if (entry.kind === "outcome") {
         outcomes.push(entry.outcome);
       } else if (entry.kind === "contribution") {
         contributions.push(entry.contribution);
       } else if (entry.kind === "property") {
-        // Latest wins per (plugin, key, option), and per author too for person scope
-        const record = propertyRecord(entry, author);
-        properties.set(propertySlot(record), record);
+        properties.push(propertyRecord(entry, author));
+      } else if (entry.kind === "reset") {
+        resets.push(resetRecord(entry, author));
       }
     }
+    const effective = effectiveEntries({ grades, rankings, properties, resets });
 
     return {
       project: { ...data.project },
       options: [...data.options],
-      grades: [...grades.values()],
+      grades: effective.grades,
       comments,
-      rankings: [...rankings.values()],
+      rankings: effective.rankings,
       outcomes,
       contributions,
-      properties: [...properties.values()],
+      properties: effective.properties,
+      history: effective.history,
       role: this.roleOf(data) ?? "view",
     };
   }
@@ -206,7 +206,13 @@ export class MemoryProjectStore implements ProjectStore {
       optionIds: new Set(data.options.map((o) => o.id)),
       isOwner: role === "owner",
     });
-    const at = new Date().toISOString();
+    // Resets: the owner may append any; others only their own (or the delegate's) values.
+    checkResetEntries(
+      entries,
+      delegated
+        ? { isOwner: false, self: delegated.by }
+        : { isOwner: role === "owner", self: this.defaultUser }
+    );
 
     for (const entry of entries) {
       // Caller-supplied `by`/`at` are ignored: the store stamps the author itself.
@@ -217,7 +223,8 @@ export class MemoryProjectStore implements ProjectStore {
         id: newId(entry.kind),
         by: delegated?.by ?? this.defaultUser,
         ...(delegated?.byName !== undefined ? { byName: delegated.byName } : {}),
-        at,
+        // Strictly increasing, so a reset clears exactly the entries appended before it.
+        at: monotonicNow(),
       });
     }
 
@@ -252,6 +259,14 @@ export class MemoryProjectStore implements ProjectStore {
     if (patch.description !== undefined) data.project.description = patch.description;
     if (patch.voting !== undefined) {
       data.project.voting = { ...data.project.voting, ...patch.voting };
+    }
+    if (patch.strategy !== undefined) {
+      data.project = applyStrategyPatch(
+        data.project,
+        patch.strategy,
+        this.defaultUser,
+        monotonicNow()
+      );
     }
     this.notify(ref);
   }

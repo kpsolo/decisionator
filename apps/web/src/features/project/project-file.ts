@@ -26,6 +26,12 @@ export function snapshotToExport(snapshot: ProjectSnapshot): ProjectExportV1 {
     outcomes: snapshot.outcomes,
     contributions: snapshot.contributions ?? [],
     properties: snapshot.properties ?? [],
+    history: {
+      grades: snapshot.history?.grades ?? [],
+      rankings: snapshot.history?.rankings ?? [],
+      properties: snapshot.history?.properties ?? [],
+    },
+    resets: snapshot.history?.resets ?? [],
   });
 }
 
@@ -85,7 +91,9 @@ export async function readProjectFile(file: Blob): Promise<ProjectExportV1> {
  * Re-creates an exported project in `store`: title, description, voting state and options
  * (with their IDs), then every grade, ballot and comment under its original author, the
  * outcomes (so results and verification work as before), contributions and option property
- * values (per-person ones under their author, shared ones under the restoring owner).
+ * values (per-person ones under their author, shared ones under the restoring owner). History
+ * and resets are re-recorded in their original order, so the effective state and the history
+ * both survive.
  */
 export async function restoreProject(
   store: ProjectStore,

@@ -110,14 +110,128 @@ describe("copyEntriesAsAuthors", () => {
       scope,
       value: v,
     });
+    // Oldest first; shared values by the signed-in user whoever set them.
     expect(calls).toEqual([
-      { entries: [entry("person", null)] },
+      { entries: [entry("shared", false), entry("person", null)] },
       {
         entries: [entry("person", "seen_auto")],
         opts: { onBehalfOf: { participantId: "guest:ana", displayName: "Ana" } },
       },
-      // Shared values, oldest first, by the signed-in user whoever set them.
-      { entries: [entry("shared", false), entry("shared", 1200)] },
+      { entries: [entry("shared", 1200)] },
+    ]);
+  });
+
+  it("replays history, effective entries and resets in their original order", async () => {
+    const { store, calls } = recordingStore("me@example.com");
+    const t = (n: number) => `2026-10-06T00:00:0${n}.000Z`;
+    const seen = { optionId: "o1", plugin: "org.decisionator.option-status", key: "seen" };
+
+    await copyEntriesAsAuthors(
+      store,
+      { store: "test", id: "p1" },
+      {
+        grades: [
+          { id: "g3", at: t(3), by: "me@example.com", optionId: "o1", value: 4 },
+          { id: "g7", at: t(7), by: "guest:ana", byName: "Ana", optionId: "o1", value: 1 },
+        ],
+        comments: [],
+        rankings: [],
+        outcomes: [],
+        properties: [
+          { id: "p8", at: t(8), by: "guest:ana", ...seen, scope: "person", value: "seen" },
+        ],
+        history: {
+          grades: [
+            { id: "g1", at: t(1), by: "me@example.com", optionId: "o1", value: 2 },
+            { id: "g2", at: t(2), by: "guest:ana", byName: "Ana", optionId: "o1", value: 5 },
+          ],
+          rankings: [],
+          properties: [
+            { id: "p4", at: t(4), by: "guest:ana", ...seen, scope: "person", value: "seen_auto" },
+          ],
+        },
+        resets: [
+          {
+            id: "x5",
+            at: t(5),
+            by: "me@example.com",
+            scope: "participant",
+            participantId: "guest:ana",
+            targets: ["grades"],
+          },
+          {
+            id: "x6",
+            at: t(6),
+            by: "guest:ana",
+            byName: "Ana",
+            scope: "participant",
+            participantId: "guest:ana",
+            targets: ["properties"],
+            plugin: seen.plugin,
+            key: seen.key,
+          },
+        ],
+      }
+    );
+
+    const ana = { onBehalfOf: { participantId: "guest:ana", displayName: "Ana" } };
+    expect(calls).toEqual([
+      { entries: [{ kind: "grade", optionId: "o1", value: 2 }] },
+      { entries: [{ kind: "grade", optionId: "o1", value: 5 }], opts: ana },
+      { entries: [{ kind: "grade", optionId: "o1", value: 4 }] },
+      {
+        entries: [{ kind: "property", ...seen, scope: "person", value: "seen_auto" }],
+        opts: ana,
+      },
+      // The owner's reset of Ana's grades is the owner's.
+      {
+        entries: [
+          { kind: "reset", scope: "participant", participantId: "guest:ana", targets: ["grades"] },
+        ],
+      },
+      // Ana's reset of her own seen marks stays hers, and starts its own call.
+      {
+        entries: [
+          {
+            kind: "reset",
+            scope: "participant",
+            participantId: "guest:ana",
+            targets: ["properties"],
+            plugin: seen.plugin,
+            key: seen.key,
+          },
+          { kind: "grade", optionId: "o1", value: 1 },
+          { kind: "property", ...seen, scope: "person", value: "seen" },
+        ],
+        opts: ana,
+      },
+    ]);
+  });
+
+  it("takes resets from a snapshot's history", async () => {
+    const { store, calls } = recordingStore("me@example.com");
+    const reset = {
+      id: "x1",
+      at: "2026-10-06T00:00:01.000Z",
+      by: "owner@old-device",
+      scope: "all" as const,
+      targets: ["ballots" as const],
+      round: 2,
+    };
+    await copyEntriesAsAuthors(
+      store,
+      { store: "test", id: "p1" },
+      {
+        grades: [],
+        comments: [],
+        rankings: [],
+        outcomes: [],
+        history: { grades: [], rankings: [], properties: [], resets: [reset] },
+      }
+    );
+    // Not a self property reset: recorded by the signed-in owner.
+    expect(calls).toEqual([
+      { entries: [{ kind: "reset", scope: "all", targets: ["ballots"], round: 2 }] },
     ]);
   });
 });

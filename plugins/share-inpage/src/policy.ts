@@ -9,7 +9,8 @@ export type SubmissionCheck =
 /**
  * Checks a guest's submission against the current project state. Guests may grade and comment on
  * active options, edit their own comments, set their own person-scoped option properties on
- * active options, and rank while voting is open in the current round.
+ * active options, clear their own values of one property (a reset recorded for the guest), and
+ * rank while voting is open in the current round.
  */
 export function checkSubmission(
   snapshot: ProjectSnapshot,
@@ -55,6 +56,24 @@ export function checkSubmission(
         scope: "person",
         value: e.value,
       });
+    } else if (e.kind === "reset") {
+      const ownValues =
+        e.scope === "participant" &&
+        e.targets.length === 1 &&
+        e.targets[0] === "properties" &&
+        e.plugin !== undefined &&
+        e.key !== undefined;
+      if (!ownValues) {
+        return { ok: false, code: "invalid", message: "That change is not allowed." };
+      }
+      entries.push({
+        kind: "reset",
+        scope: "participant",
+        participantId,
+        targets: ["properties"],
+        plugin: e.plugin,
+        key: e.key,
+      });
     } else if (e.kind === "ranking") {
       if (voting?.state !== "open") {
         return { ok: false, code: "voting_closed", message: "Voting is closed." };
@@ -87,8 +106,8 @@ function unknownOption(): SubmissionCheck {
 
 /**
  * What one guest may see: no owner-only material (agent drafts, hidden comment text, encryption
- * parameters, other people's person-scoped option properties) and, while live results are off, no
- * one else's ballot.
+ * parameters, other people's person-scoped option properties, other people's history, resets that
+ * target someone else) and, while live results are off, no one else's ballot.
  */
 export function redactSnapshotFor(
   snapshot: ProjectSnapshot,
@@ -111,6 +130,22 @@ export function redactSnapshotFor(
     properties: (snapshot.properties ?? []).filter(
       (p) => p.scope === "shared" || p.by === participantId
     ),
+    ...(snapshot.history ? { history: redactHistory(snapshot.history, participantId) } : {}),
     role,
+  };
+}
+
+/** A guest's own superseded and cleared entries, plus the resets that apply to everyone or them. */
+function redactHistory(
+  history: NonNullable<ProjectSnapshot["history"]>,
+  participantId: string
+): NonNullable<ProjectSnapshot["history"]> {
+  const mine = <T extends { by: string }>(list: readonly T[]) =>
+    list.filter((e) => e.by === participantId);
+  return {
+    grades: mine(history.grades),
+    rankings: mine(history.rankings),
+    properties: mine(history.properties),
+    resets: history.resets.filter((r) => r.scope === "all" || r.participantId === participantId),
   };
 }

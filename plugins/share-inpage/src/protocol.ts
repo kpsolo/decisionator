@@ -52,6 +52,21 @@ export const GuestEntrySchema = z.discriminatedUnion("kind", [
     /** `null` clears the value; the host caps its size (PROPERTY_VALUE_MAX_BYTES). */
     value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
   }),
+  z.object({
+    kind: z.literal("reset"),
+    /**
+     * Guests may only clear their own values of one property: `scope: "participant"`,
+     * `targets: ["properties"]`, `plugin` and `key`. The host sets `participantId` to the guest;
+     * anything else parses so the host can refuse it clearly.
+     */
+    scope: z.union([z.literal("all"), z.literal("participant")]),
+    targets: z
+      .array(z.enum(["grades", "ballots", "properties"]))
+      .min(1)
+      .max(3),
+    plugin: z.string().min(1).max(200).optional(),
+    key: z.string().min(1).max(40).optional(),
+  }),
 ]);
 export type GuestEntry = z.infer<typeof GuestEntrySchema>;
 

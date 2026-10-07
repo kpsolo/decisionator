@@ -473,3 +473,148 @@ describe("option properties over live share (proto 3)", () => {
     expect(got[0]).toMatchObject({ t: "error", code: "protocol_mismatch" });
   });
 });
+
+describe("resets and history over live share (proto 3)", () => {
+  const STATUS = { plugin: "status-personal", key: "status" } as const;
+
+  it("lets a guest clear their own person values, and only theirs", async () => {
+    const { host, project } = await startHost();
+    await project.ownerAppend([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "owner-mark" },
+    ]);
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    const aliceId = alice.getState().participantId;
+    const bobId = bob.getState().participantId;
+    await alice.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "seen" },
+      { kind: "property", optionId: "b", ...STATUS, scope: "person", value: "done" },
+    ]);
+    await bob.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "bob-mark" },
+    ]);
+
+    await alice.submit([
+      { kind: "reset", scope: "participant", targets: ["properties"], ...STATUS },
+    ]);
+
+    expect(project.appendCalls.at(-1)?.entries).toEqual([
+      {
+        kind: "reset",
+        scope: "participant",
+        participantId: aliceId,
+        targets: ["properties"],
+        ...STATUS,
+      },
+    ]);
+    expect(project.state.properties?.map((p) => [p.by, p.value]).sort()).toEqual(
+      [
+        [OWNER, "owner-mark"],
+        [bobId, "bob-mark"],
+      ].sort()
+    );
+    expect(project.state.history?.properties.map((p) => p.value).sort()).toEqual(["done", "seen"]);
+    await until(
+      () =>
+        (alice.getState().snapshot?.properties ?? []).length === 0 &&
+        (alice.getState().snapshot?.history?.resets.length ?? 0) === 1
+    );
+  });
+
+  it("refuses any other guest reset", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const refused = [
+      { kind: "reset", scope: "all", targets: ["properties"], ...STATUS },
+      { kind: "reset", scope: "participant", targets: ["grades"], ...STATUS },
+      { kind: "reset", scope: "participant", targets: ["properties", "ballots"], ...STATUS },
+      { kind: "reset", scope: "participant", targets: ["properties"] },
+    ] as const;
+    for (const entry of refused) {
+      await expect(alice.submit([entry as never])).rejects.toMatchObject({
+        code: "invalid",
+        message: "That change is not allowed.",
+      });
+    }
+    expect(project.appendCalls).toHaveLength(0);
+  });
+
+  it("records a guest reset for the guest even if the guest names someone else", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    await alice.submit([
+      {
+        kind: "reset",
+        scope: "participant",
+        participantId: OWNER,
+        targets: ["properties"],
+        ...STATUS,
+      } as never,
+    ]);
+    expect(project.appendCalls[0]?.entries[0]).toMatchObject({
+      participantId: alice.getState().participantId,
+    });
+  });
+
+  it("delivers an owner reset to the guest, whose grade disappears", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const aliceId = alice.getState().participantId ?? "";
+    await alice.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    await until(() => (alice.getState().snapshot?.grades.length ?? 0) === 1);
+
+    await project.ownerAppend([
+      { kind: "reset", scope: "participant", participantId: aliceId, targets: ["grades"] },
+    ]);
+    await until(() => (alice.getState().snapshot?.grades.length ?? 0) === 0);
+    const history = alice.getState().snapshot?.history;
+    expect(history?.grades.map((g) => g.value)).toEqual([4]);
+    expect(history?.resets.map((r) => r.participantId)).toEqual([aliceId]);
+  });
+
+  it("shows a guest only their own history and the resets that concern them", async () => {
+    const { host, project } = await startHost();
+    const alice = await joined(makeGuest(host, "Alice").guest);
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    const aliceId = alice.getState().participantId ?? "";
+    const bobId = bob.getState().participantId ?? "";
+    await project.ownerAppend([{ kind: "grade", optionId: "a", value: 5 }]);
+    await project.ownerAppend([{ kind: "grade", optionId: "a", value: 1 }]);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 2 }]);
+    await alice.submit([{ kind: "grade", optionId: "a", value: 3 }]);
+    await bob.submit([{ kind: "grade", optionId: "b", value: 2 }]);
+    await bob.submit([{ kind: "grade", optionId: "b", value: 4 }]);
+    await bob.submit([
+      { kind: "property", optionId: "a", ...STATUS, scope: "person", value: "bob-mark" },
+    ]);
+    await bob.submit([{ kind: "reset", scope: "participant", targets: ["properties"], ...STATUS }]);
+    await project.ownerAppend([
+      { kind: "reset", scope: "participant", participantId: bobId, targets: ["grades"] },
+      { kind: "reset", scope: "all", targets: ["ballots"] },
+    ]);
+
+    // The owner's store keeps everything.
+    expect(project.state.history?.grades.map((g) => g.by).sort()).toEqual(
+      [OWNER, aliceId, bobId, bobId].sort()
+    );
+    expect(project.state.history?.resets).toHaveLength(3);
+
+    await until(() => (alice.getState().snapshot?.history?.resets.length ?? 0) === 1);
+    await until(() => (bob.getState().snapshot?.history?.resets.length ?? 0) === 3);
+    const aliceHistory = alice.getState().snapshot?.history;
+    expect(aliceHistory?.grades.map((g) => [g.by, g.value])).toEqual([[aliceId, 2]]);
+    expect(aliceHistory?.rankings).toEqual([]);
+    expect(aliceHistory?.properties).toEqual([]);
+    expect(aliceHistory?.resets.map((r) => r.scope)).toEqual(["all"]);
+
+    const bobHistory = bob.getState().snapshot?.history;
+    expect(bobHistory?.grades.every((g) => g.by === bobId)).toBe(true);
+    expect(bobHistory?.grades.map((g) => g.value)).toEqual([2, 4]);
+    expect(bobHistory?.properties.map((p) => p.value)).toEqual(["bob-mark"]);
+    expect(bobHistory?.resets.map((r) => r.scope).sort()).toEqual([
+      "all",
+      "participant",
+      "participant",
+    ]);
+  });
+});

@@ -1,17 +1,17 @@
 import {
-  type Grade,
   type Option,
   type Project,
-  type Ranking,
+  ProjectSchema,
   type VotingState,
   VotingStateSchema,
   checkVerifier,
   decrypt,
   deriveKey,
-  effectivePropertyValues,
+  effectiveEntries,
   encrypt,
   generateSalt,
   makeVerifier,
+  monotonicNow,
 } from "@decisionator/core";
 import {
   type AppendOptions,
@@ -30,7 +30,10 @@ import {
   type ShareRequest,
   type ShareState,
   type Unsubscribe,
+  applyStrategyPatch,
   checkPropertyEntries,
+  checkResetEntries,
+  resetRecord,
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import type { GoogleAuthService } from "./auth.js";
@@ -46,6 +49,7 @@ import {
   decodeOutcomeRow,
   decodePropertyRow,
   decodeRankingRow,
+  decodeResetRow,
 } from "./rows.js";
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -106,6 +110,37 @@ function parseVoting(raw: string | undefined): { state: VotingState; warning?: s
   }
 }
 
+type StrategyMeta = Pick<Project, "strategy" | "strategyChanges">;
+
+/**
+ * Reads the `strategy` and `strategyChanges` meta values (JSON, encrypted in password mode like
+ * the title). An invalid value is skipped with a warning.
+ */
+async function readStrategyMeta(
+  meta: { values: Map<string, string>; rowOf: Map<string, number> },
+  key: CryptoKey | undefined,
+  warnings: string[]
+): Promise<StrategyMeta> {
+  const out: StrategyMeta = {};
+  for (const name of ["strategy", "strategyChanges"] as const) {
+    const raw = meta.values.get(name);
+    if (!raw) continue;
+    try {
+      const json = key ? await decrypt(raw, key) : raw;
+      const parsed = ProjectSchema.shape[name].safeParse(JSON.parse(json));
+      if (!parsed.success) {
+        throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+      }
+      if (name === "strategy") out.strategy = parsed.data as StrategyMeta["strategy"];
+      else out.strategyChanges = parsed.data as StrategyMeta["strategyChanges"];
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : String(err);
+      warnings.push(`meta row ${meta.rowOf.get(name)}: invalid ${name} value (${reason})`);
+    }
+  }
+  return out;
+}
+
 /** Tabs whose payload column is encrypted in password mode: [tab, columns, payload column]. */
 const PAYLOAD_TABS: [string, string, number][] = [
   ["options", "A:F", 5],
@@ -115,10 +150,11 @@ const PAYLOAD_TABS: [string, string, number][] = [
   ["outcomes", "A:D", 3],
   ["contributions", "A:F", 5],
   ["properties", "A:E", 4],
+  ["resets", "A:D", 3],
 ];
 
 /** Tabs added after format v1 was released; a project may lack them until it is migrated. */
-const LATER_TABS = ["contributions", "properties"];
+const LATER_TABS = ["contributions", "properties", "resets"];
 
 export class GoogleSheetsProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.google-sheets";
@@ -174,6 +210,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       "outcomes",
       "contributions",
       "properties",
+      "resets",
     ];
     const spreadsheet = await this.client.createSpreadsheet(input.title, sheetTitles);
     const spreadsheetId = spreadsheet.spreadsheetId;
@@ -254,6 +291,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         values: [["id", "at", "by", "targetKind", "targetId", "payload"]],
       },
       { range: "properties!A:E", values: [[...TAB_HEADERS.properties]] },
+      { range: "resets!A:D", values: [[...TAB_HEADERS.resets]] },
     ]);
 
     this.protection.set(spreadsheetId, Boolean(opts?.password));
@@ -279,8 +317,8 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       data = await this.client.batchGetValues(ref.id, ranges);
     } catch (err) {
       // An older project lacks the tabs added since (a format v1 project has no contributions
-      // tab, a project from before sheet layout 2.3.0 no properties tab), and a read naming a
-      // missing tab fails as a whole.
+      // tab, a project from before sheet layout 2.3.0 no properties or resets tab), and a read
+      // naming a missing tab fails as a whole.
       if (!(err instanceof BadRequestError)) throw err;
       const titles = await this.client.getSheetTitles(ref.id);
       missingTabs = LATER_TABS.filter((tab) => !titles.includes(tab));
@@ -347,6 +385,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       description,
       protected: isProtected,
       voting: voting.state,
+      ...(await readStrategyMeta(meta, cryptoKey, warnings)),
       formatVersion,
     };
 
@@ -368,10 +407,15 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         }
         if (missingTabs.includes("contributions")) addTabs.push("contributions");
       }
-      // Sheet layout 2.3.0 adds the properties tab (additive: formatVersion stays 2).
+      // Sheet layout 2.3.0 adds the properties and resets tabs (additive: formatVersion
+      // stays 2).
       if (missingTabs.includes("properties")) {
         addTabs.push("properties");
         updates.push({ range: "properties!A1:E1", values: [[...TAB_HEADERS.properties]] });
+      }
+      if (missingTabs.includes("resets")) {
+        addTabs.push("resets");
+        updates.push({ range: "resets!A1:D1", values: [[...TAB_HEADERS.resets]] });
       }
       if (updates.length > 0) {
         try {
@@ -406,45 +450,36 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const options = await decodeTab("options", (row, n) => decodeOptionRow(row, n, hook));
     this.optionIds.set(ref.id, new Set(options.map((o) => o.id)));
 
-    // Latest wins per (by, optionId)
-    const gradesMap = new Map<string, Grade>();
-    for (const grade of await decodeTab("grades", (row, n) =>
-      decodeGradeRow(row, n, undefined, hook)
-    )) {
-      gradesMap.set(JSON.stringify([grade.by, grade.optionId]), grade);
-    }
+    const grades = await decodeTab("grades", (row, n) => decodeGradeRow(row, n, undefined, hook));
 
     const comments = await decodeTab("comments", (row, n) =>
       decodeCommentRow(row, n, undefined, hook)
     );
 
-    // Latest wins per (by, round)
-    const rankingsMap = new Map<string, Ranking>();
-    for (const ranking of await decodeTab("rankings", (row, n) =>
+    const rankings = await decodeTab("rankings", (row, n) =>
       decodeRankingRow(row, n, undefined, hook)
-    )) {
-      rankingsMap.set(JSON.stringify([ranking.by, ranking.round]), ranking);
-    }
+    );
 
     const outcomes = await decodeTab("outcomes", (row, n) => decodeOutcomeRow(row, n, hook));
     const contributions = await decodeTab("contributions", (row, n) =>
       decodeContributionRow(row, n, hook)
     );
-    // Latest wins per (plugin, key, optionId), and per author for person values. Rows are in
-    // append order, so a later row wins on an equal timestamp.
-    const properties = effectivePropertyValues(
-      await decodeTab("properties", (row, n) => decodePropertyRow(row, n, hook))
-    );
+    const properties = await decodeTab("properties", (row, n) => decodePropertyRow(row, n, hook));
+    const resets = await decodeTab("resets", (row, n) => decodeResetRow(row, n, hook));
+    // Latest-wins and resets. Rows of every tab are in append order, so a later row wins on an
+    // equal timestamp.
+    const effective = effectiveEntries({ grades, rankings, properties, resets });
 
     return {
       project,
       options,
-      grades: Array.from(gradesMap.values()),
+      grades: effective.grades,
       comments,
-      rankings: Array.from(rankingsMap.values()),
+      rankings: effective.rankings,
       outcomes,
       contributions,
-      properties,
+      properties: effective.properties,
+      history: effective.history,
       role,
       ...(warnings.length > 0 ? { warnings } : {}),
     };
@@ -493,6 +528,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         isOwner: role === "owner",
       });
     }
+    checkResetEntries(entries, { isOwner: role === "owner" && !delegated, self: by });
 
     // A ranking without a round counts for the round the project is voting in now.
     const needsRound = entries.some((e) => e.kind === "ranking" && e.round === undefined);
@@ -509,10 +545,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       return key ? encrypt(json, key) : json;
     };
 
-    const now = new Date().toISOString();
     const rows: { tab: string; row: string[] }[] = [];
 
     for (const entry of entries) {
+      // Strictly increasing stamps keep "appended after a reset" decidable by time.
+      const now = monotonicNow();
       const entryId = `entry_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       if (entry.kind === "grade") {
@@ -565,6 +602,18 @@ export class GoogleSheetsProjectStore implements ProjectStore {
             }),
           ],
         });
+      } else if (entry.kind === "reset") {
+        const {
+          id: _id,
+          at: _at,
+          by: _by,
+          ...payload
+        } = resetRecord(entry, {
+          id: entryId,
+          at: now,
+          by,
+        });
+        rows.push({ tab: "resets", row: [entryId, now, by, await seal({ ...payload, byName })] });
       } else if (entry.kind === "contribution") {
         const c = entry.contribution;
         rows.push({
@@ -653,7 +702,14 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     if (snap.project.protected && !key) {
       throw new Error("Password required to decrypt project");
     }
-    if (patch.title === undefined && patch.description === undefined && !patch.voting) return;
+    if (
+      patch.title === undefined &&
+      patch.description === undefined &&
+      !patch.voting &&
+      !patch.strategy
+    ) {
+      return;
+    }
 
     // Rows are addressed by key: their position differs between plain and protected projects.
     const data = await this.client.batchGetValues(ref.id, ["meta!A:B"]);
@@ -676,6 +732,21 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const voting = patch.voting ? { ...snap.project.voting, ...patch.voting } : undefined;
     if (voting) {
       set("voting", JSON.stringify(voting));
+    }
+    if (patch.strategy) {
+      const identity = await this.auth.getIdentity();
+      const next = applyStrategyPatch(
+        { strategy: snap.project.strategy, strategyChanges: snap.project.strategyChanges },
+        patch.strategy,
+        identity.participantId,
+        monotonicNow()
+      );
+      const sealJson = (value: unknown) => {
+        const json = JSON.stringify(value);
+        return key ? encrypt(json, key) : json;
+      };
+      set("strategy", await sealJson(next.strategy));
+      set("strategyChanges", await sealJson(next.strategyChanges));
     }
 
     await this.client.batchUpdateValues(ref.id, [{ range: "meta!A:B", values: rows }]);
@@ -839,6 +910,15 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     setMeta("title", await encrypt(snap.project.title, cryptoKey));
     if (snap.project.description) {
       setMeta("description", await encrypt(snap.project.description, cryptoKey));
+    }
+    if (snap.project.strategy) {
+      setMeta("strategy", await encrypt(JSON.stringify(snap.project.strategy), cryptoKey));
+    }
+    if (snap.project.strategyChanges) {
+      setMeta(
+        "strategyChanges",
+        await encrypt(JSON.stringify(snap.project.strategyChanges), cryptoKey)
+      );
     }
 
     // 4. Encrypt the payload column of every row of every content tab, in place.

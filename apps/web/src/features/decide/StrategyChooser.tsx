@@ -1,10 +1,6 @@
 import { latestOutcome, runTally } from "@decisionator/core";
 import type { Option, OutcomeRecord, Project } from "@decisionator/core";
 import type { ProjectRef, ProjectSnapshot, ProjectStore } from "@decisionator/plugin-sdk";
-import { bordaStrategy } from "@decisionator/strategy-borda";
-import { ownerPickStrategy } from "@decisionator/strategy-owner-pick";
-import { randomStrategy } from "@decisionator/strategy-random";
-import { weightedStrategy } from "@decisionator/strategy-weighted";
 import { CheckCircle2, Play, Sparkles } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -19,58 +15,10 @@ import {
   CardTitle,
 } from "../../components/ui/card.js";
 import { NativeSelect } from "../../components/ui/native-select.js";
+import { BUILTIN_STRATEGIES, type StrategyDescriptor } from "./strategies.js";
 
-export interface StrategyDescriptor {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  usesRandomness: boolean;
-  interactive?: boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: strategy plugin interface
-  strategy: any;
-}
-
-export const BUILTIN_STRATEGIES: StrategyDescriptor[] = [
-  {
-    id: "org.decisionator.strategy.borda",
-    name: "Borda Count Ranking",
-    version: "0.1.0",
-    description: "Points-based ranking over contributor ballots with deterministic tie-breaking.",
-    usesRandomness: true,
-    strategy: bordaStrategy,
-  },
-  {
-    id: "org.decisionator.strategy.owner-pick",
-    name: "Owner Direct Pick",
-    version: "0.1.0",
-    description: "The owner directly designates the winning option.",
-    usesRandomness: false,
-    interactive: true,
-    strategy: ownerPickStrategy,
-  },
-  {
-    id: "org.decisionator.strategy.random",
-    name: "Uniform Random Draw",
-    version: "0.1.0",
-    description: "Fair, unweighted random selection with reproducible CSPRNG seed.",
-    usesRandomness: true,
-    strategy: randomStrategy,
-  },
-  {
-    id: "org.decisionator.strategy.weighted",
-    name: "Random Weighted by Grades",
-    version: "0.1.0",
-    description: "Draws an option with probability proportional to its average grade.",
-    usesRandomness: true,
-    strategy: weightedStrategy,
-  },
-];
-
-/** Display name of a strategy id; unknown (third-party) ids are shown as-is. */
-export function strategyName(id: string): string {
-  return BUILTIN_STRATEGIES.find((s) => s.id === id)?.name ?? id;
-}
+export { BUILTIN_STRATEGIES, strategyName } from "./strategies.js";
+export type { StrategyDescriptor } from "./strategies.js";
 
 const DEFAULT_STRATEGY_ID = "org.decisionator.strategy.random";
 

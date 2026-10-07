@@ -220,7 +220,7 @@ store, and the host plumbing. No story can be shown without them.
 - [x] T024 [P] Attach `exposureRef(option.id)` to option rows in
   `apps/web/src/features/voting/RankBallot.tsx` (`SortableOptionItem`) and
   `apps/web/src/features/voting/ResultsView.tsx`.
-- [ ] T025 `apps/web/src/app/ProjectViewPage.tsx`:
+- [x] T025 `apps/web/src/app/ProjectViewPage.tsx`:
   - wrap the page in `OptionExtensionsProvider` with `viewerId = currentUser` and
     `appendProperties = (entries) => store.append(ref, entries)`, with an optimistic snapshot
     update like grades;
@@ -292,7 +292,7 @@ a count and an "Only not seen" filter; marks are private, including for live gue
     changeset.
   
   T030 should pass.
-- [ ] T032 [US1] `apps/web/src/features/live/GuestSession.tsx`:
+- [x] T032 [US1] `apps/web/src/features/live/GuestSession.tsx`:
   - wrap `GuestWorkspace` in `OptionExtensionsProvider` with `viewerId = me`;
   - `appendProperties` queues entries and flushes them through `guest.submit` at most every 2 s
     (≤ 50 per submit);
@@ -454,7 +454,7 @@ the dot back).
 **Independent Test**: spec US5 (a re-grade from 3 to 4 shows its time and "Changed from 3"; the
 seen action shows "Seen automatically · time").
 
-- [ ] T051 [P] [US5] Write `packages/core/test/history.test.ts` for `effectiveEntries`, per
+- [x] T051 [P] [US5] Write `packages/core/test/history.test.ts` for `effectiveEntries`, per
   data-model.md "Reset" and contracts/history-resets.md:
   - latest wins per slot, and superseded entries go to `history` oldest first;
   - a participant reset clears only that participant's entries appended earlier;
@@ -462,7 +462,7 @@ seen action shows "Seen automatically · time").
   - an all-scope reset clears only `shared` properties;
   - a reset never clears entries appended after it;
   - the `plugin`/`key` limits apply.
-- [ ] T052 [US5] Create `packages/core/src/model/history.ts`:
+- [x] T052 [US5] Create `packages/core/src/model/history.ts`:
   - `ResetSchema` with these rules: targets are 1–3 unique values; `participantId` is required
     if and only if the scope is `participant`; `plugin` and `key` come together; `round` ≥ 1;
   - `effectiveEntries({ grades, rankings, properties, resets })` returning
@@ -473,39 +473,39 @@ seen action shows "Seen automatically · time").
   `packages/plugin-sdk/src/delegation.ts` allows `reset` only in the self form, and
   `packages/plugin-sdk/src/property-entries.ts` gets `checkResetEntries(entries, { isOwner, self })`.
   T051 should pass.
-- [ ] T053 [US5] Add the contract-kit cases from contracts/history-resets.md ("Contract-kit
+- [x] T053 [US5] Add the contract-kit cases from contracts/history-resets.md ("Contract-kit
   cases") to `packages/plugin-sdk/testing/project-store-kit.ts`, under the describe
   "history and resets (v1.4.0)". They fail first.
-- [ ] T054 [P] [US5] `plugins/store-file/src/file-store.ts`:
+- [x] T054 [P] [US5] `plugins/store-file/src/file-store.ts`:
   - append grades, rankings and properties instead of replacing them;
   - store resets;
   - build the snapshot with `effectiveEntries`, including `history`.
-- [ ] T055 [P] [US5] `plugins/store-local/src/store.ts`: the same as T054 for Automerge, never
+- [x] T055 [P] [US5] `plugins/store-local/src/store.ts`: the same as T054 for Automerge, never
   storing `undefined`.
-- [ ] T056 [P] [US5] `plugins/store-firestore/src/{collections,firestore-store}.ts`: a `reset`
+- [x] T056 [P] [US5] `plugins/store-firestore/src/{collections,firestore-store}.ts`: a `reset`
   entry doc; `buildEntries` uses `effectiveEntries` and returns `history`.
-- [ ] T057 [P] [US5] Google Sheets:
+- [x] T057 [P] [US5] Google Sheets:
   - `plugins/store-google-sheets/src/layout.ts`: tab `resets[id,at,by,payload]`, added in the
     same 2.3.0 migration;
   - `src/rows.ts`: `decodeResetRow`;
   - `src/sheet-store.ts`: `effectiveEntries` over row order, and `history`;
   - update `specs/001-decision-engine-core/contracts/sheet-store.md`.
-- [ ] T058 [P] [US5] `examples/plugin-store-memory/src/index.ts`: append plus
+- [x] T058 [P] [US5] `examples/plugin-store-memory/src/index.ts`: append plus
   `effectiveEntries`. Add the rules from contracts/history-resets.md to
   `specs/001-decision-engine-core/contracts/project-store.md` (1.4.0).
-- [ ] T059 [US5] Live share:
+- [x] T059 [US5] Live share:
   - `plugins/share-inpage/src/policy.ts`: `redactSnapshotFor` passes `history` filtered to the
     guest's own grades, rankings and properties, plus resets with `scope: "all"` or that target
     the guest;
   - tests in `plugins/share-inpage/test/host-guest.test.ts`;
   - update `specs/004-live-share-network/contracts/live-share.md` (3.0.0).
-- [ ] T060 [P] [US5] Export:
+- [x] T060 [P] [US5] Export:
   - `packages/core/src/export/project-v1.ts`: optional `history` and `resets` (default empty),
     mirrored in the JSON schema;
   - `project-xlsx.ts`: "History" and "Resets" sheets;
   - round-trip tests in `packages/core/test/export/`;
   - update `docs/project-export.md`.
-- [ ] T061 [US5] `apps/web/src/features/project/copy-entries.ts`: restore and Move re-append the
+- [x] T061 [US5] `apps/web/src/features/project/copy-entries.ts`: restore and Move re-append the
   history in its original order (per author, through `onBehalfOf`), then the effective entries and
   resets. Extend `copy-entries.test.ts` and `project-file.test.ts`.
 - [ ] T062 [P] [US5] Create `apps/web/src/features/history/time-texts.ts`:
@@ -597,7 +597,7 @@ shown; the outcome names Weighted grades).
   - `MetaPatch.strategy` in `packages/plugin-sdk/src/project-store.ts`;
   - `updateMeta` and the read path in all five stores (Sheets meta keys `strategy` and
     `strategyChanges`).
-- [ ] T072 [US7] Create `apps/web/src/features/decide/strategies.ts`:
+- [x] T072 [US7] Create `apps/web/src/features/decide/strategies.ts`:
   - move `BUILTIN_STRATEGIES` and the descriptors out of `StrategyChooser.tsx`;
   - `enabledStrategies()`;
   - `chosenStrategy(snapshot)`, falling back to Borda with `{ topN: voting.topN }`;
@@ -628,7 +628,7 @@ shown; the outcome names Weighted grades).
 **Independent Test**: spec US8 (a row per strategy, differences marked, the same random draw on
 reopening, and Adopt records exactly one outcome).
 
-- [ ] T076 [P] [US8] Write `apps/web/src/features/decide/compare.test.ts`, then
+- [x] T076 [P] [US8] Write `apps/web/src/features/decide/compare.test.ts`, then
   `compare.ts`'s `compareStrategies(snapshot, strategies, chosenId)`:
   - the seed is `hex(SHA-256(canonical tally input))[0..32]`;
   - each row is `{ ok, order, winner, seed }` or `{ ok: false, reason }`;

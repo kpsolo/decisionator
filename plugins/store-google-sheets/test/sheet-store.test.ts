@@ -243,7 +243,7 @@ describe("GoogleSheetsProjectStore", () => {
     });
   });
 
-  describe("properties tab migration (sheet layout 2.3.0)", () => {
+  describe("properties and resets tab migration (sheet layout 2.3.0)", () => {
     const seen = {
       kind: "property" as const,
       optionId: OPT,
@@ -252,18 +252,29 @@ describe("GoogleSheetsProjectStore", () => {
       scope: "person" as const,
       value: "seen",
     };
+    const seenReset = {
+      kind: "reset" as const,
+      scope: "participant" as const,
+      participantId: "owner@example.com",
+      targets: ["properties" as const],
+      plugin: "org.decisionator.option-status",
+      key: "seen",
+    };
 
     it("adds the missing properties tab on open, then appends and reads a property", async () => {
       const { store, client } = setupStore();
       const ref = await store.createProject({ title: "Before 2.3.0", options: [option] });
       const grid = fakeGoogleState.sheets.get(ref.id);
       grid?.tabs.delete("properties");
+      grid?.tabs.delete("resets");
 
       const fresh = setupStore().store;
       const snap = await fresh.openProject(ref);
       expect(snap.project.formatVersion).toBe(2);
       expect(snap.properties).toEqual([]);
+      expect(snap.history?.resets).toEqual([]);
       expect(grid?.tabs.get("properties")?.[0]).toEqual(["id", "at", "by", "optionId", "payload"]);
+      expect(grid?.tabs.get("resets")?.[0]).toEqual(["id", "at", "by", "payload"]);
 
       await fresh.append(ref, [seen]);
       const raw = await client.batchGetValues(ref.id, ["properties!A:E"]);
@@ -284,6 +295,35 @@ describe("GoogleSheetsProjectStore", () => {
         value: "seen",
       });
       expect(reread.warnings).toBeUndefined();
+
+      await fresh.append(ref, [seenReset]);
+      const resetRows = (await client.batchGetValues(ref.id, ["resets!A:D"])).valueRanges[0]
+        ?.values;
+      expect(resetRows).toHaveLength(2);
+      expect(JSON.parse(resetRows?.[1]?.[3] ?? "{}")).toMatchObject({
+        scope: "participant",
+        participantId: "owner@example.com",
+        targets: ["properties"],
+        plugin: seenReset.plugin,
+        key: "seen",
+      });
+      const afterReset = await setupStore().store.openProject(ref);
+      expect(afterReset.properties).toEqual([]);
+      expect(afterReset.history?.properties.map((p) => p.value)).toEqual(["seen"]);
+      expect(afterReset.history?.resets).toHaveLength(1);
+    });
+
+    it("adds only the resets tab to a project that already has properties", async () => {
+      const { store } = setupStore();
+      const ref = await store.createProject({ title: "Early 2.3.0", options: [option] });
+      await store.append(ref, [seen]);
+      const grid = fakeGoogleState.sheets.get(ref.id);
+      grid?.tabs.delete("resets");
+
+      const snap = await setupStore().store.openProject(ref);
+      expect(snap.properties?.map((p) => p.value)).toEqual(["seen"]);
+      expect(grid?.tabs.get("resets")?.[0]).toEqual(["id", "at", "by", "payload"]);
+      expect(grid?.tabs.get("properties")).toHaveLength(2);
     });
 
     it("opens a project without a properties tab read-only for a viewer", async () => {
@@ -292,11 +332,13 @@ describe("GoogleSheetsProjectStore", () => {
       await store.share(ref, { inviteUsers: [{ email: "viewer@example.com", role: "view" }] });
       const grid = fakeGoogleState.sheets.get(ref.id);
       grid?.tabs.delete("properties");
+      grid?.tabs.delete("resets");
 
       const snap = await setupStore("viewer@example.com").store.openProject(ref);
       expect(snap.role).toBe("view");
       expect(snap.properties).toEqual([]);
       expect(grid?.tabs.has("properties")).toBe(false);
+      expect(grid?.tabs.has("resets")).toBe(false);
     });
 
     it("encrypts property payloads in password mode and skips bad rows with a warning", async () => {
@@ -317,6 +359,28 @@ describe("GoogleSheetsProjectStore", () => {
       const snap = await setupStore().store.openProject(ref, { password: PASSWORD });
       expect(snap.properties?.map((p) => p.value)).toEqual(["seen"]);
       expect(snap.warnings?.some((w) => w.startsWith("properties row 3:"))).toBe(true);
+    });
+
+    it("encrypts reset payloads in password mode and skips bad rows with a warning", async () => {
+      const { store, client } = setupStore();
+      const ref = await store.createProject(
+        { title: "Protected", options: [option] },
+        { password: PASSWORD }
+      );
+      await store.openProject(ref, { password: PASSWORD });
+      await store.append(ref, [seen]);
+      await store.append(ref, [seenReset]);
+      await client.appendValues(ref.id, "resets!A:D", [
+        ["r_bad", "2026-10-07T00:00:00Z", "x@example.com", "enc:v1:broken"],
+      ]);
+
+      const raw = await client.batchGetValues(ref.id, ["resets!A:D"]);
+      expect(raw.valueRanges[0]?.values?.[1]?.[3]?.startsWith("enc:v1:")).toBe(true);
+
+      const snap = await setupStore().store.openProject(ref, { password: PASSWORD });
+      expect(snap.properties).toEqual([]);
+      expect(snap.history?.resets).toHaveLength(1);
+      expect(snap.warnings?.some((w) => w.startsWith("resets row 3:"))).toBe(true);
     });
   });
 });

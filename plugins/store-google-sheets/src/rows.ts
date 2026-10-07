@@ -13,6 +13,8 @@ import {
   PropertyValueSchema,
   type Ranking,
   RankingSchema,
+  type Reset,
+  ResetSchema,
 } from "@decisionator/core";
 import { readStoredByName } from "@decisionator/plugin-sdk";
 
@@ -448,5 +450,55 @@ export async function decodePropertyRow(
     return { entity: parseRes.data };
   } catch (err: unknown) {
     return { warning: `properties row ${rowIndex}: invalid JSON payload (${errorMessage(err)})` };
+  }
+}
+
+/**
+ * Reset Row Codec (sheet layout 2.3.0)
+ * Tab: resets (id, at, by, payload); payload `{scope,participantId?,targets,round?,plugin?,key?,byName?}`
+ */
+export async function decodeResetRow(
+  row: string[],
+  rowIndex: number,
+  payloadHook?: PayloadHook
+): Promise<RowDecodeResult<Reset>> {
+  const [id, at, by, rawPayload] = row;
+  if (!rawPayload) {
+    return { warning: `resets row ${rowIndex}: empty payload column` };
+  }
+
+  let jsonStr = rawPayload;
+  if (payloadHook) {
+    try {
+      jsonStr = await payloadHook(rawPayload);
+    } catch (err: unknown) {
+      return {
+        warning: `resets row ${rowIndex}: failed to decrypt payload (${errorMessage(err)})`,
+      };
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const parseRes = ResetSchema.safeParse({
+      id: id || "",
+      at: at || "",
+      by: by || "",
+      ...byNameField(parsed),
+      scope: parsed?.scope,
+      targets: parsed?.targets,
+      ...(parsed?.participantId !== undefined ? { participantId: parsed.participantId } : {}),
+      ...(parsed?.round !== undefined ? { round: parsed.round } : {}),
+      ...(parsed?.plugin !== undefined ? { plugin: parsed.plugin } : {}),
+      ...(parsed?.key !== undefined ? { key: parsed.key } : {}),
+    });
+    if (!parseRes.success) {
+      return {
+        warning: `resets row ${rowIndex}: validation failed (${parseRes.error.issues.map((i) => i.message).join(", ")})`,
+      };
+    }
+    return { entity: parseRes.data };
+  } catch (err: unknown) {
+    return { warning: `resets row ${rowIndex}: invalid JSON payload (${errorMessage(err)})` };
   }
 }

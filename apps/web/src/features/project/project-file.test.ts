@@ -4,11 +4,17 @@ import { redactSnapshotFor } from "@decisionator/share-inpage";
 import { FileProjectStore } from "@decisionator/store-file";
 import { bordaStrategy } from "@decisionator/strategy-borda";
 import { describe, expect, it } from "vitest";
+import { copyEntriesAsAuthors } from "./copy-entries.js";
 import { readProjectFile, restoreProject, snapshotToExport } from "./project-file.js";
 
 const OWNER = "owner@device";
 
-async function seededProject() {
+type Seed = (
+  store: FileProjectStore,
+  ref: Awaited<ReturnType<FileProjectStore["createProject"]>>
+) => Promise<void>;
+
+async function seededProject(more?: Seed) {
   const store = new FileProjectStore(OWNER, `export-src-${Math.random()}`);
   const ref = await store.createProject({
     title: "Team offsite",
@@ -59,6 +65,7 @@ async function seededProject() {
       value: false,
     },
   ]);
+  if (more) await more(store, ref);
   const snap = await store.openProject(ref);
   const outcome = await runTally({
     snapshot: snap,
@@ -143,6 +150,86 @@ describe("project export files", () => {
           [OWNER, "approved", false],
         ])
       );
+    }
+  );
+
+  const SEEN = { plugin: "org.decisionator.option-status", key: "seen" };
+  const ANA = { onBehalfOf: { participantId: "guest:ana", displayName: "Ana" } };
+
+  /** A re-grade, an owner's reset of Ana's grades and Ana's reset of her own seen marks. */
+  const withHistory: Seed = async (store, ref) => {
+    await store.append(ref, [{ kind: "grade", optionId: "lis", value: 3 }]);
+    await store.append(ref, [{ kind: "grade", optionId: "alp", value: 2 }], ANA);
+    await store.append(ref, [
+      { kind: "reset", scope: "participant", participantId: "guest:ana", targets: ["grades"] },
+    ]);
+    await store.append(ref, [{ kind: "grade", optionId: "alp", value: 1 }], ANA);
+    await store.append(
+      ref,
+      [
+        {
+          kind: "reset",
+          scope: "participant",
+          participantId: "guest:ana",
+          targets: ["properties"],
+          ...SEEN,
+        },
+        { kind: "property", optionId: "bcn", ...SEEN, scope: "person", value: "seen" },
+      ],
+      ANA
+    );
+  };
+
+  it.each(["json", "xlsx", "move"] as const)(
+    "keeps history and resets and the same effective state (%s)",
+    async (via) => {
+      const original = await seededProject(withHistory);
+      // The fixture really has history: the re-grade, Ana's cleared grades and seen mark.
+      expect(original.grades.map((g) => [g.by, g.optionId, g.value])).toEqual(
+        expect.arrayContaining([
+          [OWNER, "lis", 3],
+          ["guest:ana", "alp", 1],
+        ])
+      );
+      expect(original.grades).toHaveLength(2);
+      expect(original.history?.grades).toHaveLength(3);
+      expect(original.history?.properties).toHaveLength(1);
+      expect(original.history?.resets).toHaveLength(2);
+
+      const target = new FileProjectStore(OWNER, `export-dst-${Math.random()}`);
+      let ref: Awaited<ReturnType<FileProjectStore["createProject"]>>;
+      if (via === "move") {
+        ref = await target.createProject({
+          title: original.project.title,
+          description: original.project.description,
+          voting: original.project.voting,
+          options: original.options,
+        });
+        await copyEntriesAsAuthors(target, ref, original);
+      } else {
+        const bundle = snapshotToExport(original);
+        expect(bundle.history.grades).toHaveLength(3);
+        expect(bundle.resets).toHaveLength(2);
+        const file =
+          via === "json"
+            ? new Blob([JSON.stringify(bundle)])
+            : new Blob([createProjectWorkbook(bundle) as Uint8Array<ArrayBuffer>]);
+        ref = await restoreProject(target, await readProjectFile(file));
+      }
+      const restored = await target.openProject(ref);
+
+      expect(comparable(restored)).toEqual(comparable(original));
+      const counts = (s: typeof original) => ({
+        grades: s.history?.grades.length,
+        rankings: s.history?.rankings.length,
+        properties: s.history?.properties.length,
+        resets: s.history?.resets.length,
+      });
+      expect(counts(restored)).toEqual(counts(original));
+      const resets = (s: typeof original) =>
+        (s.history?.resets ?? []).map(({ id: _id, at: _at, ...rest }) => rest);
+      expect(resets(restored)).toEqual(resets(original));
+      expect(restored.history?.resets.map((r) => r.by)).toEqual([OWNER, "guest:ana"]);
     }
   );
 

@@ -1,4 +1,6 @@
 import type { ZodError } from "zod";
+import { GradeSchema, RankingSchema } from "../model/entries.js";
+import { ResetSchema } from "../model/history.js";
 import type { Option } from "../model/option.js";
 import { PropertyScalarSchema, PropertyValueSchema } from "../model/property.js";
 import { computeOptionStats } from "../stats/aggregate.js";
@@ -22,8 +24,9 @@ import {
  * as `.xlsx` — restores the project. Layout: `docs/project-export.md`.
  *
  * Columns are found by header name, so their order may change and extra columns are ignored.
- * Outcomes, contributions and option properties keep their full record as JSON (split over `Record (JSON)` columns
- * when longer than one cell can hold), so restored outcomes still verify.
+ * Outcomes, contributions, option properties, history entries and resets keep their full record
+ * as JSON (split over `Record (JSON)` columns when longer than one cell can hold), so restored
+ * outcomes still verify.
  */
 
 export const XLSX_SHEETS = {
@@ -36,7 +39,42 @@ export const XLSX_SHEETS = {
   outcomes: "Outcomes",
   contributions: "Contributions",
   properties: "Properties",
+  history: "History",
+  resets: "Resets",
 } as const;
+
+type HistoryKind = "grade" | "ranking" | "property";
+type HistoryRow =
+  | { kind: "grade"; record: ProjectExportV1["history"]["grades"][number] }
+  | { kind: "ranking"; record: ProjectExportV1["history"]["rankings"][number] }
+  | { kind: "property"; record: ProjectExportV1["history"]["properties"][number] };
+
+/**
+ * The three history lists merged into one chronological list. A merge, not a sort, so each
+ * list keeps its own order (the order it is read back in).
+ */
+function historyRows(history: ProjectExportV1["history"]): HistoryRow[] {
+  const lists: HistoryRow[][] = [
+    history.grades.map((record) => ({ kind: "grade" as const, record })),
+    history.rankings.map((record) => ({ kind: "ranking" as const, record })),
+    history.properties.map((record) => ({ kind: "property" as const, record })),
+  ];
+  const next = lists.map(() => 0);
+  const rows: HistoryRow[] = [];
+  for (;;) {
+    let pick = -1;
+    for (let i = 0; i < lists.length; i++) {
+      const head = lists[i]?.[next[i] ?? 0];
+      if (!head) continue;
+      const best = pick >= 0 ? lists[pick]?.[next[pick] ?? 0] : undefined;
+      if (!best || head.record.at < best.record.at) pick = i;
+    }
+    if (pick < 0) return rows;
+    const row = lists[pick]?.[next[pick] ?? 0];
+    if (row) rows.push(row);
+    next[pick] = (next[pick] ?? 0) + 1;
+  }
+}
 
 export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -77,9 +115,10 @@ function jsonHeaders(count: number): string[] {
 function withJsonRecords<T>(
   header: string[],
   items: readonly T[],
-  cells: (item: T) => CellValue[]
+  cells: (item: T) => CellValue[],
+  record: (item: T) => unknown = (item) => item
 ): CellValue[][] {
-  const chunked = items.map((item) => chunkJson(item));
+  const chunked = items.map((item) => chunkJson(record(item)));
   const width = Math.max(1, ...chunked.map((c) => c.length));
   return [
     [...header, ...jsonHeaders(width)],
@@ -339,6 +378,46 @@ export function createProjectWorkbook(bundle: ProjectExportV1): Uint8Array {
         ]
       ),
     },
+    {
+      name: XLSX_SHEETS.history,
+      widths: [10, 36, 30, 28, 20, 24, 60],
+      rows: withJsonRecords(
+        ["Kind", "Option", "Value", "By", "By name", "At"],
+        historyRows(bundle.history),
+        (h) => [
+          h.kind,
+          h.kind === "ranking"
+            ? `Round ${h.record.round ?? 1}`
+            : (title.get(h.record.optionId) ?? h.record.optionId),
+          h.kind === "ranking"
+            ? lines(h.record.ranking.map((id) => title.get(id) ?? id))
+            : h.record.value,
+          h.record.by,
+          h.record.byName,
+          h.record.at,
+        ],
+        (h) => h.record
+      ),
+    },
+    {
+      name: XLSX_SHEETS.resets,
+      widths: [11, 28, 14, 7, 34, 20, 28, 20, 24, 60],
+      rows: withJsonRecords(
+        ["Scope", "Participant", "Targets", "Round", "Plugin", "Key", "By", "By name", "At"],
+        bundle.resets,
+        (r) => [
+          r.scope,
+          r.participantId,
+          lines(r.targets),
+          r.round,
+          r.plugin,
+          r.key,
+          r.by,
+          r.byName,
+          r.at,
+        ]
+      ),
+    },
   ];
   return writeWorkbook(sheets);
 }
@@ -417,16 +496,32 @@ function scalarCell(v: string | undefined): unknown {
  * A Properties row. The `Record (JSON)` column keeps exact JSON types; rows added or edited by
  * hand without it are read from the named columns, with Option matched by title or ID.
  */
+const hasJsonRecord = (r: Map<string, string>) =>
+  [...r.entries()].some(([k, v]) => k.startsWith(RECORD_JSON.toLowerCase()) && v.trim() !== "");
+
+/** The `Record (JSON)` of a row when it is present and matches `schema`, else `undefined`. */
+function validJsonRecord(
+  r: Map<string, string>,
+  sheet: string,
+  i: number,
+  schema: { safeParse(v: unknown): { success: boolean } }
+): unknown {
+  if (!hasJsonRecord(r)) return undefined;
+  try {
+    const record = jsonRecord(r, sheet, i);
+    return schema.safeParse(record).success ? record : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function propertyRow(
   r: Map<string, string>,
   i: number,
   idByTitle: Map<string, string>,
   fallbackAt: string
 ): unknown {
-  const hasJson = [...r.entries()].some(
-    ([k, v]) => k.startsWith(RECORD_JSON.toLowerCase()) && v.trim() !== ""
-  );
-  if (hasJson) {
+  if (hasJsonRecord(r)) {
     try {
       const record = jsonRecord(r, XLSX_SHEETS.properties, i);
       if (PropertyValueSchema.safeParse(record).success) return record;
@@ -442,6 +537,77 @@ function propertyRow(
     key: text(r, "Key"),
     scope: text(r, "Scope"),
     value: scalarCell(text(r, "Value")),
+    by: text(r, "By"),
+    byName: text(r, "By name"),
+    at: text(r, "At") ?? fallbackAt,
+  };
+}
+
+const optionRef = (r: Map<string, string>, idByTitle: Map<string, string>) => {
+  const option = text(r, "Option")?.trim();
+  return option ? (idByTitle.get(option.toLowerCase()) ?? option) : undefined;
+};
+
+/**
+ * A History row, from its `Record (JSON)` or, for grades and ballots edited by hand, from the
+ * named columns. History is informational, so a row that cannot be read is skipped
+ * (`undefined`) rather than failing the whole restore.
+ */
+function historyRow(
+  r: Map<string, string>,
+  i: number,
+  idByTitle: Map<string, string>,
+  fallbackAt: string
+): HistoryRow | undefined {
+  const kind = text(r, "Kind")?.trim().toLowerCase() as HistoryKind | undefined;
+  const schema =
+    kind === "grade"
+      ? GradeSchema
+      : kind === "ranking"
+        ? RankingSchema
+        : kind === "property"
+          ? PropertyValueSchema
+          : undefined;
+  if (!kind || !schema) return undefined;
+  const json = validJsonRecord(r, XLSX_SHEETS.history, i, schema);
+  if (json !== undefined) return { kind, record: json } as HistoryRow;
+
+  const base = {
+    id: `hist_sheet_${i + 1}`,
+    by: text(r, "By"),
+    byName: text(r, "By name"),
+    at: text(r, "At") ?? fallbackAt,
+  };
+  let candidate: unknown;
+  if (kind === "grade") {
+    candidate = { ...base, optionId: optionRef(r, idByTitle), value: int(r, "Value") };
+  } else if (kind === "ranking") {
+    const round = /(\d+)/.exec(text(r, "Option") ?? "")?.[1];
+    candidate = {
+      ...base,
+      round: round ? Number(round) : 1,
+      ranking: list(r, "Value").map((t) => idByTitle.get(t.toLowerCase()) ?? t),
+    };
+  } else {
+    // A property row needs its plugin and key, which only the JSON record holds.
+    return undefined;
+  }
+  const parsed = schema.safeParse(candidate);
+  return parsed.success ? ({ kind, record: parsed.data } as HistoryRow) : undefined;
+}
+
+/** A Resets row, from its `Record (JSON)` or else the named columns. */
+function resetRow(r: Map<string, string>, i: number, fallbackAt: string): unknown {
+  const json = validJsonRecord(r, XLSX_SHEETS.resets, i, ResetSchema);
+  if (json !== undefined) return json;
+  return {
+    id: text(r, "ID") ?? `rst_sheet_${i + 1}`,
+    scope: text(r, "Scope")?.trim().toLowerCase(),
+    participantId: text(r, "Participant"),
+    targets: list(r, "Targets").map((t) => t.toLowerCase()),
+    round: int(r, "Round"),
+    plugin: text(r, "Plugin"),
+    key: text(r, "Key"),
     by: text(r, "By"),
     byName: text(r, "By name"),
     at: text(r, "At") ?? fallbackAt,
@@ -540,6 +706,11 @@ export function readProjectWorkbook(bytes: Uint8Array): ProjectExportV1 {
     text(r, "ID") ?? `${prefix}_sheet_${i + 1}`;
   const at = (r: Map<string, string>) => text(r, "At") ?? exportedAt;
 
+  const history = table(sheets.get(XLSX_SHEETS.history)).flatMap((r, i) => {
+    const row = historyRow(r, i, idByTitle, exportedAt);
+    return row ? [row] : [];
+  });
+
   const raw = {
     format: PROJECT_EXPORT_FORMAT,
     exportedAt,
@@ -592,6 +763,13 @@ export function readProjectWorkbook(bytes: Uint8Array): ProjectExportV1 {
     properties: table(sheets.get(XLSX_SHEETS.properties)).map((r, i) =>
       propertyRow(r, i, idByTitle, exportedAt)
     ),
+    // Workbooks written before history and resets have neither sheet → empty.
+    history: {
+      grades: history.flatMap((h) => (h.kind === "grade" ? [h.record] : [])),
+      rankings: history.flatMap((h) => (h.kind === "ranking" ? [h.record] : [])),
+      properties: history.flatMap((h) => (h.kind === "property" ? [h.record] : [])),
+    },
+    resets: table(sheets.get(XLSX_SHEETS.resets)).map((r, i) => resetRow(r, i, exportedAt)),
   };
 
   const parsed = ProjectExportV1Schema.safeParse(raw);

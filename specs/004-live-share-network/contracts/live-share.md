@@ -89,7 +89,9 @@ type GuestEntry =
   | { kind: "ranking"; ranking: string[] /* unique */; round: number }
   | { kind: "property"; optionId: string; plugin: string; key: string;
       scope: "shared" | "person";              // the host accepts "person" only
-      value: string | number | boolean | null  /* JSON ≤ 2 KiB; null clears */ };
+      value: string | number | boolean | null  /* JSON ≤ 2 KiB; null clears */ }
+  | { kind: "reset"; scope: "participant"; targets: ["properties"]; plugin: string; key: string };
+      // clears the guest's own values of one property; no participantId (the host sets it)
 ```
 
 A `hello` whose `proto` differs from the host's (for example a proto 2 guest meeting a proto 3
@@ -131,6 +133,11 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
      `scope: "person"`, and only with a `value` of at most 2 KiB as JSON
      (`PROPERTY_VALUE_MAX_BYTES`); otherwise `invalid` with "That change is not allowed.".
      Accepted values are recorded under the guest, latest-wins per guest, option, plugin and key.
+   - resets (contract `history-resets`) only as `scope: "participant"`, `targets` exactly
+     `["properties"]`, with both `plugin` and `key`; the host records
+     `{ kind: "reset", scope: "participant", participantId: <guest>, targets: ["properties"], plugin, key }`
+     and ignores any `participantId` the guest sent. Any other reset (`scope: "all"`, other or
+     more targets, no `plugin`/`key`) → `invalid` with "That change is not allowed.".
 3. Accepted entries are written with `append(ref, entries, { onBehalfOf: { participantId, displayName } })`.
    The guest gets `ack ok` only after the store call resolved; a failure is reported as
    `store_failed` with the store's message.
@@ -142,7 +149,10 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
    - `project.kdf` and `project.ref` removed;
    - while voting is open and `liveResults` is off, only the guest's own rankings;
    - `properties`: every `shared` value, and only the guest's own `person` values (never the
-     owner's or another guest's).
+     owner's or another guest's);
+   - `history` (when the store reports it): `grades`, `rankings` and `properties` only with
+     `by` = the guest; `resets` only those with `scope: "all"` or `participantId` = the guest.
+     Resets the owner appends reach guests through this normal snapshot broadcast.
 6. Display names are unique among connected participants: on `hello` the host compares the
    trimmed name case-insensitively with the other participants that have open links and, on a
    clash, appends the lowest free number (`"Gina"` → `"Gina 2"`). The result is sent as
@@ -173,7 +183,8 @@ another asks to end the first. A protected project must be unlocked in the tab b
 - `plugins/share-inpage/test/host-guest.test.ts`: host and guests over in-memory links —
   attribution, identity stability, unique display names, serialized concurrent writes,
   validation (including grades and comments while voting is closed), view-only, store failure,
-  redaction, option properties (person-only, size cap, per-guest redaction), roster, session full, closing, reconnect, give-up, protocol mismatch, rate limit.
+  redaction, option properties (person-only, size cap, per-guest redaction), guest self resets
+  (own values only, other resets refused), owner resets reaching guests, history redaction, roster, session full, closing, reconnect, give-up, protocol mismatch, rate limit.
 - `plugins/share-inpage/test/transport.test.ts`: sealing, topic derivation, framing and chunking,
   heartbeat timeout, signaling room authentication/dedupe/staleness, Nostr event signing,
   subscribe/publish/queue/reconnect.
@@ -183,7 +194,7 @@ another asks to end the first. A protected project must be unlocked in the tab b
 
 | Version | Date | Change |
 |---------|------|--------|
-| 3.0.0 | 2026-10-07 | Wire `proto` 3: new `property` guest entry for person-scoped option properties (active options only, `scope: "person"`, value ≤ 2 KiB, else `invalid`); snapshots carry `properties` redacted to shared values plus the guest's own person values. Proto 2 peers get `protocol_mismatch` |
+| 3.0.0 | 2026-10-07 | Wire `proto` 3: new `property` guest entry for person-scoped option properties (active options only, `scope: "person"`, value ≤ 2 KiB, else `invalid`); snapshots carry `properties` redacted to shared values plus the guest's own person values. New `reset` guest entry that clears the guest's own values of one property (`scope: "participant"`, `targets: ["properties"]`, `plugin` + `key`; the host sets `participantId`; anything else `invalid`); snapshots carry `history` redacted to the guest's own entries plus resets that are `all`-scoped or target the guest. Proto 2 peers get `protocol_mismatch` |
 | 2.1.0 | 2026-10-07 | Host assigns unique display names (`"Gina 2"`) and returns them in `welcome.name`; the guest shows that name. Wire `proto` stays 2: no message shape changes |
 | 2.0.0 | 2026-10-06 | Network transport (WebRTC star + encrypted Nostr/BroadcastChannel signaling), per-guest attribution through delegated append, acks, heartbeat and reconnect, host-side validation and redaction, app-level session lifecycle, stable join links with QR code |
 | 1.0.0 | 2026-10-06 | BroadcastChannel-only prototype (002) |

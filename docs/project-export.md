@@ -37,6 +37,8 @@ Google Sheets (or *File → Import* in an existing sheet). To restore after edit
 | Outcomes: strategy, settings, seed, inputs, result order and points | `outcomes` | Outcomes | ✓ verbatim — *Verify Outcome* still reproduces them |
 | Agent / human contributions | `contributions` | Contributions | ✓ verbatim |
 | Option property values (plugin-defined, e.g. *Seen* status), shared and per person | `properties` | Properties | ✓ per-person values under their author, shared values under the restoring owner |
+| History: earlier grades, ballots and property values that were changed or cleared | `history` | History | ✓ re-recorded first, under the original authors |
+| Resets (who cleared which grades, ballots or property values) | `resets` | Resets | ✓ in their original position, so the same entries stay cleared |
 | Current ranking (derived) | — | Ranking | — (recomputed) |
 
 Entries by other people (e.g. live-session guests) are re-recorded on their behalf
@@ -45,6 +47,17 @@ and one ballot per round. Per-person option property values go the same way; sha
 values are recorded by the restoring owner, like outcomes and contributions. Entry IDs and timestamps of grades, ballots, comments and property values are
 assigned anew by the store; outcomes and contributions keep theirs. Password protection is not carried
 over: the export holds the decrypted content, and the restored project is unprotected.
+
+**History and resets.** Restore (and *Move*) re-records the history together with the current
+entries and the resets, in the original time order: all of them are merged, sorted by their
+original `at` and appended in that order (consecutive entries by the same author go in one
+append). So a re-grade still shows the earlier grade in the history, a reset still clears the
+same entries, and the current grades, ballots and property values equal the original ones.
+History entries go under their authors like current ones (shared property values under the
+restoring owner). A reset someone made of their own property values (e.g. *Mark all as not
+seen*) is re-recorded on their behalf; every other reset is recorded by the restoring owner,
+with its scope, participant and targets unchanged. Times become the restore time; the original
+times stay in the file.
 
 ## JSON bundle: `decisionator.project/v1`
 
@@ -70,6 +83,21 @@ Schema: `packages/core/schema/project-export-v1.schema.json` (generated from
 string, number, boolean or `null` (a cleared value) and keeps its JSON type. It was added with
 feature 005 and is optional (default `[]`), so the format id stays `decisionator.project/v1`.
 
+`history` holds the superseded and cleared entries (contract `history-resets`), oldest first:
+`{ "grades": [ … ], "rankings": [ … ], "properties": [ … ] }`, each with the same record shape
+as the current lists. `resets` holds every reset, in the order it was recorded:
+
+```json
+{ "id": "…", "at": "…", "by": "guest:ana", "byName": "Ana", "scope": "participant",
+  "participantId": "guest:ana", "targets": ["properties"],
+  "plugin": "org.decisionator.option-status", "key": "seen" }
+```
+
+`scope` is `all` or `participant` (then `participantId` is set); `targets` is 1–3 of
+`grades`, `ballots`, `properties`; `round` limits `ballots` to one round; `plugin` and `key`
+(both or neither) limit `properties` to one property. Both fields were added with feature 005
+and are optional (default empty), so older bundles still load.
+
 `contributions` and the outcome fields `inputs.settings` / `inputs.runInput` were added in
 core 0.2 and are optional, so bundles from older versions still load.
 
@@ -90,6 +118,8 @@ matched **by header name**, so they can be reordered and extra columns are ignor
 | **Outcomes** | ID, Round, At, Strategy, Strategy version, Winner ID, Winner, Tie-break, Seed, Triggered by, Explanation, Record (JSON)… |
 | **Contributions** | ID, At, By, Target kind, Target ID, Type, Review status, Body, Record (JSON)… |
 | **Properties** | Option (title), Plugin, Key, Scope (`shared`/`person`), Value, By, By name, At, Record (JSON)… |
+| **History** | Kind (`grade`/`ranking`/`property`), Option (title; `Round N` for a ballot), Value (grade, property value, or ballot choices one per line), By, By name, At, Record (JSON)… — oldest first |
+| **Resets** | Scope (`all`/`participant`), Participant, Targets (one per line), Round, Plugin, Key, By, By name, At, Record (JSON)… |
 
 Rules for restore:
 
@@ -103,6 +133,12 @@ Rules for restore:
   columns: Option matches a title or an option ID, an empty Value is `null`, and a Value that
   reads as a number, `TRUE`/`FALSE` or `null` gets that type. Workbooks without a Properties
   sheet restore with no property values.
+- History and Resets rows are restored from `Record (JSON)` when it holds a valid record. A
+  History row without it is read from the named columns for `grade` (Option, Value) and
+  `ranking` (round from Option, choices from Value) rows; any other History row that cannot be
+  read is skipped, since history is informational. A Resets row without it is read from the
+  named columns, and an invalid one is reported like other rows. Workbooks without these sheets
+  restore with no history and no resets.
 - Rows added by hand may leave ID and time empty. A ballot row with an empty
   `Ranking (option IDs)` is read from its `Choice N` cells, matching option titles.
 - An invalid value is reported with its sheet and row, e.g.
