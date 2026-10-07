@@ -9,6 +9,7 @@ import {
   Layers,
   MoreHorizontal,
   Radio,
+  RotateCcw,
   Share2,
   SlidersHorizontal,
   Trash2,
@@ -32,6 +33,7 @@ import { AgentBrief } from "../features/agents/AgentBrief.js";
 import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
 import { OptionRow } from "../features/grading/OptionRow.js";
+import { ResetDialog } from "../features/history/ResetDialog.js";
 import { averageText, optionRatings, ownGradeText } from "../features/history/time-texts.js";
 import { useLiveShare } from "../features/live/LiveShareContext.js";
 import { FilterableOptionList } from "../features/option-view/FilterableOptionList.js";
@@ -65,6 +67,7 @@ export function ProjectViewPage() {
   const [activeTab, setActiveTab] = useState<string>("options");
   const live = useLiveShare();
   const [showDelete, setShowDelete] = useState(false);
+  const [showReset, setShowReset] = useState(false);
 
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | undefined>();
@@ -277,9 +280,9 @@ export function ProjectViewPage() {
               )}
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <span>{storeLabel}</span>
-                <span aria-hidden="true">·</span>
+                <span aria-hidden="true">Â·</span>
                 <span>{`Role: ${snapshot.role}`}</span>
-                <span aria-hidden="true">·</span>
+                <span aria-hidden="true">Â·</span>
                 <span className="[overflow-wrap:anywhere]">{currentUser}</span>
               </p>
             </div>
@@ -323,7 +326,13 @@ export function ProjectViewPage() {
                       }
                     >
                       <Radio className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      Live session…
+                      Live sessionâ€¦
+                    </DropdownMenuItem>
+                  )}
+                  {isOwner && (
+                    <DropdownMenuItem onSelect={() => setShowReset(true)}>
+                      <RotateCcw className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      Resetâ€¦
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onSelect={() => downloadProjectExport(snapshot)}>
@@ -349,6 +358,23 @@ export function ProjectViewPage() {
         </header>
 
         <SkippedRowsNotice warnings={snapshot.warnings} />
+
+        {isOwner && (
+          <ResetDialog
+            open={showReset}
+            onOpenChange={setShowReset}
+            snapshot={snapshot}
+            appendEntries={async (entries) => {
+              await store.append(projectRef, entries);
+              setSnapshot(
+                await store.openProject(
+                  projectRef,
+                  cachedPassword ? { password: cachedPassword } : undefined
+                )
+              );
+            }}
+          />
+        )}
 
         <DeleteProject
           hideTrigger

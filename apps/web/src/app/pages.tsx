@@ -23,6 +23,7 @@ import { getInstalledPlugins } from "../features/plugins/plugin-registry.js";
 import { ProjectUnavailable } from "../features/project/ProjectUnavailable.js";
 import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
+import { OptionSettings } from "../features/settings/OptionSettings.js";
 import { StorageSettings } from "../features/settings/StorageSettings.js";
 import { PasswordSetup } from "../features/sharing/PasswordSetup.js";
 import { ShareDialog } from "../features/sharing/ShareDialog.js";
@@ -547,6 +548,7 @@ export function SettingsPage() {
         description="Storage provider settings, active persistence target, and credentials management."
       />
       <StorageSettings />
+      <OptionSettings />
       <LiveNetworkSettings />
     </div>
   );

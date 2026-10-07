@@ -321,13 +321,13 @@ a count and an "Only not seen" filter; marks are private, including for live gue
 **Independent Test**: spec US2 (10 s: 7 s stays new, 10 s marks; off: nothing auto-marked,
 manual still works).
 
-- [ ] T034 [US2] Create `apps/web/src/features/settings/OptionSettings.tsx` and render it as an
+- [x] T034 [US2] Create `apps/web/src/features/settings/OptionSettings.tsx` and render it as an
   "Options" card in `SettingsPage` (`apps/web/src/app/pages.tsx`):
   - the status plugin's settings form (reuse `PluginSettings`, saved with `updatePlugin`);
   - a value outside the range shows "The time must be between 1 and 300 seconds." and keeps
     the previous value;
   - the card is hidden when the plugin is disabled.
-- [ ] T035 [US2] In `OptionExtensionsProvider.tsx`, re-read plugin settings on registry
+- [x] T035 [US2] In `OptionExtensionsProvider.tsx`, re-read plugin settings on registry
   `subscribe` notifications, and push the new `exposureMs` into the tracker
   (`setMinMs`, or stop when `null`) without a reload. Previously recorded marks are untouched
   (US2 scenario 6).
@@ -423,7 +423,7 @@ conflicts are resolved in Settings; failures fall back.
 cost plugin adds a "€420" badge; grading, commenting and voting are unchanged; disabling brings
 the dot back).
 
-- [ ] T044 [US4] Add a "Marker style" chooser to `OptionSettings.tsx`. It lists the enabled
+- [x] T044 [US4] Add a "Marker style" chooser to `OptionSettings.tsx`. It lists the enabled
   plugins that replace `marker`, is stored in `deci.optionView.markerPlugin`, and is shown only
   when two or more plugins compete. The provider applies the choice live.
 - [ ] T045 [P] [US4] Add provider unit tests in
@@ -541,7 +541,7 @@ person resets their own seen marks. Resets are recorded; nothing is deleted.
 **Independent Test**: spec US6 (resetting Tom keeps the owner's and Gina's grades; Gina's "Mark
 all as not seen" changes only her marks).
 
-- [ ] T066 [US6] Create `apps/web/src/features/history/ResetDialog.tsx` (owner only), opened from
+- [x] T066 [US6] Create `apps/web/src/features/history/ResetDialog.tsx` (owner only), opened from
   "More project actions" → "Reset…" in `apps/web/src/app/ProjectViewPage.tsx`:
   - a choice between "All votes" and one participant, listed from the grade, ballot and history
     authors with `byName`;
