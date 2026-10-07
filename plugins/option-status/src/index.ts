@@ -34,15 +34,22 @@ export function createOptionStatusPlugin(): PluginDefinition {
     },
 
     optionView(ctx): OptionViewContribution {
-      if (isNew(ctx.values[KEY])) {
-        return {
-          marker: { variant: "dot", label: "Not seen", tone: "primary", replace: true },
-          footer: [{ action: { id: "mark-seen", label: "Mark as seen" } }],
-        };
-      }
+      const fresh = isNew(ctx.values[KEY]);
+      // Cards stay quiet, like a mail list: only the marker. The manual actions live in the
+      // detail view.
+      const footer =
+        ctx.surface === "card"
+          ? []
+          : [
+              fresh
+                ? { action: { id: "mark-seen", label: "Mark as seen" } }
+                : { action: { id: "mark-not-seen", label: "Mark as not seen" } },
+            ];
       return {
-        marker: null,
-        footer: [{ action: { id: "mark-not-seen", label: "Mark as not seen" } }],
+        marker: fresh
+          ? { variant: "dot", label: "Not seen", tone: "primary", replace: true }
+          : null,
+        footer,
       };
     },
 

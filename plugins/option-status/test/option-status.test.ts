@@ -16,11 +16,15 @@ function option(id: string, status: Option["status"] = "active"): Option {
   };
 }
 
-function viewCtx(seen: PropertyScalar | undefined, writes: [string, PropertyScalar][] = []) {
+function viewCtx(
+  seen: PropertyScalar | undefined,
+  writes: [string, PropertyScalar][] = [],
+  surface: "card" | "detail" = "detail"
+) {
   const ctx: OptionViewContext = {
     option: option("lis"),
     viewerId: "gina",
-    surface: "card",
+    surface,
     values: seen === undefined ? {} : { seen },
     settings: {},
     setValue: async (key, value) => {
@@ -68,6 +72,13 @@ describe("option status plugin", () => {
         { action: { id: "mark-not-seen", label: "Mark as not seen" } },
       ]);
     }
+  });
+
+  it("keeps cards to the marker only", async () => {
+    const plugin = createOptionStatusPlugin();
+    const view = await plugin.optionView?.(viewCtx(undefined, [], "card"));
+    expect(view?.marker?.variant).toBe("dot");
+    expect(view?.footer).toEqual([]);
   });
 
   it("marks exposed new options as seen_auto in one batch", async () => {

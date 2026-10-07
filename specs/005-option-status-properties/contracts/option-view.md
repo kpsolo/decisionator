@@ -103,7 +103,7 @@ results cross the boundary unchanged because they are plain data.
 |---|---|---|
 | none or `not_seen` | marker `{ variant: "dot", label: "Not seen", tone: "primary", replace: true }`; title drawn bold (the `dot` variant implies bold title) | same marker in the header |
 | `seen` / `seen_auto` | no marker | no marker; footer action "Mark as not seen" |
-| none / `not_seen` | footer action "Mark as seen" | footer action "Mark as seen" |
+| none / `not_seen` (actions) | no footer action: cards show the marker only | footer action "Mark as seen" |
 
 - The list summary is "N not seen yet" (`N` counted over active options; hidden when 0).
 - The list filter is "Only not seen", with `where: { key: "seen", in: [null, "not_seen"] }`.
