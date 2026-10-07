@@ -1,4 +1,4 @@
-# Contract: Plugin Runtime (host ⇄ plugin RPC) — v1.0.0
+# Contract: Plugin Runtime (host ⇄ plugin RPC) — v1.1.0
 
 > **Scope: sandboxed loading ships with US6.** In the MVP, first-party modules implement the same contracts in-process (research R26).
 
@@ -56,6 +56,25 @@ fails with `PERMISSION_DENIED`.
 
 `fetch` is the standard browser `fetch`. CSP enforces the `net:` allow-list.
 
+## Option view calls (host → plugin, v1.1.0)
+
+These are for plugins that declare `provides.optionView` or `provides.exposure` (contract
+[`option-view`](../../005-option-status-properties/contracts/option-view.md)). Every result is
+plain data that the host validates and renders itself.
+
+| Method | Params | Result |
+|---|---|---|
+| `optionView.render` | `OptionViewContext` without `setValue` | `OptionViewContribution` |
+| `optionList.render` | `OptionListContext` without `resetValues` | `OptionListContribution` |
+| `optionView.action` | `{ context, actionId }` | `void` |
+| `optionList.action` | `{ context, actionId }` | `void` |
+| `exposure.exposed` | `{ context, optionIds }` | `void` |
+
+A plugin writes its own values with the host capabilities `properties.set`
+(`{ optionId, key, value }`) and `properties.reset` (`{ key }`). The host applies FR-012
+(scope and owner rules) and refuses anything else with `PERMISSION_DENIED`. Calls that take
+longer than 200 ms keep the previous rendering (or the default).
+
 ## Error codes
 
 `PERMISSION_DENIED`, `TIMEOUT`, `INVALID_PARAMS`, `PRECONDITION_FAILED`, `NOT_SUPPORTED`,
@@ -66,3 +85,10 @@ fails with `PERMISSION_DENIED`.
 The host loads a plugin only if every declared `platform.*` range is satisfied by the host's
 contract versions. Otherwise the host refuses to load it and shows
 "Built for Deci runtime ^2.0, this app provides 1.4" (US6 #4).
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.1.0 | 2026-10-07 | Option view calls and `properties.set` / `properties.reset` (feature 005) |
+| 1.0.0 | 2026-10-05 | Initial runtime |

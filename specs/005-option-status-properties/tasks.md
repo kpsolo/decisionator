@@ -153,7 +153,7 @@ store, and the host plumbing. No story can be shown without them.
     backend.
 - [x] T016 [P] `examples/plugin-store-memory/src/`: property support so its
   `test/contract.test.ts` passes.
-- [ ] T017 Update the contract documents:
+- [x] T017 Update the contract documents:
   - `specs/001-decision-engine-core/contracts/project-store.md` → 1.4.0 (rules 1–7 from
     contracts/option-properties.md, plus a changelog row);
   - `specs/001-decision-engine-core/contracts/sheet-store.md` → 2.3.0 (properties tab,
@@ -197,7 +197,7 @@ store, and the host plumbing. No story can be shown without them.
   - a 250 ms `tick` interval only while something is on screen;
   - returns `exposureRef(optionId)`;
   - is a no-op when no enabled plugin wants exposure.
-- [ ] T022 [P] Create `apps/web/src/features/option-view/OptionPlaces.tsx`:
+- [x] T022 [P] Create `apps/web/src/features/option-view/OptionPlaces.tsx`:
   - components `OptionMarker`, `OptionBadges`, `OptionFooter`, `OptionSections`,
     `PropertySection` and `OptionListBar`, rendered from the provider's contributions with
     theme tokens;
@@ -362,7 +362,7 @@ survives export → restore, and is hidden while disabled but kept).
   example plugins as installable entries only when `import.meta.env.DEV` and localStorage
   `deci.devPlugins` lists their ids, so they are never in production builds. A second fixture
   plugin defining `priority` under another id is used for the same-name case.
-- [ ] T039 [US3] Finish `PropertySection` in `OptionPlaces.tsx`:
+- [x] T039 [US3] Finish `PropertySection` in `OptionPlaces.tsx`:
   - inputs per type (text, number, switch, select, date);
   - editable only where FR-012 allows (shared: owner; person: self), read-only display
     otherwise;
@@ -426,7 +426,7 @@ the dot back).
 - [x] T044 [US4] Add a "Marker style" chooser to `OptionSettings.tsx`. It lists the enabled
   plugins that replace `marker`, is stored in `deci.optionView.markerPlugin`, and is shown only
   when two or more plugins compete. The provider applies the choice live.
-- [ ] T045 [P] [US4] Add provider unit tests in
+- [x] T045 [P] [US4] Add provider unit tests in
   `apps/web/src/features/option-view/OptionExtensionsProvider.test.tsx`
   (`renderToStaticMarkup` with a fake registry):
   - the marker choice versus first-enabled;
@@ -585,7 +585,7 @@ all as not seen" changes only her marks).
 **Independent Test**: spec US7 ("Weighted grades" is chosen and "Decided by: Weighted grades" is
 shown; the outcome names Weighted grades).
 
-- [ ] T071 [US7] Start with contract-kit cases "strategy meta (v1.4.0)" in
+- [x] T071 [US7] Start with contract-kit cases "strategy meta (v1.4.0)" in
   `packages/plugin-sdk/testing/project-store-kit.ts`:
   - an owner set returns `snapshot.project.strategy` with `at`/`by`;
   - `strategyChanges` is capped at 20;
