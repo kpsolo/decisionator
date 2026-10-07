@@ -43,12 +43,12 @@ describe("dev plugins", () => {
     expect(getInstalledPlugins().some((p) => ALL.includes(p.id))).toBe(false);
   });
 
-  it("registers the listed plugins, whose manifests validate, starting disabled", () => {
+  it("registers the listed plugins, whose manifests validate, starting enabled", () => {
     localStorage.setItem(DEV_PLUGINS_KEY, JSON.stringify(ALL));
     expect(installDevPlugins()).toEqual(ALL);
     const installed = getInstalledPlugins().filter((p) => ALL.includes(p.id));
     expect(installed.map((p) => p.id)).toEqual(ALL);
-    expect(installed.every((p) => !p.enabled)).toBe(true);
+    expect(installed.every((p) => p.enabled)).toBe(true);
   });
 
   it("gives the examples their view definitions and a throwing fixture", async () => {
