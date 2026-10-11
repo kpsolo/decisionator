@@ -193,6 +193,9 @@ export class LiveShareGuest {
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
+    if (this.offlineSince === 0) {
+      this.offlineSince = Date.now();
+    }
     this.abort = new AbortController();
     let link: Link;
     try {
@@ -214,7 +217,13 @@ export class LiveShareGuest {
       if (this.link !== link) return;
       this.link = null;
       this.failPending("Lost the connection to the host. Your change may not have been saved.");
-      if (this.stopped || this.state.status === "ended" || this.state.status === "failed") return;
+      if (
+        this.stopped ||
+        this.state.status === "revoked" ||
+        this.state.status === "failed" ||
+        this.state.status === "ended"
+      )
+        return;
       if (this.state.status === "live") {
         this.offlineSince = Date.now();
         this.attempt = 0;
@@ -291,11 +300,20 @@ export class LiveShareGuest {
         break;
       }
       case "closing":
-        this.stopped = true;
         if (msg.code === "session_revoked") {
+          this.stopped = true;
           this.set({ status: "revoked", message: msg.reason });
-        } else {
+        } else if (msg.code === "ended") {
+          this.stopped = true;
           this.set({ status: "ended", message: msg.reason });
+        } else {
+          // "host_closed": the tab closed or was reloaded.
+          // Show the reason immediately, but schedule retry with clean offline timer
+          // so if the host is reloading (F5), the guest reconnects upon reload.
+          this.offlineSince = Date.now();
+          this.attempt = 0;
+          this.set({ status: "ended", message: msg.reason });
+          this.scheduleRetry();
         }
         link.close("host closed");
         break;
@@ -309,7 +327,10 @@ export class LiveShareGuest {
 
   private scheduleRetry(): void {
     if (this.stopped) return;
-    if (Date.now() - this.offlineSince > this.opts.giveUpAfterMs) {
+    if (this.offlineSince === 0) {
+      this.offlineSince = Date.now();
+    }
+    if (Date.now() - this.offlineSince >= this.opts.giveUpAfterMs) {
       this.set({
         status: "failed",
         message: this.state.snapshot

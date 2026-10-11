@@ -38,8 +38,6 @@ test("User Story 3: Clean browser profile shows unreachable notice when host is 
   await expect(
     page.getByRole("heading", { name: "This session can't be reached right now." })
   ).toBeVisible({ timeout: 15000 });
-  await expect(
-    page.getByText("The host may be offline, or the link may be wrong or revoked.")
-  ).toBeVisible();
+  await expect(page.getByText(/Could not reach the host|The host may be offline/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
 });

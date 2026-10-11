@@ -105,54 +105,11 @@ export function JoinLivePage() {
           </div>
           <CardTitle>This session link has been revoked by the owner.</CardTitle>
           <CardDescription>
-            {rev?.reason ||
-              "This link is no longer valid. The owner may have ended or revoked the session."}
+            {rev?.reason && rev.reason !== "This session link has been revoked by the owner."
+              ? rev.reason
+              : "This link is no longer valid. The owner may have ended or revoked the session."}
           </CardDescription>
         </CardHeader>
-      </Card>
-    );
-  }
-
-  // 2. Check if current browser is the host of this session (FR-001, US1)
-  const hostProject = sessionId ? resolveHostProject(sessionId) : null;
-  if (hostProject) {
-    const colon = hostProject.indexOf(":");
-    const storeId = colon >= 0 ? hostProject.slice(0, colon) : hostProject;
-    const id = colon >= 0 ? hostProject.slice(colon + 1) : "";
-    const projectPath = `/p/${storeId}/${id}`;
-
-    return (
-      <Card className="mx-auto mt-6 max-w-md">
-        <CardHeader>
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Radio className="h-5 w-5" aria-hidden />
-          </div>
-          <CardTitle>You are the host of this session</CardTitle>
-          <CardDescription>
-            This live deliberation was created in this browser. You can resume live hosting for
-            returning collaborators or open the project directly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Button
-            onClick={() => {
-              const sm = getStorageManager();
-              const projectRef = { store: storeId, id };
-              const store = sm.resolveStore(projectRef);
-              void liveShare.openFor({
-                store,
-                projectRef,
-                projectTitle: "Live Session",
-              });
-              navigate(projectPath);
-            }}
-          >
-            Resume Live Session
-          </Button>
-          <Button variant="outline" onClick={() => navigate(projectPath)}>
-            Open Project
-          </Button>
-        </CardContent>
       </Card>
     );
   }
@@ -175,7 +132,23 @@ export function JoinLivePage() {
     );
   }
 
-  if (cachedSession) {
+  if (!cacheChecked) {
+    return null;
+  }
+
+  const hostProject = sessionId ? resolveHostProject(sessionId) : null;
+  const isGuestTab = () => {
+    try {
+      return sessionId
+        ? sessionStorage.getItem(`deci.live.guestTab.${sessionId}`) === "true"
+        : false;
+    } catch {
+      return false;
+    }
+  };
+
+  // 2. Returning guest with saved offline deliberation state (FR-003, US2)
+  if (cachedSession && (!hostProject || isGuestTab() || joinedAs)) {
     return (
       <GuestSession
         sessionId={sessionId}
@@ -184,6 +157,93 @@ export function JoinLivePage() {
         displayName={cachedSession.displayName || cachedSession.name}
         initialCached={cachedSession}
       />
+    );
+  }
+
+  // 3. Check if current browser is the host of this session (FR-001, US1)
+  if (hostProject && !joinedAs && !isGuestTab()) {
+    const colon = hostProject.indexOf(":");
+    const storeId = colon >= 0 ? hostProject.slice(0, colon) : hostProject;
+    const id = colon >= 0 ? hostProject.slice(colon + 1) : "";
+    const projectPath = `/p/${storeId}/${id}`;
+
+    return (
+      <Card className="mx-auto mt-6 max-w-md">
+        <CardHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Radio className="h-5 w-5" aria-hidden />
+          </div>
+          <CardTitle>You are the host of this session</CardTitle>
+          <CardDescription>
+            This live deliberation was created in this browser. You can resume live hosting for
+            returning collaborators, open the project directly, or join as a guest.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                const sm = getStorageManager();
+                const projectRef = { store: storeId, id };
+                const store = sm.resolveStore(projectRef);
+                void liveShare.openFor({
+                  store,
+                  projectRef,
+                  projectTitle: "Live Session",
+                });
+                navigate(projectPath);
+              }}
+            >
+              Resume Live Session
+            </Button>
+            <Button variant="outline" onClick={() => navigate(projectPath)}>
+              Open Project
+            </Button>
+          </div>
+
+          <div className="relative my-1">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or join as guest</span>
+            </div>
+          </div>
+
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = name.trim();
+              if (!trimmed) return;
+              saveGuestName(trimmed);
+              if (sessionId) {
+                try {
+                  sessionStorage.setItem(`deci.live.guestTab.${sessionId}`, "true");
+                } catch {}
+              }
+              setJoinedAs(trimmed);
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={nameId} className="text-sm font-medium">
+                Your name
+              </label>
+              <Input
+                id={nameId}
+                value={name}
+                maxLength={80}
+                required
+                autoComplete="nickname"
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="secondary" className="w-full" disabled={!name.trim()}>
+              Join
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -207,6 +267,11 @@ export function JoinLivePage() {
               const trimmed = name.trim();
               if (!trimmed) return;
               saveGuestName(trimmed);
+              if (sessionId) {
+                try {
+                  sessionStorage.setItem(`deci.live.guestTab.${sessionId}`, "true");
+                } catch {}
+              }
               setJoinedAs(trimmed);
             }}
           >
@@ -330,8 +395,9 @@ function GuestSession({
           </div>
           <CardTitle>This session link has been revoked by the owner.</CardTitle>
           <CardDescription>
-            {state.message ||
-              "This link is no longer valid. The owner may have ended or revoked the session."}
+            {state.message && state.message !== "This session link has been revoked by the owner."
+              ? state.message
+              : "This link is no longer valid. The owner may have ended or revoked the session."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -749,7 +815,7 @@ function StatusBadge({
     return (
       <Badge
         variant="outline"
-        className="gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        className="gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
       >
         <WifiOff className="h-3 w-3" aria-hidden />
         {timeStr ? `Host offline • Last synced ${timeStr}` : "Host offline"}

@@ -126,7 +126,7 @@ export function ForkSessionDialog({
           </Button>
           <Button onClick={handleFork} disabled={forking}>
             {forking && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-            Save Copy
+            Save to workspace
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -117,7 +117,7 @@ for (const theme of ["light", "dark"] as const) {
 
     test("sessions dashboard page", async ({ page }) => {
       await page.goto("./#/sessions");
-      await expect(page.getByRole("heading", { name: "Shared Sessions" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeVisible();
       await checkA11y(page, `Sessions dashboard (${theme})`);
     });
 

@@ -78,6 +78,7 @@ export function loadNetworkConfig(): LiveNetworkConfig {
       relays: Array.isArray(saved.relays) ? saved.relays : defaults.relays,
       iceServers: Array.isArray(saved.iceServers) ? saved.iceServers : defaults.iceServers,
       sameBrowser: typeof saved.sameBrowser === "boolean" ? saved.sameBrowser : true,
+      ...(typeof saved.giveUpAfterMs === "number" ? { giveUpAfterMs: saved.giveUpAfterMs } : {}),
       ...(validRateLimit(saved.rateLimit) ? { rateLimit: saved.rateLimit } : {}),
     };
   } catch {

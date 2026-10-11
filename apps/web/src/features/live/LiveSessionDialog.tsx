@@ -455,46 +455,48 @@ function LivePanel() {
           {roster.length === 0 ? (
             <p className="py-2 text-center text-xs text-muted-foreground">No participants yet</p>
           ) : (
-            roster.map((p) => (
-              <div
-                key={p.participantId}
-                className="flex items-center justify-between gap-2 py-1.5 px-2 text-xs rounded hover:bg-muted/50"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={cn(
-                      "inline-block h-2 w-2 shrink-0 rounded-full",
-                      p.online ? "bg-success" : "bg-muted-foreground/30"
+            <ul className="space-y-1" aria-label="Connected people">
+              {roster.map((p) => (
+                <li
+                  key={p.participantId}
+                  className="flex items-center justify-between gap-2 py-1.5 px-2 text-xs rounded hover:bg-muted/50"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={cn(
+                        "inline-block h-2 w-2 shrink-0 rounded-full",
+                        p.online ? "bg-success" : "bg-muted-foreground/30"
+                      )}
+                      title={p.online ? "Online" : "Offline"}
+                      aria-hidden
+                    />
+                    <span className="truncate font-medium">{p.name}</span>
+                    {p.isHost && (
+                      <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                        Host
+                      </Badge>
                     )}
-                    title={p.online ? "Online" : "Offline"}
-                    aria-hidden
-                  />
-                  <span className="truncate font-medium">{p.name}</span>
-                  {p.isHost && (
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                      Host
-                    </Badge>
-                  )}
-                </div>
+                  </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-muted-foreground text-[11px]">
-                    {p.gradeCount} {p.gradeCount === 1 ? "grade" : "grades"}
-                    {p.hasBallot ? " • Ballot cast" : ""}
-                  </span>
-                  {!p.isHost && (p.gradeCount > 0 || p.hasBallot) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
-                      onClick={() => setDropTarget(p)}
-                    >
-                      Drop votes
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-muted-foreground text-[11px]">
+                      {p.gradeCount} {p.gradeCount === 1 ? "grade" : "grades"}
+                      {p.hasBallot ? " • Ballot cast" : ""}
+                    </span>
+                    {!p.isHost && (p.gradeCount > 0 || p.hasBallot) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
+                        onClick={() => setDropTarget(p)}
+                      >
+                        Drop votes
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

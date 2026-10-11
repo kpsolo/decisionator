@@ -183,9 +183,10 @@ export class LiveShareHost {
     this.unwatch = null;
     if (this.broadcastTimer) clearTimeout(this.broadcastTimer);
     if (this.relayPublishTimer) clearTimeout(this.relayPublishTimer);
+    const code = reason === "The host closed their tab." ? "host_closed" : "ended";
     for (const s of [...this.links]) {
       clearTimeout(s.helloTimer);
-      send(s.link, { t: "closing", reason, code: "ended" });
+      send(s.link, { t: "closing", reason, code });
       s.link.close("host closed");
     }
     this.links.clear();

@@ -114,7 +114,9 @@ test("User Story 1: Host reloads page (F5) and guests reconnect within 5 seconds
   await expect(guest.getByRole("heading", { name: "Team Offsite Deliberation" })).toBeVisible({
     timeout: 1000,
   });
-  await expect(guest.getByText(/Host offline • Last synced/)).toBeVisible({ timeout: 1000 });
+  await expect(guest.getByText(/Host offline • Last synced/).first()).toBeVisible({
+    timeout: 1000,
+  });
   const offlineRenderTime = Date.now() - offlineStart;
   expect(offlineRenderTime).toBeLessThan(2000);
 

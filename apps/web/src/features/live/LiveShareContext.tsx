@@ -209,16 +209,21 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
 
   const closeDialog = useCallback(() => setDialogTarget(null), []);
 
-  // Warn before closing tab if guests are connected
+  // Warn before closing tab if guests are connected, and notify guests on pagehide
   const guestCount = session?.state.guests.length ?? 0;
   useEffect(() => {
     if (!session) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (guestCount > 0) e.preventDefault();
     };
+    const onPageHide = () => {
+      sessionRef.current?.hosting.close("The host closed their tab.");
+    };
     window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("pagehide", onPageHide);
     };
   }, [session, guestCount]);
 

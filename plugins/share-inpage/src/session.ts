@@ -24,6 +24,10 @@ export interface LiveNetworkConfig {
   sameBrowser: boolean;
   /** Per-guest submission limit applied by the host (default 20 at once, 5 per second). */
   rateLimit?: { burst: number; perSecond: number };
+  /** Stop retrying after this long without a connection (default 8s when relays empty, else 30s). */
+  giveUpAfterMs?: number;
+  /** Timeout for dialing host on WebRTC data channel (default 5s when relays empty, else 15s). */
+  dialTimeoutMs?: number;
 }
 
 export const DEFAULT_RELAYS = [
@@ -140,8 +144,18 @@ export function joinSession(opts: {
     deviceSecret: opts.deviceSecret,
     displayName: opts.displayName,
     hostKey: normHostKey,
-    dial: (signal) => dialHost(room, { iceServers: opts.config.iceServers }, signal),
+    dial: (signal) =>
+      dialHost(
+        room,
+        {
+          iceServers: opts.config.iceServers,
+          timeoutMs:
+            opts.config.dialTimeoutMs ?? (opts.config.relays.length === 0 ? 5_000 : 15_000),
+        },
+        signal
+      ),
     onNotice: opts.onNotice,
+    giveUpAfterMs: opts.config.giveUpAfterMs ?? (opts.config.relays.length === 0 ? 6_000 : 30_000),
   });
 
   const sessionKeys = deriveSessionKeys(opts.credentials);

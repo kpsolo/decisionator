@@ -261,9 +261,12 @@ export function HomePage() {
                 >
                   <div className="space-y-1 pr-4 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-foreground truncate text-sm">
+                      <Link
+                        to={openUrl}
+                        className="font-medium text-foreground hover:underline truncate text-sm"
+                      >
                         {p.title}
-                      </span>
+                      </Link>
                       <Badge
                         variant={badgeVariant}
                         className="uppercase text-[10px] tracking-wider font-semibold"

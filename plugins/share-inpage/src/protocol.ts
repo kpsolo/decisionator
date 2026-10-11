@@ -124,7 +124,7 @@ const Ack = z.object({
   code: AckErrorCodeSchema.optional(),
   message: z.string().optional(),
 });
-export const ClosingCodeSchema = z.enum(["session_revoked", "ended"]);
+export const ClosingCodeSchema = z.enum(["session_revoked", "ended", "host_closed"]);
 export type ClosingCode = z.infer<typeof ClosingCodeSchema>;
 const Closing = z.object({
   t: z.literal("closing"),

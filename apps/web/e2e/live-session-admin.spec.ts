@@ -67,11 +67,8 @@ test("User Story 5: Host toggles read-only mode and drops participant votes with
   await joinAs(guest, "Tom");
 
   // 3. Tom grades Option One with 4 stars
-  await guest.getByRole("button", { name: "Rate 4 out of 5" }).first().click();
-  await expect(guest.getByRole("button", { name: "Rate 4 out of 5" }).first()).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
+  await guest.locator('input[aria-label="4 stars"]').first().check({ force: true });
+  await expect(guest.locator('input[aria-label="4 stars"]').first()).toBeChecked();
 
   // 4. Host inspects roster in live panel
   await expect(dialog.getByText("Tom")).toBeVisible();
@@ -82,13 +79,13 @@ test("User Story 5: Host toggles read-only mode and drops participant votes with
   await readOnlyToggle.click();
 
   // Guest immediately sees read-only banner within 1000ms (< 1000 ms) (FR-015, SC-003)
-  await expect(guest.getByText("The host made this session view-only.")).toBeVisible({
+  await expect(guest.getByText("The host made this session view-only.").first()).toBeVisible({
     timeout: 2000,
   });
 
   // Host turns off Read-only mode
   await readOnlyToggle.click();
-  await expect(guest.getByText("The host made this session view-only.")).not.toBeVisible({
+  await expect(guest.getByText("The host made this session view-only.")).toHaveCount(0, {
     timeout: 2000,
   });
 
@@ -100,11 +97,10 @@ test("User Story 5: Host toggles read-only mode and drops participant votes with
   await confirmModal.getByRole("button", { name: "Drop votes" }).click();
 
   // Guest receives reset notification / toast (FR-030)
-  await expect(guest.getByText("The host reset your votes.")).toBeVisible({ timeout: 5000 });
+  await expect(guest.getByText("The host reset your votes.").first()).toBeVisible({
+    timeout: 5000,
+  });
 
   // Tom's grade is cleared
-  await expect(guest.getByRole("button", { name: "Rate 4 out of 5" }).first()).toHaveAttribute(
-    "aria-pressed",
-    "false"
-  );
+  await expect(guest.locator('input[aria-label="4 stars"]').first()).not.toBeChecked();
 });
