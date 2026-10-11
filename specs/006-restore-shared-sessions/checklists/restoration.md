@@ -12,44 +12,44 @@
 
 ## 1. Host Recognition & Reload Recovery Requirements Quality
 
-- [ ] CHK001 Are the conditions under which a browser identifies itself as the host vs. a guest explicitly defined for shared join links? [Completeness, Spec §FR-001]
-- [ ] CHK002 Is the distinction between tab page reloads (F5) and permanent tab closures clearly bounded regarding session survival? [Clarity, Spec §FR-002]
-- [ ] CHK003 Does the specification define what happens if a host resumes hosting while guests are already connected or waiting? [Coverage, Spec §US1 AS3]
-- [ ] CHK004 Can the 5-second guest reconnection threshold after host reload be objectively measured? [Measurability, Spec §SC-002]
-- [ ] CHK005 Are the required UI actions ("Resume Live Session" and "Open Project") and their redirection destinations explicitly specified for returning hosts? [Completeness, Spec §US1 AS1]
-- [ ] CHK006 Is the session expiration or stale heartbeat threshold for active hosting recovery unambiguously defined? [Clarity, Data Model §4]
+- [x] CHK001 Are the conditions under which a browser identifies itself as the host vs. a guest explicitly defined for shared join links? [Completeness, Spec §FR-001]
+- [x] CHK002 Is the distinction between tab page reloads (F5) and permanent tab closures clearly bounded regarding session survival? [Clarity, Spec §FR-002]
+- [x] CHK003 Does the specification define what happens if a host resumes hosting while guests are already connected or waiting? [Coverage, Spec §US1 AS3]
+- [x] CHK004 Can the 5-second guest reconnection threshold after host reload be objectively measured? [Measurability, Spec §SC-002]
+- [x] CHK005 Are the required UI actions ("Resume Live Session" and "Open Project") and their redirection destinations explicitly specified for returning hosts? [Completeness, Spec §US1 AS1]
+- [x] CHK006 Is the session expiration or stale heartbeat threshold for active hosting recovery unambiguously defined? [Clarity, Data Model §4]
 
 ---
 
 ## 2. Guest Offline Caching & Synchronization Requirements Quality
 
-- [ ] CHK007 Are the specific project data elements required to be visible in offline cached view fully enumerated? [Completeness, Spec §FR-003]
-- [ ] CHK008 Is the offline status indicator and timestamp format specified with unambiguous visual criteria? [Clarity, Spec §FR-004]
-- [ ] CHK009 Does the spec specify the exact user feedback and input state when an offline guest attempts to vote or comment? [Completeness, Spec §US2 AS4]
-- [ ] CHK010 Can the sub-second (< 1s) initial render of cached deliberation state be objectively verified? [Measurability, Spec §SC-001]
-- [ ] CHK011 Are the requirements for state reconciliation defined when an offline guest's view seamlessly upgrades back to live? [Completeness, Spec §FR-005]
-- [ ] CHK012 Are offline cached session retention and local deletion requirements consistent with the project's Anonymous-First data disposal policy? [Consistency, Spec §FR-009]
+- [x] CHK007 Are the specific project data elements required to be visible in offline cached view fully enumerated? [Completeness, Spec §FR-003]
+- [x] CHK008 Is the offline status indicator and timestamp format specified with unambiguous visual criteria? [Clarity, Spec §FR-004]
+- [x] CHK009 Does the spec specify the exact user feedback and input state when an offline guest attempts to vote or comment? [Completeness, Spec §US2 AS4]
+- [x] CHK010 Can the sub-second (< 1s) initial render of cached deliberation state be objectively verified? [Measurability, Spec §SC-001]
+- [x] CHK011 Are the requirements for state reconciliation defined when an offline guest's view seamlessly upgrades back to live? [Completeness, Spec §FR-005]
+- [x] CHK012 Are offline cached session retention and local deletion requirements consistent with the project's Anonymous-First data disposal policy? [Consistency, Spec §FR-009]
 
 ---
 
 ## 3. Asynchronous Relay Retrieval & Anti-Forgery Requirements Quality
 
-- [ ] CHK013 Are the discovery and retrieval requirements for asynchronous relay snapshots specified for first-time visitors when the host is offline? [Completeness, Spec §FR-006]
-- [ ] CHK014 Is the relay verification rule requiring Schnorr signature matching against the link's public key explicitly defined? [Clarity, Spec §FR-017]
-- [ ] CHK015 Does the specification define user-facing explanations for malformed, unresolvable, or expired session links? [Coverage, Spec §US3 AS2]
-- [ ] CHK016 Can the 5-second retrieval target for asynchronous relay snapshot bootstrapping be objectively measured? [Measurability, Spec §SC-004]
-- [ ] CHK017 Are the precedence rules between live WebRTC snapshots and asynchronous relay snapshots documented without ambiguity? [Consistency, Contract §1.3]
-- [ ] CHK018 Does the spec specify how legacy join links lacking the host key segment handle relay authenticity without breaking backwards compatibility? [Edge Case, Contract §0]
+- [x] CHK013 Are the discovery and retrieval requirements for asynchronous relay snapshots specified for first-time visitors when the host is offline? [Completeness, Spec §FR-006]
+- [x] CHK014 Is the relay verification rule requiring Schnorr signature matching against the link's public key explicitly defined? [Clarity, Spec §FR-017]
+- [x] CHK015 Does the specification define user-facing explanations for malformed, unresolvable, or expired session links? [Coverage, Spec §US3 AS2]
+- [x] CHK016 Can the 5-second retrieval target for asynchronous relay snapshot bootstrapping be objectively measured? [Measurability, Spec §SC-004]
+- [x] CHK017 Are the precedence rules between live WebRTC snapshots and asynchronous relay snapshots documented without ambiguity? [Consistency, Contract §1.3]
+- [x] CHK018 Does the spec specify how legacy join links lacking the host key segment handle relay authenticity without breaking backwards compatibility? [Edge Case, Contract §0]
 
 ---
 
 ## 4. Edge Cases & Resilience Requirements Quality
 
-- [ ] CHK019 Is device storage management quantified with an explicit capacity limit or least-recently-used (LRU) eviction threshold? [Clarity, Spec §Edge Cases]
-- [ ] CHK020 Are error and recovery requirements specified for guest submissions interrupted by an unexpected host drop during transmission? [Coverage, Spec §Edge Cases]
-- [ ] CHK021 Is the resolution mechanism for duplicate guest display names across host disconnects and reconnects explicitly defined? [Clarity, Spec §Edge Cases]
-- [ ] CHK022 Does the specification define conflict resolution between asynchronous snapshot fetching and concurrent relay tombstone retractions? [Consistency, Spec §Edge Cases]
-- [ ] CHK023 Are fallback requirements defined when local application storage is cleared on a host browser? [Coverage, Spec §Edge Cases]
+- [x] CHK019 Is device storage management quantified with an explicit capacity limit or least-recently-used (LRU) eviction threshold? [Clarity, Spec §Edge Cases]
+- [x] CHK020 Are error and recovery requirements specified for guest submissions interrupted by an unexpected host drop during transmission? [Coverage, Spec §Edge Cases]
+- [x] CHK021 Is the resolution mechanism for duplicate guest display names across host disconnects and reconnects explicitly defined? [Clarity, Spec §Edge Cases]
+- [x] CHK022 Does the specification define conflict resolution between asynchronous snapshot fetching and concurrent relay tombstone retractions? [Consistency, Spec §Edge Cases]
+- [x] CHK023 Are fallback requirements defined when local application storage is cleared on a host browser? [Coverage, Spec §Edge Cases]
 
 ---
 

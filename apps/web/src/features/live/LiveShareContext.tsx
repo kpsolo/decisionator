@@ -2,6 +2,7 @@ import type { ProjectRef, ProjectStore } from "@decisionator/plugin-sdk";
 import {
   type HostingSession,
   type LiveHostState,
+  type LiveRole,
   hostedProjectFromStore,
   startHosting,
 } from "@decisionator/share-inpage";
@@ -15,7 +16,32 @@ import {
   useRef,
   useState,
 } from "react";
-import { hostCredentialsFor, loadNetworkConfig } from "./live-config.js";
+import {
+  hostCredentialsFor,
+  loadNetworkConfig,
+  markSessionRevoked,
+  removeHostSessionIndex,
+  rotateHostCredentials,
+} from "./live-config.js";
+import { getStorageManager } from "../../storage/storage-manager.js";
+
+export const ACTIVE_HOSTING_KEY = "deci.live.activeHosting";
+
+export interface ActiveHostingDescriptor {
+  projectRef: { store: string; id: string };
+  projectTitle: string;
+  sessionId: string;
+  startedAt: string;
+  lastHeartbeat: string;
+}
+
+export function clearActiveHosting(): void {
+  try {
+    sessionStorage.removeItem(ACTIVE_HOSTING_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 export interface LiveTarget {
   store: ProjectStore;
@@ -45,6 +71,8 @@ interface LiveShareContextValue {
   closeDialog(): void;
   start(target: LiveTarget): Promise<void>;
   stop(reason?: string): void;
+  setRole(role: LiveRole): void;
+  revoke(reason?: string): void;
 }
 
 const LiveShareContext = createContext<LiveShareContextValue | null>(null);
@@ -64,8 +92,14 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
   const [startError, setStartError] = useState<string | null>(null);
   const sessionRef = useRef<ActiveLiveSession | null>(null);
   sessionRef.current = session;
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stop = useCallback((reason?: string) => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    clearActiveHosting();
     sessionRef.current?.hosting.close(reason);
     sessionRef.current = null;
     setSession(null);
@@ -79,9 +113,10 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
     setStarting(true);
     setStartError(null);
     try {
+      const creds = hostCredentialsFor(key);
       const hosting = await startHosting({
         project: hostedProjectFromStore(target.store, target.projectRef),
-        credentials: hostCredentialsFor(key),
+        credentials: creds,
         config: loadNetworkConfig(),
       });
       const next: ActiveLiveSession = {
@@ -96,6 +131,34 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
       hosting.host.subscribe((state) => {
         setSession((s) => (s && s.hosting === hosting ? { ...s, state } : s));
       });
+
+      // Persist active hosting descriptor for reload recovery (data-model §4)
+      const desc: ActiveHostingDescriptor = {
+        projectRef: target.projectRef,
+        projectTitle: target.projectTitle,
+        sessionId: creds.sessionId,
+        startedAt: new Date().toISOString(),
+        lastHeartbeat: new Date().toISOString(),
+      };
+      try {
+        sessionStorage.setItem(ACTIVE_HOSTING_KEY, JSON.stringify(desc));
+      } catch {
+        // ignore
+      }
+
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+        try {
+          const raw = sessionStorage.getItem(ACTIVE_HOSTING_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as ActiveHostingDescriptor;
+            parsed.lastHeartbeat = new Date().toISOString();
+            sessionStorage.setItem(ACTIVE_HOSTING_KEY, JSON.stringify(parsed));
+          }
+        } catch {
+          // ignore
+        }
+      }, 30_000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setStartError(
@@ -107,6 +170,29 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
       setStarting(false);
     }
   }, []);
+
+  // Auto-resume hosting on mount if active hosting descriptor is present and < 1 hour old (FR-002, US1)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(ACTIVE_HOSTING_KEY);
+      if (!raw) return;
+      const desc = JSON.parse(raw) as ActiveHostingDescriptor;
+      const ageMs = Date.now() - new Date(desc.lastHeartbeat).getTime();
+      if (ageMs > 3600 * 1000) {
+        clearActiveHosting();
+        return;
+      }
+      const sm = getStorageManager();
+      const store = sm.resolveStore(desc.projectRef);
+      void start({
+        store,
+        projectRef: desc.projectRef,
+        projectTitle: desc.projectTitle,
+      });
+    } catch {
+      // ignore
+    }
+  }, [start]);
 
   const openFor = useCallback(
     (target: LiveTarget) => {
@@ -123,23 +209,43 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
 
   const closeDialog = useCallback(() => setDialogTarget(null), []);
 
-  // Leaving the page ends the session: warn first if people are connected, then tell them.
+  // Warn before closing tab if guests are connected
   const guestCount = session?.state.guests.length ?? 0;
   useEffect(() => {
     if (!session) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (guestCount > 0) e.preventDefault();
     };
-    const onPageHide = () => sessionRef.current?.hosting.close("The host closed their tab.");
     window.addEventListener("beforeunload", onBeforeUnload);
-    window.addEventListener("pagehide", onPageHide);
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
-      window.removeEventListener("pagehide", onPageHide);
     };
   }, [session, guestCount]);
 
-  useEffect(() => () => sessionRef.current?.hosting.close("The host closed their tab."), []);
+  useEffect(() => {
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, []);
+
+  const setRole = useCallback((role: LiveRole) => {
+    if (sessionRef.current) {
+      sessionRef.current.hosting.host.setRole(role);
+      setSession((prev) => (prev ? { ...prev, state: prev.hosting.host.getState() } : null));
+    }
+  }, []);
+
+  const revoke = useCallback((reason = "This session link has been revoked by the owner.") => {
+    if (sessionRef.current) {
+      const sessionId = sessionRef.current.hosting.credentials.sessionId;
+      markSessionRevoked(sessionId, reason);
+      removeHostSessionIndex(sessionId);
+      rotateHostCredentials(sessionRef.current.key);
+      sessionRef.current.hosting.revoke(reason);
+    }
+    clearActiveHosting();
+    setSession(null);
+  }, []);
 
   const value = useMemo<LiveShareContextValue>(
     () => ({
@@ -152,8 +258,10 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
       closeDialog,
       start,
       stop,
+      setRole,
+      revoke,
     }),
-    [session, dialogTarget, starting, startError, openFor, openActive, closeDialog, start, stop]
+    [session, dialogTarget, starting, startError, openFor, openActive, closeDialog, start, stop, setRole, revoke]
   );
 
   return <LiveShareContext.Provider value={value}>{children}</LiveShareContext.Provider>;

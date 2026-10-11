@@ -10,12 +10,15 @@ import {
   ProjectSharePage,
   ProjectStatsPage,
   ProjectVotePage,
+  SessionsDashboard,
   SettingsPage,
 } from "./pages.js";
 
 export const routes: RouteObject[] = [
   { path: "/", element: <HomePage /> },
   { path: "/new", element: <NewProjectWizard /> },
+  { path: "/sessions", element: <SessionsDashboard /> },
+  { path: "/join/:sessionId/:secret/:hostKey", element: <JoinLivePage /> },
   { path: "/join/:sessionId/:secret", element: <JoinLivePage /> },
   // Pre-v2 links carried no secret; the page explains they no longer work.
   { path: "/join/:sessionId", element: <JoinLivePage /> },

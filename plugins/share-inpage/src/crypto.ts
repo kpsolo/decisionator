@@ -1,3 +1,4 @@
+import { schnorr } from "@noble/curves/secp256k1";
 import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -41,6 +42,10 @@ export interface SessionCredentials {
   sessionId: string;
   /** 128-bit secret; whoever holds it can join and read the signaling traffic. */
   secret: string;
+  /** Host verification key (x-only Schnorr public key) — optional in join link. */
+  hostKey?: string;
+  /** Host-only secret used to derive Schnorr key pair (never travels in links or snapshots). */
+  relaySecret?: string;
 }
 
 export function createSessionCredentials(): SessionCredentials {
@@ -97,4 +102,40 @@ export function guestSessionKey(deviceSecret: string, sessionId: string): string
  */
 export function participantIdFromKey(sessionKey: string): string {
   return `peer:${sha256Hex(`deci-live/pid\0${sessionKey}`).slice(0, 24)}`;
+}
+
+/**
+ * Derives the host Schnorr key pair from the host-only relaySecret and sessionId (data-model §1).
+ */
+export function deriveHostKeyPair(
+  relaySecret: string,
+  sessionId: string
+): {
+  secretKey: Uint8Array;
+  hostKey: string; // 64 hex chars
+  hostKeyLink: string; // 43 base64url chars
+} {
+  const ikm = utf8ToBytes(relaySecret);
+  const okm = hkdf(sha256, ikm, utf8ToBytes("deci-live/relay"), utf8ToBytes(sessionId), 32);
+  const secretKey = okm;
+  const pubkeyBytes = schnorr.getPublicKey(secretKey);
+  return {
+    secretKey,
+    hostKey: bytesToHex(pubkeyBytes),
+    hostKeyLink: toBase64Url(pubkeyBytes),
+  };
+}
+
+/**
+ * Normalizes hostKey from either 43-character base64url link segment or 64-character hex to hex.
+ */
+export function parseHostKeyFromLink(raw: string): string {
+  if (raw.length === 64) return raw;
+  try {
+    const bytes = fromBase64Url(raw);
+    if (bytes.length === 32) return bytesToHex(bytes);
+    return raw;
+  } catch {
+    return raw;
+  }
 }

@@ -1,6 +1,7 @@
 import type { ProjectSnapshot, Unsubscribe } from "@decisionator/plugin-sdk";
 import { guestSessionKey, randomId } from "./crypto.js";
 import type { Link } from "./link.js";
+import type { RelayPayload } from "./nostr.js";
 import {
   type AckErrorCode,
   type GuestEntry,
@@ -17,6 +18,8 @@ export type LiveGuestStatus =
   | "live"
   /** Lost the host; retrying. Submissions are refused until it is back. */
   | "reconnecting"
+  /** The session link was revoked by the host. */
+  | "revoked"
   /** The host ended the session. The last snapshot stays available. */
   | "ended"
   /** Gave up, or the host refused us. `retry()` starts over. */
@@ -27,10 +30,13 @@ export interface LiveGuestState {
   snapshot: ProjectSnapshot | null;
   participantId: string | null;
   role: LiveRole | null;
+  rev?: number;
   /** The display name the host gave us; differs from the one asked for when it was taken. */
   name?: string;
   /** Why the session ended or failed. */
   message?: string;
+  /** Notice message for the guest, e.g. "The host reset your votes." */
+  notice?: string;
 }
 
 export class SubmitError extends Error {
@@ -48,6 +54,8 @@ export interface LiveShareGuestOptions {
   /** Device-wide secret the guest's identity is derived from (kept in local storage). */
   deviceSecret: string;
   displayName: string;
+  /** Optional pinned host public key (from join link). */
+  hostKey?: string;
   /** Opens a new link to the host, or rejects when the host cannot be reached. */
   dial: (signal: AbortSignal) => Promise<Link>;
   /** Wait for a welcome after connecting. */
@@ -57,6 +65,8 @@ export interface LiveShareGuestOptions {
   /** Stop retrying after this long without a connection. */
   giveUpAfterMs?: number;
   maxRetryDelayMs?: number;
+  /** Optional callback when host performs an administrative action affecting the guest (e.g. resets votes). */
+  onNotice?: (message: string) => void;
 }
 
 interface Pending {
@@ -67,8 +77,8 @@ interface Pending {
 
 /** The guest side of a live session. */
 export class LiveShareGuest {
-  private readonly opts: Required<Omit<LiveShareGuestOptions, "dial">> &
-    Pick<LiveShareGuestOptions, "dial">;
+  private readonly opts: Required<Omit<LiveShareGuestOptions, "dial" | "onNotice" | "hostKey">> &
+    Pick<LiveShareGuestOptions, "dial" | "onNotice" | "hostKey">;
   private state: LiveGuestState = {
     status: "connecting",
     snapshot: null,
@@ -84,6 +94,8 @@ export class LiveShareGuest {
   private pending = new Map<string, Pending>();
   private listeners = new Set<(state: LiveGuestState) => void>();
   private stopped = false;
+  private lastResetAt = "";
+  private pinnedHostKey: string | null = null;
 
   constructor(opts: LiveShareGuestOptions) {
     this.opts = {
@@ -93,6 +105,31 @@ export class LiveShareGuest {
       maxRetryDelayMs: 10_000,
       ...opts,
     };
+    if (opts.hostKey) {
+      this.pinnedHostKey = opts.hostKey;
+    }
+  }
+
+  applyRelayPayload(payload: RelayPayload, hostKey: string): void {
+    if (this.pinnedHostKey && hostKey !== this.pinnedHostKey) return;
+    if (!this.pinnedHostKey) this.pinnedHostKey = hostKey;
+
+    if (payload.type === "tombstone") {
+      this.stopped = true;
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.set({ status: "revoked", message: "This session link has been revoked by the owner." });
+      this.link?.close("host revoked");
+      return;
+    }
+
+    if (payload.type === "snapshot") {
+      if (payload.rev <= this.rev) return;
+      this.rev = payload.rev;
+      this.set({
+        rev: payload.rev,
+        snapshot: payload.snapshot as unknown as ProjectSnapshot,
+      });
+    }
   }
 
   start(): void {
@@ -199,24 +236,43 @@ export class LiveShareGuest {
     if (!parsed.success) return;
     const msg = parsed.data;
     switch (msg.t) {
-      case "welcome":
+      case "welcome": {
         clearTimeout(welcomeTimer);
         this.attempt = 0;
         this.rev = msg.rev;
+        const welcomeSnapshot = msg.snapshot as unknown as ProjectSnapshot;
+        const liveHostKey = (welcomeSnapshot as unknown as Record<string, unknown>).live
+          ? ((welcomeSnapshot as unknown as Record<string, unknown>).live as Record<string, unknown>).hostKey
+          : undefined;
+        if (typeof liveHostKey === "string" && !this.pinnedHostKey) {
+          this.pinnedHostKey = liveHostKey;
+        }
+        this.checkVoteResets(this.state.snapshot, welcomeSnapshot, msg.participantId);
         this.set({
           status: "live",
           participantId: msg.participantId,
           name: msg.name,
           role: msg.role,
-          snapshot: msg.snapshot as unknown as ProjectSnapshot,
+          rev: msg.rev,
+          snapshot: welcomeSnapshot,
           message: undefined,
         });
         break;
-      case "snapshot":
+      }
+      case "snapshot": {
         if (msg.rev <= this.rev) return;
         this.rev = msg.rev;
-        this.set({ snapshot: msg.snapshot as unknown as ProjectSnapshot });
+        const updatedSnapshot = msg.snapshot as unknown as ProjectSnapshot;
+        if (this.state.participantId) {
+          this.checkVoteResets(this.state.snapshot, updatedSnapshot, this.state.participantId);
+        }
+        this.set({
+          rev: msg.rev,
+          snapshot: updatedSnapshot,
+          ...(msg.role ? { role: msg.role } : {}),
+        });
         break;
+      }
       case "ack": {
         const p = this.pending.get(msg.id);
         if (!p) return;
@@ -231,7 +287,11 @@ export class LiveShareGuest {
       }
       case "closing":
         this.stopped = true;
-        this.set({ status: "ended", message: msg.reason });
+        if (msg.code === "session_revoked") {
+          this.set({ status: "revoked", message: msg.reason });
+        } else {
+          this.set({ status: "ended", message: msg.reason });
+        }
         link.close("host closed");
         break;
       case "error":
@@ -264,6 +324,59 @@ export class LiveShareGuest {
       p.reject(new SubmitError("offline", message));
     }
     this.pending.clear();
+  }
+
+  private checkVoteResets(
+    oldSnapshot: ProjectSnapshot | null,
+    newSnapshot: ProjectSnapshot,
+    participantId: string
+  ): void {
+    if (!oldSnapshot) {
+      for (const r of newSnapshot.history?.resets ?? []) {
+        if (r.scope === "participant" && r.participantId === participantId) {
+          if (!this.lastResetAt || r.at > this.lastResetAt) {
+            this.lastResetAt = r.at;
+          }
+        }
+      }
+      return;
+    }
+
+    const oldRound = oldSnapshot.project.voting?.round ?? 1;
+    const newRound = newSnapshot.project.voting?.round ?? 1;
+
+    const hadGrades = oldSnapshot.grades.some((g) => g.by === participantId);
+    const hadBallot = oldSnapshot.rankings.some(
+      (r) => r.by === participantId && (r.round ?? 1) === oldRound
+    );
+    const hadVotes = hadGrades || hadBallot;
+
+    const hasGrades = newSnapshot.grades.some((g) => g.by === participantId);
+    const hasBallot = newSnapshot.rankings.some(
+      (r) => r.by === participantId && (r.round ?? 1) === newRound
+    );
+    const hasVotes = hasGrades || hasBallot;
+
+    let newerResetAt: string | null = null;
+    for (const r of newSnapshot.history?.resets ?? []) {
+      if (r.scope === "participant" && r.participantId === participantId) {
+        if (!this.lastResetAt || r.at > this.lastResetAt) {
+          if (!newerResetAt || r.at > newerResetAt) {
+            newerResetAt = r.at;
+          }
+        }
+      }
+    }
+
+    if (newerResetAt) {
+      this.lastResetAt = newerResetAt;
+    }
+
+    if (hadVotes && !hasVotes && this.pending.size === 0 && newerResetAt) {
+      const msg = "The host reset your votes.";
+      this.opts.onNotice?.(msg);
+      this.set({ notice: msg });
+    }
   }
 
   private send(link: Link, message: GuestMessage): void {

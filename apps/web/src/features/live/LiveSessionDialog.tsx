@@ -1,5 +1,6 @@
-import { AlertTriangle, Check, Copy, Info, Loader2, Radio, Users } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Check, Copy, Info, Loader2, Radio, ShieldAlert, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -11,10 +12,15 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog.js";
 import { Input } from "../../components/ui/input.js";
+import { Switch } from "../../components/ui/switch.js";
 import { toast } from "../../components/ui/use-toast.js";
+import { cn } from "../../lib/utils.js";
+import { participantVoteResets } from "../history/reset-entries.js";
 import { projectKey, useLiveShare } from "./LiveShareContext.js";
 import { QrCode } from "./QrCode.js";
+import { RevokeSessionDialog } from "./RevokeSessionDialog.js";
 import { appBaseUrl, isLoopbackHost, joinUrl, savePublicBaseUrl } from "./live-config.js";
+import { buildRoster, type LiveParticipantProfile } from "./participant-roster.js";
 
 /**
  * The live session panel. Closing it only hides it: the session keeps running (see the header
@@ -31,7 +37,7 @@ export function LiveSessionDialog() {
 
   return (
     <Dialog open onOpenChange={(open) => !open && live.closeDialog()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Radio className="h-5 w-5 text-primary" aria-hidden />
@@ -85,11 +91,39 @@ function LivePanel() {
   const session = live.session;
   const [base, setBase] = useState(appBaseUrl);
   const [copied, setCopied] = useState(false);
+  const [dropTarget, setDropTarget] = useState<LiveParticipantProfile | null>(null);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
+
   if (!session) return null;
+
+  // Track host's project snapshot
+  useEffect(() => {
+    const s = session.hosting.host.getSnapshot();
+    if (s) setSnapshot(s);
+
+    const unwatch = session.target.store.watch(session.target.projectRef, (updated) => {
+      setSnapshot(updated);
+    });
+    return () => {
+      unwatch();
+    };
+  }, [session]);
 
   const loopback = isLoopbackHost();
   const url = joinUrl(session.hosting.credentials, base);
   const guests = session.state.guests;
+  const currentRole = session.hosting.host.getRole();
+
+  const hostParticipantId = useMemo(() => {
+    if (snapshot?.options[0]?.by) return snapshot.options[0].by;
+    return "owner";
+  }, [snapshot]);
+
+  const roster = useMemo(() => {
+    if (!snapshot) return [];
+    return buildRoster(snapshot, guests, hostParticipantId);
+  }, [snapshot, guests, hostParticipantId]);
 
   const copy = async () => {
     try {
@@ -106,10 +140,40 @@ function LivePanel() {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleDropVotes = async () => {
+    if (!dropTarget || !snapshot) return;
+    try {
+      const round = snapshot.project.voting?.round ?? 1;
+      const resets = participantVoteResets(dropTarget.participantId, round);
+      await session.target.store.append(session.target.projectRef, resets);
+      toast({
+        title: "Votes dropped",
+        description: `Reset grades and ballot for ${dropTarget.name}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Could not drop votes",
+        description: err instanceof Error ? err.message : "Failed to append reset entries.",
+        variant: "destructive",
+      });
+    } finally {
+      setDropTarget(null);
+    }
+  };
+
+  const handleRevokeConfirm = () => {
+    live.revoke("This session link has been revoked by the owner.");
+    live.closeDialog();
+    toast({
+      title: "Session link revoked",
+      description: "Connected guests were disconnected and the link was deactivated.",
+    });
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-        <QrCode value={url} label="QR code for the join link" size={168} />
+        <QrCode value={url} label="QR code for the join link" size={148} />
         <div className="w-full min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="success" className="gap-1.5">
@@ -154,15 +218,83 @@ function LivePanel() {
               </Button>
             </div>
           </div>
+        </div>
+      </div>
 
-          {guests.length > 0 && (
-            <ul className="flex flex-wrap gap-1.5" aria-label="Connected people">
-              {guests.map((g) => (
-                <li key={g.participantId}>
-                  <Badge variant="outline">{g.name}</Badge>
-                </li>
-              ))}
-            </ul>
+      {/* Dynamic Role Control (US5, FR-015) */}
+      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <div className="space-y-0.5">
+          <label htmlFor="read-only-toggle" className="text-xs font-medium cursor-pointer">
+            Read-only mode
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            {currentRole === "view"
+              ? "Session is view-only. Connected guests cannot submit grades, comments, or ballots."
+              : "Contributions allowed. Guests can submit grades, comments, and ballots."}
+          </p>
+        </div>
+        <Switch
+          id="read-only-toggle"
+          checked={currentRole === "view"}
+          onCheckedChange={(checked) => live.setRole(checked ? "view" : "contribute")}
+        />
+      </div>
+
+      {/* Participant Roster (US5, FR-014, FR-030) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Participant Roster ({roster.length})
+          </h4>
+          <span className="text-[11px] text-muted-foreground">
+            {roster.filter((r) => r.online).length} online
+          </span>
+        </div>
+
+        <div className="max-h-44 overflow-y-auto space-y-1 rounded-md border border-border p-2">
+          {roster.length === 0 ? (
+            <p className="py-2 text-center text-xs text-muted-foreground">No participants yet</p>
+          ) : (
+            roster.map((p) => (
+              <div
+                key={p.participantId}
+                className="flex items-center justify-between gap-2 py-1.5 px-2 text-xs rounded hover:bg-muted/50"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={cn(
+                      "inline-block h-2 w-2 shrink-0 rounded-full",
+                      p.online ? "bg-success" : "bg-muted-foreground/30"
+                    )}
+                    title={p.online ? "Online" : "Offline"}
+                    aria-hidden
+                  />
+                  <span className="truncate font-medium">{p.name}</span>
+                  {p.isHost && (
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                      Host
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-muted-foreground text-[11px]">
+                    {p.gradeCount} {p.gradeCount === 1 ? "grade" : "grades"}
+                    {p.hasBallot ? " • Ballot cast" : ""}
+                  </span>
+                  {!p.isHost && (p.gradeCount > 0 || p.hasBallot) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
+                      onClick={() => setDropTarget(p)}
+                    >
+                      Drop votes
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
@@ -197,27 +329,70 @@ function LivePanel() {
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         <span>
           Votes travel directly between browsers and are saved into this project. Encrypted
-          connection offers pass through public relays, which see no project data. The link stays
-          the same for this project, so people can rejoin. Closing this window keeps the session
-          running.
+          connection offers pass through public relays, which see no project data. Closing this
+          window keeps the session running.
         </span>
       </p>
 
-      <DialogFooter className="border-t border-border pt-3">
-        <Button variant="outline" size="sm" onClick={live.closeDialog}>
-          Hide
-        </Button>
+      <DialogFooter className="border-t border-border pt-3 flex items-center justify-between sm:justify-between">
         <Button
-          variant="destructive"
+          variant="outline"
           size="sm"
-          onClick={() => {
-            live.stop("The host ended the session.");
-            live.closeDialog();
-          }}
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          leftIcon={<ShieldAlert className="h-3.5 w-3.5" aria-hidden />}
+          onClick={() => setRevokeOpen(true)}
         >
-          End session
+          Revoke link
         </Button>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={live.closeDialog}>
+            Hide
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              live.stop("The host ended the session.");
+              live.closeDialog();
+            }}
+          >
+            End session
+          </Button>
+        </div>
       </DialogFooter>
+
+      {/* Confirmation modal for dropping participant votes (US5, FR-030) */}
+      {dropTarget && (
+        <Dialog open onOpenChange={(open) => !open && setDropTarget(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Drop votes from {dropTarget.name}?</DialogTitle>
+              <DialogDescription>
+                This will reset all grades and the current round ballot submitted by{" "}
+                <span className="font-semibold text-foreground">{dropTarget.name}</span>. Historical audit
+                trail is preserved in project history.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setDropTarget(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDropVotes}>
+                Drop votes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Confirmation modal for revoking link (US5, FR-008) */}
+      <RevokeSessionDialog
+        open={revokeOpen}
+        onOpenChange={setRevokeOpen}
+        projectTitle={session.target.projectTitle}
+        onConfirm={handleRevokeConfirm}
+      />
     </div>
   );
 }

@@ -6,12 +6,17 @@ import { randomId } from "./crypto.js";
 import type { SignalingTransport } from "./signaling.js";
 
 /**
- * Network rendezvous over public Nostr relays (NIP-01). Messages are ephemeral events (the
- * 20000–29999 kind range relays forward but do not store), signed with a throwaway key, tagged
- * with the session topic and carrying only sealed payloads. Relays never see who is in a session
- * or what they exchange; they only pass connection offers between the host and its guests.
+ * Network rendezvous over public Nostr relays (NIP-01). Ephemeral signaling events (kind 25050)
+ * pass connection offers between the host and its guests.
+ * Parameterized replaceable events (kind 30078, NIP-78) carry host-signed sealed snapshots
+ * for asynchronous offline bootstrapping.
  */
 export const LIVE_SIGNAL_KIND = 25_050;
+export const NIP78_SNAPSHOT_KIND = 30_078;
+
+export type RelayPayload =
+  | { v: 1; type: "snapshot"; rev: number; publishedAt: number; snapshot: Record<string, unknown> }
+  | { v: 1; type: "tombstone"; publishedAt: number; reason: "revoked" | "ended" };
 
 export interface NostrEvent {
   id: string;
@@ -41,6 +46,24 @@ export function signEvent(
   return { ...template, id, pubkey, sig };
 }
 
+export function verifyEvent(event: NostrEvent): boolean {
+  try {
+    const serialized = JSON.stringify([
+      0,
+      event.pubkey,
+      event.created_at,
+      event.kind,
+      event.tags,
+      event.content,
+    ]);
+    const expectedId = bytesToHex(sha256(utf8ToBytes(serialized)));
+    if (expectedId !== event.id) return false;
+    return schnorr.verify(event.sig, event.id, event.pubkey);
+  } catch {
+    return false;
+  }
+}
+
 type SocketFactory = (url: string) => WebSocket;
 
 interface RelayConnection {
@@ -56,6 +79,10 @@ export class NostrSignaling implements SignalingTransport {
   private readonly secretKey = schnorr.utils.randomPrivateKey();
   private relays: RelayConnection[];
   private topics = new Map<string, { subId: string; handlers: Set<(p: string) => void> }>();
+  private snapshotSubs = new Map<
+    string,
+    { subId: string; hostKey: string; handlers: Set<(event: NostrEvent) => void> }
+  >();
   private closed = false;
 
   constructor(
@@ -106,6 +133,49 @@ export class NostrSignaling implements SignalingTransport {
     };
   }
 
+  publishSnapshot(topic: string, secretKey: Uint8Array, content: string): void {
+    const event = signEvent(secretKey, {
+      kind: NIP78_SNAPSHOT_KIND,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ["d", topic],
+        ["t", topic],
+      ],
+      content,
+    });
+    const frame = JSON.stringify(["EVENT", event]);
+    for (const r of this.relays) this.sendOrQueue(r, frame);
+  }
+
+  subscribeSnapshot(
+    topic: string,
+    hostKey: string,
+    onEvent: (event: NostrEvent) => void
+  ): Unsubscribe {
+    let entry = this.snapshotSubs.get(topic);
+    if (!entry) {
+      entry = { subId: randomId(8), hostKey, handlers: new Set() };
+      this.snapshotSubs.set(topic, entry);
+      for (const r of this.relays) {
+        if (r.socket?.readyState === 1) {
+          r.socket.send(this.reqSnapshotFrame(topic, hostKey, entry.subId));
+        }
+      }
+    }
+    entry.handlers.add(onEvent);
+    return () => {
+      const e = this.snapshotSubs.get(topic);
+      if (!e) return;
+      e.handlers.delete(onEvent);
+      if (e.handlers.size === 0) {
+        this.snapshotSubs.delete(topic);
+        for (const r of this.relays) {
+          if (r.socket?.readyState === 1) r.socket.send(JSON.stringify(["CLOSE", e.subId]));
+        }
+      }
+    };
+  }
+
   close(): void {
     this.closed = true;
     for (const r of this.relays) {
@@ -114,12 +184,20 @@ export class NostrSignaling implements SignalingTransport {
       r.socket = null;
     }
     this.topics.clear();
+    this.snapshotSubs.clear();
   }
 
   private reqFrame(topic: string, subId: string): string {
-    // `since` slightly in the past so a message sent while we were subscribing is not missed.
     const since = Math.floor(Date.now() / 1000) - 30;
     return JSON.stringify(["REQ", subId, { kinds: [LIVE_SIGNAL_KIND], "#t": [topic], since }]);
+  }
+
+  private reqSnapshotFrame(topic: string, hostKey: string, subId: string): string {
+    return JSON.stringify([
+      "REQ",
+      subId,
+      { kinds: [NIP78_SNAPSHOT_KIND], authors: [hostKey], "#d": [topic], limit: 1 },
+    ]);
   }
 
   private sendOrQueue(r: RelayConnection, frame: string): void {
@@ -144,6 +222,9 @@ export class NostrSignaling implements SignalingTransport {
     socket.onopen = () => {
       r.retry = 0;
       for (const [topic, e] of this.topics) socket.send(this.reqFrame(topic, e.subId));
+      for (const [topic, e] of this.snapshotSubs) {
+        socket.send(this.reqSnapshotFrame(topic, e.hostKey, e.subId));
+      }
       const queued = r.outbox.splice(0);
       for (const frame of queued) socket.send(frame);
     };
@@ -174,8 +255,21 @@ export class NostrSignaling implements SignalingTransport {
     }
     if (!Array.isArray(msg) || msg[0] !== "EVENT") return;
     const event = msg[2] as Partial<NostrEvent> | undefined;
-    if (!event || event.kind !== LIVE_SIGNAL_KIND || typeof event.content !== "string") return;
-    // Authenticity comes from the sealed payload, so the event signature need not be checked.
+    if (!event || typeof event.content !== "string") return;
+
+    if (event.kind === NIP78_SNAPSHOT_KIND) {
+      for (const entry of this.snapshotSubs.values()) {
+        if (entry.subId === msg[1]) {
+          if (event.pubkey === entry.hostKey && verifyEvent(event as NostrEvent)) {
+            for (const cb of entry.handlers) cb(event as NostrEvent);
+          }
+        }
+      }
+      return;
+    }
+
+    if (event.kind !== LIVE_SIGNAL_KIND) return;
+
     const topic = event.tags?.find((t) => t[0] === "t")?.[1];
     if (!topic) return;
     const entry = this.topics.get(topic);

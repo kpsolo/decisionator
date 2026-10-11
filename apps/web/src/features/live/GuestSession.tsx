@@ -8,16 +8,18 @@ import {
 } from "@decisionator/share-inpage";
 import {
   Download,
+  Eye,
   Link2Off,
   Loader2,
   Radio,
   RefreshCw,
+  ShieldAlert,
   Unplug,
   Users,
   WifiOff,
 } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -30,6 +32,7 @@ import {
 import { Input } from "../../components/ui/input.js";
 import { Skeleton } from "../../components/ui/skeleton.js";
 import { toast } from "../../components/ui/use-toast.js";
+import { getStorageManager } from "../../storage/storage-manager.js";
 import { CommentThread } from "../comments/CommentThread.js";
 import { CompareStrategiesDialog } from "../decide/CompareStrategiesDialog.js";
 import { DecidedBy } from "../decide/DecisionMethod.js";
@@ -42,33 +45,141 @@ import { downloadProjectExport } from "../project/project-file.js";
 import { RankBallot } from "../voting/RankBallot.js";
 import { ResultsView } from "../voting/ResultsView.js";
 import {
+  type CachedLiveSessionRecord,
+  cacheLiveSession,
+  deleteCachedLiveSession,
+  getCachedLiveSession,
+} from "../../sync/db.js";
+import { useLiveShare } from "./LiveShareContext.js";
+import {
+  getSessionRevocation,
   guestDeviceSecret,
+  isSessionRevoked,
   loadNetworkConfig,
+  resolveHostProject,
   saveGuestName,
   savedGuestName,
 } from "./live-config.js";
 
-/** `/join/:sessionId/:secret` — a guest joining a live session hosted in someone's tab. */
+/** `/join/:sessionId/:secret[/:hostKey]` — a guest joining a live session hosted in someone's tab. */
 export function JoinLivePage() {
-  const { sessionId, secret } = useParams();
+  const { sessionId, secret, hostKey } = useParams();
+  const navigate = useNavigate();
+  const liveShare = useLiveShare();
+  const [cachedSession, setCachedSession] = useState<CachedLiveSessionRecord | null>(null);
+  const [cacheChecked, setCacheChecked] = useState(false);
   const [name, setName] = useState(savedGuestName);
   const [joinedAs, setJoinedAs] = useState<string | null>(null);
   const nameId = useId();
 
-  if (!sessionId || !secret) {
+  // Read local offline cache on mount (SC-001, FR-003)
+  useEffect(() => {
+    let active = true;
+    if (sessionId) {
+      void getCachedLiveSession(sessionId).then((rec) => {
+        if (!active) return;
+        if (rec) {
+          setCachedSession(rec);
+          void cacheLiveSession({ ...rec, lastOpenedAt: new Date().toISOString() });
+        }
+        setCacheChecked(true);
+      });
+    } else {
+      setCacheChecked(true);
+    }
+    return () => {
+      active = false;
+    };
+  }, [sessionId]);
+
+  // 1. Check if session has been revoked on this device (FR-011, US5)
+  if (sessionId && isSessionRevoked(sessionId)) {
+    const rev = getSessionRevocation(sessionId);
+    return (
+      <Card className="mx-auto mt-6 max-w-md">
+        <CardHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+            <Link2Off className="h-5 w-5" aria-hidden />
+          </div>
+          <CardTitle>This session link has been revoked by the owner.</CardTitle>
+          <CardDescription>
+            {rev?.reason || "This link is no longer valid. The owner may have ended or revoked the session."}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  // 2. Check if current browser is the host of this session (FR-001, US1)
+  const hostProject = sessionId ? resolveHostProject(sessionId) : null;
+  if (hostProject) {
+    const colon = hostProject.indexOf(":");
+    const storeId = colon >= 0 ? hostProject.slice(0, colon) : hostProject;
+    const id = colon >= 0 ? hostProject.slice(colon + 1) : "";
+    const projectPath = `/p/${storeId}/${id}`;
+
+    return (
+      <Card className="mx-auto mt-6 max-w-md">
+        <CardHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Radio className="h-5 w-5" aria-hidden />
+          </div>
+          <CardTitle>You are the host of this session</CardTitle>
+          <CardDescription>
+            This live deliberation was created in this browser. You can resume live hosting for returning collaborators or open the project directly.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Button
+            onClick={() => {
+              const sm = getStorageManager();
+              const projectRef = { store: storeId, id };
+              const store = sm.resolveStore(projectRef);
+              void liveShare.openFor({
+                store,
+                projectRef,
+                projectTitle: "Live Session",
+              });
+              navigate(projectPath);
+            }}
+          >
+            Resume Live Session
+          </Button>
+          <Button variant="outline" onClick={() => navigate(projectPath)}>
+            Open Project
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isMalformed = !sessionId || !secret || sessionId.length < 6 || secret.length < 10;
+  if (isMalformed) {
     return (
       <Card className="mx-auto mt-6 max-w-md">
         <CardHeader>
           <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
             <Link2Off className="h-5 w-5 text-muted-foreground" aria-hidden />
           </div>
-          <CardTitle>This join link is incomplete</CardTitle>
+          <CardTitle>This link is incomplete or damaged.</CardTitle>
           <CardDescription>
-            Ask the host to copy the link again or to show you the QR code. Links from older
-            versions of Deci no longer work.
+            The link is missing required security keys or has been corrupted. Ask the host to copy
+            the link again or to show you the QR code.
           </CardDescription>
         </CardHeader>
       </Card>
+    );
+  }
+
+  if (cachedSession) {
+    return (
+      <GuestSession
+        sessionId={sessionId}
+        secret={secret}
+        hostKey={hostKey}
+        displayName={cachedSession.displayName || cachedSession.name}
+        initialCached={cachedSession}
+      />
     );
   }
 
@@ -117,36 +228,82 @@ export function JoinLivePage() {
     );
   }
 
-  return <GuestSession sessionId={sessionId} secret={secret} displayName={joinedAs} />;
+  return (
+    <GuestSession
+      sessionId={sessionId}
+      secret={secret}
+      hostKey={hostKey}
+      displayName={joinedAs}
+      initialCached={null}
+    />
+  );
 }
 
 function GuestSession({
   sessionId,
   secret,
+  hostKey,
   displayName,
+  initialCached,
 }: {
   sessionId: string;
   secret: string;
+  hostKey?: string;
   displayName: string;
+  initialCached?: CachedLiveSessionRecord | null;
 }) {
   const [guest, setGuest] = useState<LiveShareGuest | null>(null);
   const [state, setState] = useState<LiveGuestState | null>(null);
+  const [cached, setCached] = useState<CachedLiveSessionRecord | null>(initialCached ?? null);
   const [unsupported, setUnsupported] = useState<string | null>(null);
 
   useEffect(() => {
     let joined: ReturnType<typeof joinSession>;
     try {
       joined = joinSession({
-        credentials: { sessionId, secret },
+        credentials: { sessionId, secret, hostKey },
         deviceSecret: guestDeviceSecret(),
         displayName,
         config: loadNetworkConfig(),
+        onNotice: (msg) => {
+          toast({ title: msg });
+        },
       });
     } catch (err) {
       setUnsupported(err instanceof Error ? err.message : String(err));
       return;
     }
-    const off = joined.guest.subscribe(setState);
+    const off = joined.guest.subscribe((s) => {
+      setState(s);
+      if (s.status === "revoked") {
+        void deleteCachedLiveSession(sessionId);
+        setCached(null);
+        return;
+      }
+      if (s.notice) {
+        toast({ title: s.notice });
+      }
+      if (s.snapshot) {
+        const now = new Date().toISOString();
+        const record: CachedLiveSessionRecord = {
+          sessionId,
+          secret,
+          hostKey: hostKey ?? cached?.hostKey ?? null,
+          participantId: s.participantId ?? cached?.participantId ?? "",
+          displayName,
+          name: s.name ?? cached?.name ?? displayName,
+          role: s.role ?? cached?.role ?? "contribute",
+          projectTitle: s.snapshot.project.title,
+          rev: s.rev ?? 1,
+          snapshot: s.snapshot,
+          cachedAt: cached?.cachedAt ?? now,
+          lastSyncedAt: s.status === "live" ? now : (cached?.lastSyncedAt ?? now),
+          lastOpenedAt: now,
+        };
+        setCached(record);
+        void cacheLiveSession(record);
+      }
+    });
     joined.guest.start();
     setGuest(joined.guest);
     // Say goodbye when the tab goes, so the host's list of connected people drops us at once.
@@ -157,26 +314,45 @@ function GuestSession({
       off();
       joined.dispose();
     };
-  }, [sessionId, secret, displayName]);
+  }, [sessionId, secret, hostKey, displayName]);
+
+  if (state?.status === "revoked") {
+    return (
+      <Card className="mx-auto mt-6 max-w-md border-destructive/40">
+        <CardHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+            <ShieldAlert className="h-5 w-5" aria-hidden />
+          </div>
+          <CardTitle>This session link has been revoked by the owner.</CardTitle>
+          <CardDescription>
+            {state.message || "This link is no longer valid. The owner may have ended or revoked the session."}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   if (unsupported) {
     return (
       <StatusCard icon={<Unplug className="h-5 w-5" />} title="Can't join" body={unsupported} />
     );
   }
-  if (!guest || !state) return null;
 
-  if (!state.snapshot) {
-    if (state.status === "failed") {
+  const activeSnapshot = state?.snapshot ?? cached?.snapshot;
+
+  if (!activeSnapshot) {
+    if (state?.status === "failed") {
       return (
         <StatusCard
           icon={<WifiOff className="h-5 w-5" />}
-          title="Couldn't connect"
-          body={state.message ?? "The host could not be reached."}
+          title="This session can't be reached right now."
+          body={state.message || "The host may be offline, or the link may be wrong or revoked."}
           action={
-            <Button onClick={() => guest.retry()} leftIcon={<RefreshCw className="h-4 w-4" />}>
-              Try again
-            </Button>
+            guest ? (
+              <Button onClick={() => guest.retry()} leftIcon={<RefreshCw className="h-4 w-4" />}>
+                Retry
+              </Button>
+            ) : undefined
           }
         />
       );
@@ -205,8 +381,9 @@ function GuestSession({
     <GuestWorkspace
       guest={guest}
       state={state}
-      snapshot={state.snapshot}
+      snapshot={activeSnapshot}
       displayName={displayName}
+      cachedSession={cached}
     />
   );
 }
@@ -216,20 +393,24 @@ function GuestWorkspace({
   state,
   snapshot,
   displayName,
+  cachedSession,
 }: {
-  guest: LiveShareGuest;
-  state: LiveGuestState;
+  guest: LiveShareGuest | null;
+  state: LiveGuestState | null;
   snapshot: ProjectSnapshot;
   displayName: string;
+  cachedSession?: CachedLiveSessionRecord | null;
 }) {
-  const me = state.participantId ?? "";
+  const me = state?.participantId ?? cachedSession?.participantId ?? "";
   // The host may have numbered the name ("Gina 2") if someone else already uses it.
-  const myName = state.name ?? displayName;
-  const live = state.status === "live";
-  const canContribute = live && state.role === "contribute";
+  const myName = state?.name ?? cachedSession?.name ?? displayName;
+  const live = state?.status === "live";
+  const role = state?.role ?? cachedSession?.role ?? "contribute";
+  const canContribute = live && role === "contribute";
+  const isOfflineCached = !live && !!cachedSession;
   const disabledReason = !live
     ? "Not connected to the host, so changes can't be saved right now."
-    : state.role !== "contribute"
+    : role !== "contribute"
       ? "The host made this session view-only."
       : undefined;
 
@@ -281,12 +462,22 @@ function GuestWorkspace({
   };
 
   const submit = async (entries: GuestEntry[]) => {
+    if (!guest || !live) {
+      toast({
+        title: "Not saved",
+        description: "Not connected to the host, so changes can't be saved right now.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       await guest.submit(entries);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isDisconnect = /disconnect|closed|lost/i.test(msg);
       toast({
-        title: "Not saved",
-        description: err instanceof Error ? err.message : String(err),
+        title: isDisconnect ? "Host disconnected" : "Not saved",
+        description: isDisconnect ? "Host disconnected; submission not saved" : msg,
         variant: "destructive",
       });
       throw err;
@@ -298,18 +489,21 @@ function GuestWorkspace({
   const batcher = useMemo(
     () =>
       createBatcher<GuestEntry>(async (entries) => {
+        if (!guest || !live) return;
         try {
           await guest.submit(entries);
         } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const isDisconnect = /disconnect|closed|lost/i.test(msg);
           toast({
-            title: "Not saved",
-            description: err instanceof Error ? err.message : String(err),
+            title: isDisconnect ? "Host disconnected" : "Not saved",
+            description: isDisconnect ? "Host disconnected; submission not saved" : msg,
             variant: "destructive",
           });
           throw err;
         }
       }),
-    [guest]
+    [guest, live]
   );
   useEffect(() => () => batcher.dispose(), [batcher]);
 
@@ -342,7 +536,11 @@ function GuestWorkspace({
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={state.status} />
+            <StatusBadge
+              status={state?.status ?? "connecting"}
+              isOfflineCached={isOfflineCached}
+              lastSyncedAt={cachedSession?.lastSyncedAt}
+            />
             <span className="text-xs text-muted-foreground">{`You're ${myName}`}</span>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
@@ -355,17 +553,32 @@ function GuestWorkspace({
           )}
         </header>
 
-        {state.status === "reconnecting" && (
+        {isOfflineCached && (
+          <Banner icon={<WifiOff className="h-4 w-4" />}>
+            Host offline • Last synced{" "}
+            {cachedSession?.lastSyncedAt
+              ? new Date(cachedSession.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              : "earlier"}
+          </Banner>
+        )}
+
+        {live && role === "view" && (
+          <Banner icon={<Eye className="h-4 w-4" />}>
+            The host made this session view-only.
+          </Banner>
+        )}
+
+        {state?.status === "reconnecting" && (
           <Banner icon={<Loader2 className="h-4 w-4 motion-safe:animate-spin" />} live>
             Lost the connection to the host. Reconnecting…
           </Banner>
         )}
-        {(state.status === "ended" || state.status === "failed") && (
+        {(state?.status === "ended" || state?.status === "failed") && (
           <Banner
             icon={<Unplug className="h-4 w-4" />}
             action={
               <div className="flex flex-wrap gap-2">
-                {state.status === "failed" && (
+                {state.status === "failed" && guest && (
                   <Button size="sm" variant="outline" onClick={() => guest.retry()}>
                     Reconnect
                   </Button>
@@ -487,12 +700,34 @@ function GuestWorkspace({
   );
 }
 
-function StatusBadge({ status }: { status: LiveGuestState["status"] }) {
+function StatusBadge({
+  status,
+  isOfflineCached = false,
+  lastSyncedAt,
+}: {
+  status: LiveGuestState["status"];
+  isOfflineCached?: boolean;
+  lastSyncedAt?: string;
+}) {
   if (status === "live") {
     return (
       <Badge variant="success" className="gap-1.5">
         <Radio className="h-3 w-3" aria-hidden />
         Live
+      </Badge>
+    );
+  }
+  if (isOfflineCached) {
+    const timeStr = lastSyncedAt
+      ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "";
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+      >
+        <WifiOff className="h-3 w-3" aria-hidden />
+        {timeStr ? `Host offline • Last synced ${timeStr}` : "Host offline"}
       </Badge>
     );
   }

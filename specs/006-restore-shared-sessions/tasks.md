@@ -10,9 +10,9 @@
 
 **Purpose**: Database schema expansion, protocol schemas, and routing entry points.
 
-- [ ] T001 Register `live_sessions` object store in `DecisionatorDB` schema and upgrade handler with `lastOpenedAt` index in `apps/web/src/sync/db.ts`
-- [ ] T002 [P] Define additive wire schemas in `plugins/share-inpage/src/protocol.ts`: `SnapshotUpdate` gains optional `role: LiveRoleSchema.optional()`, `Closing` gains optional `code: z.enum(["session_revoked", "ended"]).optional()`, and update `SessionCredentials` / crypto types for optional `hostKey`
-- [ ] T003 [P] Add route `{ path: "/sessions", element: <SessionsDashboard /> }` to `apps/web/src/app/routes.tsx` and export navigation links in `apps/web/src/app/pages.tsx`
+- [X] T001 Register `live_sessions` object store in `DecisionatorDB` schema and upgrade handler with `lastOpenedAt` index in `apps/web/src/sync/db.ts`
+- [X] T002 [P] Define additive wire schemas in `plugins/share-inpage/src/protocol.ts`: `SnapshotUpdate` gains optional `role: LiveRoleSchema.optional()`, `Closing` gains optional `code: z.enum(["session_revoked", "ended"]).optional()`, and update `SessionCredentials` / crypto types for optional `hostKey`
+- [X] T003 [P] Add route `{ path: "/sessions", element: <SessionsDashboard /> }` to `apps/web/src/app/routes.tsx` and export navigation links in `apps/web/src/app/pages.tsx`
 
 ---
 
@@ -20,9 +20,9 @@
 
 **Purpose**: Core session indexing, revocation tracking, and IndexedDB cache helpers that block user stories.
 
-- [ ] T004 [P] Implement reverse session lookup helpers (`saveHostSessionIndex`, `resolveHostProject`), `relaySecret` generation in `hostCredentialsFor`, and revocation registry in `apps/web/src/features/live/live-config.ts`
-- [ ] T005 [P] Implement IndexedDB cache access helpers (`cacheLiveSession`, `getCachedLiveSession`, `listCachedLiveSessions`, `deleteCachedLiveSession`, and LRU 30-session eviction) in `apps/web/src/sync/db.ts`
-- [ ] T006 Write unit and contract tests for reverse index, `relaySecret` derivation, and cache helpers with LRU eviction in `apps/web/src/features/live/live-config.test.ts` and `apps/web/src/sync/db.test.ts`
+- [X] T004 [P] Implement reverse session lookup helpers (`saveHostSessionIndex`, `resolveHostProject`), `relaySecret` generation in `hostCredentialsFor`, and revocation registry in `apps/web/src/features/live/live-config.ts`
+- [X] T005 [P] Implement IndexedDB cache access helpers (`cacheLiveSession`, `getCachedLiveSession`, `listCachedLiveSessions`, `deleteCachedLiveSession`, and LRU 30-session eviction) in `apps/web/src/sync/db.ts`
+- [X] T006 Write unit and contract tests for reverse index, `relaySecret` derivation, and cache helpers with LRU eviction in `apps/web/src/features/live/live-config.test.ts` and `apps/web/src/sync/db.test.ts`
 
 **Checkpoint**: Foundation ready — user story implementation can begin.
 
@@ -35,12 +35,12 @@
 **Independent Test**: An owner starts a live session, closes tab, and opens the join link in chat; recognized as owner, clicks "Resume Live Session", and re-hosts on the same credentials. When reloading the page, hosting auto-resumes within 5 seconds.
 
 ### Tests for User Story 1
-- [ ] T007 [P] [US1] Write unit test for host reverse resolution and reload auto-resume in `apps/web/src/features/live/host-resume.test.ts`
+- [X] T007 [P] [US1] Write unit test for host reverse resolution and reload auto-resume in `apps/web/src/features/live/host-resume.test.ts`
 
 ### Implementation for User Story 1
-- [ ] T008 [US1] Update `apps/web/src/features/live/LiveShareContext.tsx` to persist active hosting descriptor to `sessionStorage["deci.live.activeHosting"]` on `start()`, update heartbeat every 30 s, clear on `stop()` and revocation, and auto-resume hosting on mount if active hosting descriptor is present (< 1 hour)
-- [ ] T009 [US1] Update `apps/web/src/features/live/GuestSession.tsx` (`JoinLivePage`) to check revocation first, then `resolveHostProject(sessionId)`: if matched and not revoked, render Host Resume card with "Resume Live Session" and "Open Project" actions, redirecting to `/p/:store/:id`
-- [ ] T010 [US1] Add E2E Playwright test in `apps/web/e2e/live-session-resume.spec.ts` testing host page reload resilience and guest auto-reconnection with timing assertions (< 5000 ms)
+- [X] T008 [US1] Update `apps/web/src/features/live/LiveShareContext.tsx` to persist active hosting descriptor to `sessionStorage["deci.live.activeHosting"]` on `start()`, update heartbeat every 30 s, clear on `stop()` and revocation, and auto-resume hosting on mount if active hosting descriptor is present (< 1 hour)
+- [X] T009 [US1] Update `apps/web/src/features/live/GuestSession.tsx` (`JoinLivePage`) to check revocation first, then `resolveHostProject(sessionId)`: if matched and not revoked, render Host Resume card with "Resume Live Session" and "Open Project" actions, redirecting to `/p/:store/:id`
+- [X] T010 [US1] Add E2E Playwright test in `apps/web/e2e/live-session-resume.spec.ts` testing host page reload resilience and guest auto-reconnection with timing assertions (< 5000 ms)
 
 **Checkpoint**: User Story 1 is fully functional and independently testable.
 
@@ -53,12 +53,12 @@
 **Independent Test**: Gina joins a session, votes, and closes her tab. The host closes their tab. Gina re-opens the link; the workspace loads from IndexedDB in <1s displaying previous grades, ballots, and results with an offline banner.
 
 ### Tests for User Story 2
-- [ ] T011 [P] [US2] Write unit test for guest offline cache lifecycle and in-flight submission drop error handling in `apps/web/src/features/live/guest-cache.test.ts`
+- [X] T011 [P] [US2] Write unit test for guest offline cache lifecycle and in-flight submission drop error handling in `apps/web/src/features/live/guest-cache.test.ts`
 
 ### Implementation for User Story 2
-- [ ] T012 [US2] Update `apps/web/src/features/live/GuestSession.tsx` to read `getCachedLiveSession(sessionId)` on mount: if found, render `GuestWorkspace` immediately (< 1000 ms) in cached offline mode with banner "Host offline • Last synced [Time]" while `guest.start()` dials in background
-- [ ] T013 [US2] Update `apps/web/src/features/live/GuestSession.tsx` to persist received `welcome` and `snapshot` payloads to IndexedDB via `cacheLiveSession(...)`, disable submissions while offline with "Not connected to host", and surface "Host disconnected; submission not saved" on in-flight drops
-- [ ] T014 [US2] Add E2E Playwright test step in `apps/web/e2e/live-session-resume.spec.ts` verifying guest offline viewing (< 1000 ms) and smooth upgrade to live when host reconnects
+- [X] T012 [US2] Update `apps/web/src/features/live/GuestSession.tsx` to read `getCachedLiveSession(sessionId)` on mount: if found, render `GuestWorkspace` immediately (< 1000 ms) in cached offline mode with banner "Host offline • Last synced [Time]" while `guest.start()` dials in background
+- [X] T013 [US2] Update `apps/web/src/features/live/GuestSession.tsx` to persist received `welcome` and `snapshot` payloads to IndexedDB via `cacheLiveSession(...)`, disable submissions while offline with "Not connected to host", and surface "Host disconnected; submission not saved" on in-flight drops
+- [X] T014 [US2] Add E2E Playwright test step in `apps/web/e2e/live-session-resume.spec.ts` verifying guest offline viewing (< 1000 ms) and smooth upgrade to live when host reconnects
 
 **Checkpoint**: User Stories 1 and 2 work independently.
 
@@ -71,21 +71,21 @@
 **Independent Test**: An owner hosts a live session with Gina and Tom. Tom submits an invalid ballot. The owner opens the participant roster, clicks "Drop votes" for Tom, and turns on "Read-only mode". Tom's ballot is cleared from the tally, Tom sees "The host reset your votes.", and both Gina's and Tom's screens immediately show "The host made this session view-only." with inputs disabled.
 
 ### Tests for User Story 5
-- [ ] T015 [P] [US5] Write unit tests for link revocation closing frame (`code: "session_revoked"`), guest revocation transition, and cache purge in `plugins/share-inpage/test/revocation.test.ts`
-- [ ] T016 [P] [US5] Write contract and unit tests for dynamic host role toggle (`setRole`), snapshot role broadcast, and Ack rejection (`code: "read_only"`, message: "The host made this session view-only.") in `plugins/share-inpage/test/host-role.test.ts`
-- [ ] T017 [P] [US5] Write unit tests for `buildRoster(snapshot, guests, hostParticipantId)` and `participantVoteResets(participantId, round)` in `apps/web/src/features/live/participant-roster.test.ts` and `apps/web/src/features/history/reset-entries.test.ts`
+- [X] T015 [P] [US5] Write unit tests for link revocation closing frame (`code: "session_revoked"`), guest revocation transition, and cache purge in `plugins/share-inpage/test/revocation.test.ts`
+- [X] T016 [P] [US5] Write contract and unit tests for dynamic host role toggle (`setRole`), snapshot role broadcast, and Ack rejection (`code: "read_only"`, message: "The host made this session view-only.") in `plugins/share-inpage/test/host-role.test.ts`
+- [X] T017 [P] [US5] Write unit tests for `buildRoster(snapshot, guests, hostParticipantId)` and `participantVoteResets(participantId, round)` in `apps/web/src/features/live/participant-roster.test.ts` and `apps/web/src/features/history/reset-entries.test.ts`
 
 ### Implementation for User Story 5
-- [ ] T018 [US5] Implement `revoke(reason?: string)` in `plugins/share-inpage/src/host.ts`: sends `{ t: "closing", code: "session_revoked", reason: "This session link has been revoked by the owner." }` to all links, closes transport, and rotates credentials
-- [ ] T019 [US5] Implement `setRole(role: LiveRole)` in `plugins/share-inpage/src/host.ts`: broadcasts updated `role` in snapshot messages and rejects guest submissions with Ack `{ ok: false, code: "read_only", message: "The host made this session view-only." }` when `role === "view"`
-- [ ] T020 [US5] Update `plugins/share-inpage/src/guest.ts` to handle `closing` with `code: "session_revoked"` (transitions to `revoked` status), update `this.state.role` upon receiving `snapshot` messages with `role`, and emit toast "The host reset your votes." when own grades/ballot are cleared by a newer reset entry
-- [ ] T021 [US5] Extract `participantVoteResets(participantId, round)` into `apps/web/src/features/history/reset-entries.ts` (shared by `ResetDialog` and live panel) and implement `buildRoster()` in `apps/web/src/features/live/participant-roster.ts`
-- [ ] T022 [US5] Implement interactive participant roster, "Drop votes" action (with confirmation dialog appending participant resets), and "Read-only" toggle switch in `apps/web/src/features/live/LiveSessionDialog.tsx`
-- [ ] T023 [US5] Update `apps/web/src/features/live/GuestSession.tsx` to reactively lock grading and ballot inputs and display "The host made this session view-only." when `state.role === "view"`
-- [ ] T024 [US5] Implement `RevokeSessionDialog` in `apps/web/src/features/live/RevokeSessionDialog.tsx` allowing owner to confirm revocation and optional relay snapshot purge (publishing tombstone)
-- [ ] T025 [US5] Implement `SessionsDashboard` in `apps/web/src/features/live/SessionsDashboard.tsx` with "Hosted Sessions" (Revoke, Open, live peer count for current tab) and "Joined Sessions" (Reopen, "Remove from device" cache deletion)
-- [ ] T026 [US5] Add E2E Playwright test in `apps/web/e2e/live-session-revocation.spec.ts` testing owner revoking link, connected guest ejection within 1 s (< 1000 ms), cache purge, and old link blocking
-- [ ] T027 [US5] Add E2E Playwright test in `apps/web/e2e/live-session-admin.spec.ts` testing owner participant roster, dropping specific participant votes (< 1000 ms tally update, guest toast), and locking session to read-only (< 1000 ms input lock)
+- [X] T018 [US5] Implement `revoke(reason?: string)` in `plugins/share-inpage/src/host.ts`: sends `{ t: "closing", code: "session_revoked", reason: "This session link has been revoked by the owner." }` to all links, closes transport, and rotates credentials
+- [X] T019 [US5] Implement `setRole(role: LiveRole)` in `plugins/share-inpage/src/host.ts`: broadcasts updated `role` in snapshot messages and rejects guest submissions with Ack `{ ok: false, code: "read_only", message: "The host made this session view-only." }` when `role === "view"`
+- [X] T020 [US5] Update `plugins/share-inpage/src/guest.ts` to handle `closing` with `code: "session_revoked"` (transitions to `revoked` status), update `this.state.role` upon receiving `snapshot` messages with `role`, and emit toast "The host reset your votes." when own grades/ballot are cleared by a newer reset entry
+- [X] T021 [US5] Extract `participantVoteResets(participantId, round)` into `apps/web/src/features/history/reset-entries.ts` (shared by `ResetDialog` and live panel) and implement `buildRoster()` in `apps/web/src/features/live/participant-roster.ts`
+- [X] T022 [US5] Implement interactive participant roster, "Drop votes" action (with confirmation dialog appending participant resets), and "Read-only" toggle switch in `apps/web/src/features/live/LiveSessionDialog.tsx`
+- [X] T023 [US5] Update `apps/web/src/features/live/GuestSession.tsx` to reactively lock grading and ballot inputs and display "The host made this session view-only." when `state.role === "view"`
+- [X] T024 [US5] Implement `RevokeSessionDialog` in `apps/web/src/features/live/RevokeSessionDialog.tsx` allowing owner to confirm revocation and optional relay snapshot purge (publishing tombstone)
+- [X] T025 [US5] Implement `SessionsDashboard` in `apps/web/src/features/live/SessionsDashboard.tsx` with "Hosted Sessions" (Revoke, Open, live peer count for current tab) and "Joined Sessions" (Reopen, "Remove from device" cache deletion)
+- [X] T026 [US5] Add E2E Playwright test in `apps/web/e2e/live-session-revocation.spec.ts` testing owner revoking link, connected guest ejection within 1 s (< 1000 ms), cache purge, and old link blocking
+- [X] T027 [US5] Add E2E Playwright test in `apps/web/e2e/live-session-admin.spec.ts` testing owner participant roster, dropping specific participant votes (< 1000 ms tally update, guest toast), and locking session to read-only (< 1000 ms input lock)
 
 **Checkpoint**: User Stories 1, 2, and 5 work independently.
 
@@ -98,14 +98,14 @@
 **Independent Test**: A clean browser profile with no prior cache opens a shared link while host is offline; fetches sealed snapshot from Nostr relays in <5s and renders full decision state. Forged records from other link holders are ignored.
 
 ### Tests for User Story 3
-- [ ] T028 [P] [US3] Write unit and contract tests for host-signed NIP-78 replaceable snapshot publishing (`kind 30078`), Schnorr signature verification, key pinning, and tombstone handling in `plugins/share-inpage/test/nostr-nip78.test.ts`
+- [X] T028 [P] [US3] Write unit and contract tests for host-signed NIP-78 replaceable snapshot publishing (`kind 30078`), Schnorr signature verification, key pinning, and tombstone handling in `plugins/share-inpage/test/nostr-nip78.test.ts`
 
 ### Implementation for User Story 3
-- [ ] T029 [US3] Update `plugins/share-inpage/src/nostr.ts` to support NIP-78 parameterized replaceable events (`kind 30078`, tag `["d", topic]`) signed by the host Schnorr key, and query `authors: [hostKey]` on subscribe
-- [ ] T030 [US3] Update `plugins/share-inpage/src/host.ts` to derive `hostKeyPair` from `relaySecret`, include `hostKey` in `welcome` snapshot, publish signed NIP-78 snapshot on broadcast (≤ 1 per 2 s), and publish signed tombstone on revocation purge
-- [ ] T031 [US3] Update `plugins/share-inpage/src/guest.ts` to extract `hostKey` from link (or pin from first welcome), verify Schnorr signature before unsealing NIP-78 events, and initialize snapshot if received before WebRTC connects
-- [ ] T032 [US3] Update `apps/web/src/features/live/GuestSession.tsx` to explain unreachable links ("This session can't be reached right now...") and malformed links ("This link is incomplete or damaged.")
-- [ ] T033 [US3] Add Playwright test in `apps/web/e2e/live-session-async.spec.ts` validating clean browser profile fetching snapshot asynchronously from Nostr relay (< 5000 ms) and rejecting forged events
+- [X] T029 [US3] Update `plugins/share-inpage/src/nostr.ts` to support NIP-78 parameterized replaceable events (`kind 30078`, tag `["d", topic]`) signed by the host Schnorr key, and query `authors: [hostKey]` on subscribe
+- [X] T030 [US3] Update `plugins/share-inpage/src/host.ts` to derive `hostKeyPair` from `relaySecret`, include `hostKey` in `welcome` snapshot, publish signed NIP-78 snapshot on broadcast (≤ 1 per 2 s), and publish signed tombstone on revocation purge
+- [X] T031 [US3] Update `plugins/share-inpage/src/guest.ts` to extract `hostKey` from link (or pin from first welcome), verify Schnorr signature before unsealing NIP-78 events, and initialize snapshot if received before WebRTC connects
+- [X] T032 [US3] Update `apps/web/src/features/live/GuestSession.tsx` to explain unreachable links ("This session can't be reached right now...") and malformed links ("This link is incomplete or damaged.")
+- [X] T033 [US3] Add Playwright test in `apps/web/e2e/live-session-async.spec.ts` validating clean browser profile fetching snapshot asynchronously from Nostr relay (< 5000 ms) and rejecting forged events
 
 **Checkpoint**: User Story 3 enables verifiable asynchronous snapshot rendezvous.
 

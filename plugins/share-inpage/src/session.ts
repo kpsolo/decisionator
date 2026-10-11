@@ -1,8 +1,15 @@
-import { type SessionCredentials, deriveSessionKeys } from "./crypto.js";
+import {
+  type SessionCredentials,
+  deriveHostKeyPair,
+  deriveSessionKeys,
+  parseHostKeyFromLink,
+  seal,
+  unseal,
+} from "./crypto.js";
 import { LiveShareGuest } from "./guest.js";
 import { LiveShareHost } from "./host.js";
 import type { HostedProject } from "./hosted-project.js";
-import { NostrSignaling } from "./nostr.js";
+import { NostrSignaling, type RelayPayload } from "./nostr.js";
 import type { LiveRole } from "./protocol.js";
 import { dialHost, isWebRtcAvailable, listenForGuests } from "./rtc.js";
 import { BroadcastChannelSignaling, SignalingRoom, type SignalingTransport } from "./signaling.js";
@@ -56,6 +63,7 @@ export interface HostingSession {
   readonly credentials: SessionCredentials;
   readonly host: LiveShareHost;
   close(reason?: string): void;
+  revoke(reason?: string): void;
 }
 
 /** Starts serving `project`; resolves once the project is loaded and offers are being answered. */
@@ -66,13 +74,29 @@ export async function startHosting(opts: {
   role?: LiveRole;
 }): Promise<HostingSession> {
   if (!isWebRtcAvailable()) throw new LiveShareUnsupportedError();
+  const room = openRoom(opts.credentials, opts.config);
+  const sessionKeys = deriveSessionKeys(opts.credentials);
+  const hostKeyPair = opts.credentials.relaySecret
+    ? deriveHostKeyPair(opts.credentials.relaySecret, opts.credentials.sessionId)
+    : null;
+
   const host = new LiveShareHost({
     project: opts.project,
     role: opts.role,
+    relaySecret: opts.credentials.relaySecret,
+    sessionId: opts.credentials.sessionId,
     ...(opts.config.rateLimit ? { rateLimit: opts.config.rateLimit } : {}),
+    onPublishRelay(type, payload) {
+      if (!hostKeyPair) return;
+      const sealed = seal(sessionKeys.signalKey, sessionKeys.topic, JSON.stringify(payload));
+      for (const t of room.getTransports()) {
+        if (t instanceof NostrSignaling) {
+          t.publishSnapshot(sessionKeys.topic, hostKeyPair.secretKey, sealed);
+        }
+      }
+    },
   });
   await host.start();
-  const room = openRoom(opts.credentials, opts.config);
   const stopListening = listenForGuests(room, { iceServers: opts.config.iceServers }, (link) =>
     host.accept(link)
   );
@@ -87,6 +111,13 @@ export async function startHosting(opts: {
       stopListening();
       room.close();
     },
+    revoke(reason) {
+      if (closed) return;
+      closed = true;
+      host.revoke(reason);
+      stopListening();
+      room.close();
+    },
   };
 }
 
@@ -96,18 +127,48 @@ export function joinSession(opts: {
   deviceSecret: string;
   displayName: string;
   config: LiveNetworkConfig;
+  onNotice?: (message: string) => void;
 }): { guest: LiveShareGuest; dispose(): void } {
   if (!isWebRtcAvailable()) throw new LiveShareUnsupportedError();
   const room = openRoom(opts.credentials, opts.config);
+  const normHostKey = opts.credentials.hostKey
+    ? parseHostKeyFromLink(opts.credentials.hostKey)
+    : undefined;
+
   const guest = new LiveShareGuest({
     sessionId: opts.credentials.sessionId,
     deviceSecret: opts.deviceSecret,
     displayName: opts.displayName,
+    hostKey: normHostKey,
     dial: (signal) => dialHost(room, { iceServers: opts.config.iceServers }, signal),
+    onNotice: opts.onNotice,
   });
+
+  const sessionKeys = deriveSessionKeys(opts.credentials);
+  const unsubs: (() => void)[] = [];
+  if (normHostKey) {
+    for (const t of room.getTransports()) {
+      if (t instanceof NostrSignaling) {
+        unsubs.push(
+          t.subscribeSnapshot(sessionKeys.topic, normHostKey, (event) => {
+            const unsealed = unseal(sessionKeys.signalKey, sessionKeys.topic, event.content);
+            if (!unsealed) return;
+            try {
+              const payload = JSON.parse(unsealed) as RelayPayload;
+              guest.applyRelayPayload(payload, normHostKey);
+            } catch {
+              // ignore
+            }
+          })
+        );
+      }
+    }
+  }
+
   return {
     guest,
     dispose() {
+      for (const u of unsubs) u();
       guest.leave();
       room.close();
     },
@@ -116,5 +177,7 @@ export function joinSession(opts: {
 
 /** Route path of a join link (hash routing keeps it in the URL fragment, off every server). */
 export function joinPath(credentials: SessionCredentials): string {
-  return `/join/${credentials.sessionId}/${credentials.secret}`;
+  return credentials.hostKey
+    ? `/join/${credentials.sessionId}/${credentials.secret}/${credentials.hostKey}`
+    : `/join/${credentials.sessionId}/${credentials.secret}`;
 }

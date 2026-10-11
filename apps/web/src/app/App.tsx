@@ -1,5 +1,5 @@
 import { QuotaBudget } from "@decisionator/store-google-sheets";
-import { Blocks, Home, Menu, Plus, Settings, X } from "lucide-react";
+import { Blocks, Home, Menu, Plus, Radio, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink, useRoutes } from "react-router-dom";
 import { DeciIcon } from "../components/DeciLogo.js";
@@ -130,6 +130,14 @@ export function AppShell() {
               <span>Projects</span>
             </NavLink>
             <NavLink
+              to="/sessions"
+              className={sidebarNavLinkClass}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <Radio className="h-4 w-4" aria-hidden />
+              <span>Sessions</span>
+            </NavLink>
+            <NavLink
               to="/plugins"
               className={sidebarNavLinkClass}
               onClick={() => setMobileMenuOpen(false)}
@@ -195,6 +203,10 @@ export function AppShell() {
             <NavLink to="/" end className={sidebarNavLinkClass}>
               <Home className="h-4 w-4" aria-hidden />
               <span>Projects</span>
+            </NavLink>
+            <NavLink to="/sessions" className={sidebarNavLinkClass}>
+              <Radio className="h-4 w-4" aria-hidden />
+              <span>Sessions</span>
             </NavLink>
             <NavLink to="/plugins" className={sidebarNavLinkClass}>
               <Blocks className="h-4 w-4" aria-hidden />

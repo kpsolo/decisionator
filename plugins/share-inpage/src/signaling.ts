@@ -60,6 +60,10 @@ export class SignalingRoom {
     for (const t of this.transports) t.close();
   }
 
+  getTransports(): SignalingTransport[] {
+    return this.transports;
+  }
+
   private receive(payload: string): void {
     const json = unseal(this.keys.signalKey, this.keys.topic, payload);
     if (!json) return;
