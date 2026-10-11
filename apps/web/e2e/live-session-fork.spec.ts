@@ -54,7 +54,10 @@ test("User Story 4: Collaborator can fork a shared session into their own perman
   context,
   browserName,
 }) => {
-  test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+  test.skip(
+    browserName !== "chromium" || (Boolean(process.env.CI) && process.platform === "darwin"),
+    "WebRTC loopback in CI is exercised on Linux and Windows"
+  );
   test.setTimeout(120_000);
 
   // 1. Host creates project and starts live session

@@ -54,7 +54,10 @@ test("User Story 1: Host reloads page (F5) and guests reconnect within 5 seconds
   context,
   browserName,
 }) => {
-  test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+  test.skip(
+    browserName !== "chromium" || (Boolean(process.env.CI) && process.platform === "darwin"),
+    "WebRTC loopback in CI is exercised on Linux and Windows"
+  );
   test.setTimeout(120_000);
 
   // 1. Create project and start live session

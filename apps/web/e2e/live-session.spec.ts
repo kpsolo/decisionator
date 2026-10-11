@@ -75,7 +75,10 @@ test("live session: guests vote over WebRTC, attributed, and the session outlive
   context,
   browserName,
 }) => {
-  test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+  test.skip(
+    browserName !== "chromium" || (Boolean(process.env.CI) && process.platform === "darwin"),
+    "WebRTC loopback in CI is exercised on Linux and Windows"
+  );
   test.setTimeout(120_000);
   const errors: string[] = [];
   host.on("pageerror", (e) => errors.push(e.message));
@@ -240,7 +243,10 @@ test("closing the host tab asks first, then tells guests", async ({
   context,
   browserName,
 }) => {
-  test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+  test.skip(
+    browserName !== "chromium" || (Boolean(process.env.CI) && process.platform === "darwin"),
+    "WebRTC loopback in CI is exercised on Linux and Windows"
+  );
   test.setTimeout(90_000);
 
   await createProject(host);

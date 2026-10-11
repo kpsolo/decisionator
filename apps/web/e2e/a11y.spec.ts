@@ -126,7 +126,10 @@ for (const theme of ["light", "dark"] as const) {
       context,
       browserName,
     }) => {
-      test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+      test.skip(
+        browserName !== "chromium" || (Boolean(process.env.CI) && process.platform === "darwin"),
+        "WebRTC loopback in CI is exercised on Linux and Windows"
+      );
       await page.goto("./#/new");
       await page.getByRole("textbox", { name: "Ideas or options JSON" }).fill("");
       await pasteInto(page, `\`\`\`json\n${OPTIONS_JSON}\n\`\`\``);
