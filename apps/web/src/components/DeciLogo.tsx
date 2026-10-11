@@ -1,4 +1,5 @@
 import type React from "react";
+import { useId } from "react";
 import { cn } from "../lib/utils.js";
 
 export interface DeciLogoProps extends React.SVGProps<SVGSVGElement> {
@@ -22,10 +23,15 @@ export interface DeciLogoProps extends React.SVGProps<SVGSVGElement> {
  * - A radiant cyan apex node representing the decisive consensus choice.
  */
 export function DeciIcon({ variant = "badge", size, className, ...props }: DeciLogoProps) {
+  const rawId = useId();
+  const id = rawId.replace(/[^a-zA-Z0-9-_]/g, "");
   const defaultSize = variant === "badge" ? 32 : 24;
   const dimension = size ?? defaultSize;
 
   if (variant === "badge") {
+    const bgGradId = `deci-badge-bg-${id}`;
+    const sheenGradId = `deci-badge-sheen-${id}`;
+
     return (
       <svg
         viewBox="0 0 64 64"
@@ -40,7 +46,7 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
       >
         <defs>
           <linearGradient
-            id="deci-badge-bg"
+            id={bgGradId}
             x1="0"
             y1="0"
             x2="64"
@@ -52,7 +58,7 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
             <stop offset="100%" stopColor="#4f46e5" />
           </linearGradient>
           <linearGradient
-            id="deci-badge-sheen"
+            id={sheenGradId}
             x1="0"
             y1="0"
             x2="0"
@@ -65,8 +71,8 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
         </defs>
 
         {/* Squircle base */}
-        <rect width="64" height="64" rx="16" fill="url(#deci-badge-bg)" />
-        <rect width="64" height="64" rx="16" fill="url(#deci-badge-sheen)" />
+        <rect width="64" height="64" rx="16" fill={`url(#${bgGradId})`} />
+        <rect width="64" height="64" rx="16" fill={`url(#${sheenGradId})`} />
         <rect
           width="64"
           height="64"
@@ -114,6 +120,7 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
   }
 
   // Pure Gradient Glyph
+  const glyphGradId = `deci-glyph-grad-${id}`;
   return (
     <svg
       viewBox="0 0 64 64"
@@ -128,7 +135,7 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
     >
       <defs>
         <linearGradient
-          id="deci-glyph-grad"
+          id={glyphGradId}
           x1="12"
           y1="8"
           x2="56"
@@ -143,7 +150,7 @@ export function DeciIcon({ variant = "badge", size, className, ...props }: DeciL
 
       <path
         d="M14 10 C14 8.34 15.34 7 17 7 H32 C45.8 7 57 18.2 57 32 C57 45.8 45.8 57 32 57 H17 C15.34 57 14 55.66 14 54 V10 Z M22 17 H29.5 L42.5 32 L29.5 47 H22 L34 32 L22 17 Z"
-        fill="url(#deci-glyph-grad)"
+        fill={`url(#${glyphGradId})`}
         fillRule="evenodd"
       />
       <polygon points="43.5,32 48.5,28 53.5,32 48.5,36" fill="#ffffff" />
