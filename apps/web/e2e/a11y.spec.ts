@@ -121,13 +121,19 @@ for (const theme of ["light", "dark"] as const) {
       await checkA11y(page, `Sessions dashboard (${theme})`);
     });
 
-    test("live session, revoke, and fork session dialogs", async ({ page, context, browserName }) => {
+    test("live session, revoke, and fork session dialogs", async ({
+      page,
+      context,
+      browserName,
+    }) => {
       test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
       await page.goto("./#/new");
       await page.getByRole("textbox", { name: "Ideas or options JSON" }).fill("");
       await pasteInto(page, `\`\`\`json\n${OPTIONS_JSON}\n\`\`\``);
       await page.getByRole("button", { name: "Create Project →" }).click();
-      await expect(page.getByRole("heading", { name: "Weekend plans" })).toBeVisible({ timeout: 15000 });
+      await expect(page.getByRole("heading", { name: "Weekend plans" })).toBeVisible({
+        timeout: 15000,
+      });
 
       await page.getByRole("button", { name: "More project actions" }).click();
       await page.getByRole("menuitem", { name: "Live session…" }).click();
@@ -146,7 +152,9 @@ for (const theme of ["light", "dark"] as const) {
       await guest.goto(joinUrl);
       await guest.getByRole("textbox", { name: "Your name" }).fill("Guest User");
       await guest.getByRole("button", { name: "Join" }).click();
-      await expect(guest.getByRole("heading", { name: "Weekend plans" })).toBeVisible({ timeout: 20000 });
+      await expect(guest.getByRole("heading", { name: "Weekend plans" })).toBeVisible({
+        timeout: 20000,
+      });
 
       await guest.getByRole("button", { name: "Save to my workspace" }).click();
       await expect(guest.getByRole("dialog")).toBeVisible();

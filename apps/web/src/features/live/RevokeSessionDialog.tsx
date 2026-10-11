@@ -75,18 +75,10 @@ export function RevokeSessionDialog({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            variant="outline"
-            disabled={revoking}
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="outline" disabled={revoking} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            disabled={revoking}
-            onClick={handleConfirm}
-          >
+          <Button variant="destructive" disabled={revoking} onClick={handleConfirm}>
             {revoking ? "Revoking…" : "Revoke link"}
           </Button>
         </DialogFooter>

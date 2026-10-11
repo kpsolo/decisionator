@@ -242,7 +242,12 @@ export class LiveShareGuest {
         this.rev = msg.rev;
         const welcomeSnapshot = msg.snapshot as unknown as ProjectSnapshot;
         const liveHostKey = (welcomeSnapshot as unknown as Record<string, unknown>).live
-          ? ((welcomeSnapshot as unknown as Record<string, unknown>).live as Record<string, unknown>).hostKey
+          ? (
+              (welcomeSnapshot as unknown as Record<string, unknown>).live as Record<
+                string,
+                unknown
+              >
+            ).hostKey
           : undefined;
         if (typeof liveHostKey === "string" && !this.pinnedHostKey) {
           this.pinnedHostKey = liveHostKey;

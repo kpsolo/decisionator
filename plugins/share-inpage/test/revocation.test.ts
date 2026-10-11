@@ -94,7 +94,7 @@ describe("session revocation", () => {
     await guest.submit([{ kind: "grade", optionId: "a", value: 5 }]);
     await until(() => (guest.getState().snapshot?.grades.length ?? 0) > 0);
 
-    const participantId = guest.getState().participantId!;
+    const participantId = guest.getState().participantId ?? "";
     expect(participantId).toBeTruthy();
 
     // Owner drops Alice's votes by appending reset
@@ -108,4 +108,3 @@ describe("session revocation", () => {
     expect(guest.getState().notice).toBe("The host reset your votes.");
   });
 });
-

@@ -156,8 +156,8 @@ describe("Agent API Live Session & Moderation Contract Tests (User Story 6)", ()
     // Verify stored proposal mapped back to real participant ID
     const pending = stateStore.getPendingProposals("proj_1");
     expect(pending).toHaveLength(1);
-    expect(pending[0].participantId).toBe("guest:tom_12345");
-    expect(pending[0].action).toBe("drop_votes");
+    expect(pending[0]?.participantId).toBe("guest:tom_12345");
+    expect(pending[0]?.action).toBe("drop_votes");
 
     // Verify audit log recorded proposal
     const events = auditLog.getEvents();
@@ -208,12 +208,14 @@ describe("Agent API Live Session & Moderation Contract Tests (User Story 6)", ()
       arguments: {},
     });
     expect(getRes.isError).toBeFalsy();
-    const sessionData = JSON.parse((getRes.content[0] as { text: string }).text);
+    const getContent = getRes.content as Array<{ text: string }>;
+    const sessionData = JSON.parse(getContent[0]?.text ?? "{}");
     expect(sessionData.hosting).toBe(true);
     expect(sessionData.participants).toHaveLength(2);
 
-    const tomPseudo = sessionData.participants.find((p: { name: string }) => p.name === "Tom")
-      .participantId;
+    const tomPseudo = sessionData.participants.find(
+      (p: { name: string }) => p.name === "Tom"
+    )?.participantId;
     expect(tomPseudo).toBe(stateStore.getPseudonym(grant.id, "guest:tom_12345"));
 
     // Call propose_moderation
@@ -229,7 +231,8 @@ describe("Agent API Live Session & Moderation Contract Tests (User Story 6)", ()
       console.error("propRes error:", JSON.stringify(propRes));
     }
     expect(propRes.isError).toBeFalsy();
-    const propData = JSON.parse((propRes.content[0] as { text: string }).text);
+    const propContent = propRes.content as Array<{ text: string }>;
+    const propData = JSON.parse(propContent[0]?.text ?? "{}");
     expect(propData.status).toBe("pending");
     expect(propData.id).toBeDefined();
 

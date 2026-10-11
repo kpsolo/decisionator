@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ForkSessionDialog } from "./ForkSessionDialog.js";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -35,6 +34,12 @@ import { Input } from "../../components/ui/input.js";
 import { Skeleton } from "../../components/ui/skeleton.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { getStorageManager } from "../../storage/storage-manager.js";
+import {
+  type CachedLiveSessionRecord,
+  cacheLiveSession,
+  deleteCachedLiveSession,
+  getCachedLiveSession,
+} from "../../sync/db.js";
 import { CommentThread } from "../comments/CommentThread.js";
 import { CompareStrategiesDialog } from "../decide/CompareStrategiesDialog.js";
 import { DecidedBy } from "../decide/DecisionMethod.js";
@@ -46,12 +51,7 @@ import { createBatcher } from "../option-view/batcher.js";
 import { downloadProjectExport } from "../project/project-file.js";
 import { RankBallot } from "../voting/RankBallot.js";
 import { ResultsView } from "../voting/ResultsView.js";
-import {
-  type CachedLiveSessionRecord,
-  cacheLiveSession,
-  deleteCachedLiveSession,
-  getCachedLiveSession,
-} from "../../sync/db.js";
+import { ForkSessionDialog } from "./ForkSessionDialog.js";
 import { useLiveShare } from "./LiveShareContext.js";
 import {
   getSessionRevocation,
@@ -105,7 +105,8 @@ export function JoinLivePage() {
           </div>
           <CardTitle>This session link has been revoked by the owner.</CardTitle>
           <CardDescription>
-            {rev?.reason || "This link is no longer valid. The owner may have ended or revoked the session."}
+            {rev?.reason ||
+              "This link is no longer valid. The owner may have ended or revoked the session."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -128,7 +129,8 @@ export function JoinLivePage() {
           </div>
           <CardTitle>You are the host of this session</CardTitle>
           <CardDescription>
-            This live deliberation was created in this browser. You can resume live hosting for returning collaborators or open the project directly.
+            This live deliberation was created in this browser. You can resume live hosting for
+            returning collaborators or open the project directly.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -259,6 +261,7 @@ function GuestSession({
   const [cached, setCached] = useState<CachedLiveSessionRecord | null>(initialCached ?? null);
   const [unsupported, setUnsupported] = useState<string | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: connection lifecycle is keyed by credentials and displayName
   useEffect(() => {
     let joined: ReturnType<typeof joinSession>;
     try {
@@ -327,7 +330,8 @@ function GuestSession({
           </div>
           <CardTitle>This session link has been revoked by the owner.</CardTitle>
           <CardDescription>
-            {state.message || "This link is no longer valid. The owner may have ended or revoked the session."}
+            {state.message ||
+              "This link is no longer valid. The owner may have ended or revoked the session."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -577,15 +581,16 @@ function GuestWorkspace({
           <Banner icon={<WifiOff className="h-4 w-4" />}>
             Host offline • Last synced{" "}
             {cachedSession?.lastSyncedAt
-              ? new Date(cachedSession.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              ? new Date(cachedSession.lastSyncedAt).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
               : "earlier"}
           </Banner>
         )}
 
         {live && role === "view" && (
-          <Banner icon={<Eye className="h-4 w-4" />}>
-            The host made this session view-only.
-          </Banner>
+          <Banner icon={<Eye className="h-4 w-4" />}>The host made this session view-only.</Banner>
         )}
 
         {state?.status === "reconnecting" && (

@@ -1,8 +1,5 @@
+import { deriveHostKeyPair, parseHostKeyFromLink } from "@decisionator/share-inpage";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  deriveHostKeyPair,
-  parseHostKeyFromLink,
-} from "@decisionator/share-inpage";
 import {
   clearSessionRevocation,
   getSessionRevocation,

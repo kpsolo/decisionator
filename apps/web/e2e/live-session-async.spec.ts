@@ -17,7 +17,9 @@ test("User Story 3: Displays damaged link notice for malformed join URLs", async
   // Join URL with truncated sessionId and secret
   await page.goto("./#/join/short/bad");
 
-  await expect(page.getByRole("heading", { name: "This link is incomplete or damaged." })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "This link is incomplete or damaged." })
+  ).toBeVisible({
     timeout: 5000,
   });
 });

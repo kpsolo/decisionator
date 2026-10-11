@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  ACTIVE_HOSTING_KEY,
-  type ActiveHostingDescriptor,
-} from "./LiveShareContext.js";
+import { ACTIVE_HOSTING_KEY, type ActiveHostingDescriptor } from "./LiveShareContext.js";
 import {
   hostCredentialsFor,
   isSessionRevoked,
@@ -69,7 +66,7 @@ describe("Host Reverse Resolution & Reload Auto-Resume (US1, T007)", () => {
 
       const raw = sessionStorage.getItem(ACTIVE_HOSTING_KEY);
       expect(raw).not.toBeNull();
-      const parsed = JSON.parse(raw!) as ActiveHostingDescriptor;
+      const parsed = JSON.parse(raw ?? "{}") as ActiveHostingDescriptor;
 
       const ageMs = Date.now() - new Date(parsed.lastHeartbeat).getTime();
       expect(ageMs).toBeLessThan(3600 * 1000);
@@ -89,7 +86,7 @@ describe("Host Reverse Resolution & Reload Auto-Resume (US1, T007)", () => {
       sessionStorage.setItem(ACTIVE_HOSTING_KEY, JSON.stringify(staleDescriptor));
 
       const raw = sessionStorage.getItem(ACTIVE_HOSTING_KEY);
-      const parsed = JSON.parse(raw!) as ActiveHostingDescriptor;
+      const parsed = JSON.parse(raw ?? "{}") as ActiveHostingDescriptor;
       const ageMs = Date.now() - new Date(parsed.lastHeartbeat).getTime();
 
       expect(ageMs).toBeGreaterThan(3600 * 1000);

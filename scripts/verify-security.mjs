@@ -17,7 +17,7 @@ let failedCount = 0;
 
 function pass(name, detail = "") {
   passedCount++;
-  console.log(`\x1b[32m✔ PASS\x1b[0m [${name}]${detail ? " — " + detail : ""}`);
+  console.log(`\x1b[32m✔ PASS\x1b[0m [${name}]${detail ? ` — ${detail}` : ""}`);
 }
 
 function fail(name, reason) {
@@ -31,7 +31,7 @@ function fail(name, reason) {
 function verifyGate1() {
   const codecFile = path.join(ROOT, "packages/core/src/crypto/payload-codec.ts");
   if (!fs.existsSync(codecFile)) {
-    fail("Gate 1: Payload Codec", "File not found: " + codecFile);
+    fail("Gate 1: Payload Codec", `File not found: ${codecFile}`);
     return;
   }
   const content = fs.readFileSync(codecFile, "utf-8");
@@ -64,7 +64,7 @@ function verifyGate1() {
 function verifyGate2() {
   const authFile = path.join(ROOT, "plugins/store-google-sheets/src/auth.ts");
   if (!fs.existsSync(authFile)) {
-    fail("Gate 2: Google Auth", "File not found: " + authFile);
+    fail("Gate 2: Google Auth", `File not found: ${authFile}`);
     return;
   }
   const content = fs.readFileSync(authFile, "utf-8");
@@ -74,7 +74,10 @@ function verifyGate2() {
     /private currentToken:\s*string\s*\|\s*null\s*=\s*null/.test(content) &&
     !/localStorage\.setItem\(.*token/i.test(content)
   ) {
-    pass("Gate 2: OAuth Token Storage", "Tokens held strictly in memory; zero localStorage leakage");
+    pass(
+      "Gate 2: OAuth Token Storage",
+      "Tokens held strictly in memory; zero localStorage leakage"
+    );
   } else {
     fail("Gate 2: OAuth Token Storage", "Potential persistent token leak in GoogleAuthService");
   }
@@ -97,13 +100,17 @@ function verifyGate2() {
 function verifyGate3() {
   const cryptoFile = path.join(ROOT, "plugins/share-inpage/src/crypto.ts");
   if (!fs.existsSync(cryptoFile)) {
-    fail("Gate 3: Sealed Crypto", "File not found: " + cryptoFile);
+    fail("Gate 3: Sealed Crypto", `File not found: ${cryptoFile}`);
     return;
   }
   const content = fs.readFileSync(cryptoFile, "utf-8");
 
   // Verify HKDF derives signalKey and topic
-  if (/hkdf\(sha256,\s*ikm,\s*utf8ToBytes\("deci-live\/2"\),\s*utf8ToBytes\("signal\+topic"\),\s*64\)/.test(content)) {
+  if (
+    /hkdf\(sha256,\s*ikm,\s*utf8ToBytes\("deci-live\/2"\),\s*utf8ToBytes\("signal\+topic"\),\s*64\)/.test(
+      content
+    )
+  ) {
     pass("Gate 3: HKDF Envelope Key Derivation", "Derives 32-byte signalKey and 32-byte topic");
   } else {
     fail("Gate 3: HKDF Envelope Key Derivation", "HKDF parameters deviated from protocol");
@@ -111,7 +118,10 @@ function verifyGate3() {
 
   // Verify sealing uses AES-GCM with topic as AAD
   if (/gcm\(key,\s*nonce,\s*utf8ToBytes\(topic\)\)\.encrypt/.test(content)) {
-    pass("Gate 3: Authenticated Associated Data", "Topic bound as AAD preventing envelope substitution");
+    pass(
+      "Gate 3: Authenticated Associated Data",
+      "Topic bound as AAD preventing envelope substitution"
+    );
   } else {
     fail("Gate 3: Authenticated Associated Data", "AES-GCM sealing must bind topic as AAD");
   }
@@ -129,9 +139,15 @@ function verifyGate5() {
     content.includes("guestSessionKey(deviceSecret: string, sessionId: string)") &&
     content.includes("participantIdFromKey(sessionKey: string)")
   ) {
-    pass("Gate 5: Two-Tier Identity Derivation", "sessionKey -> participantId one-way derivation verified");
+    pass(
+      "Gate 5: Two-Tier Identity Derivation",
+      "sessionKey -> participantId one-way derivation verified"
+    );
   } else {
-    fail("Gate 5: Two-Tier Identity Derivation", "Missing two-tier identity functions in crypto.ts");
+    fail(
+      "Gate 5: Two-Tier Identity Derivation",
+      "Missing two-tier identity functions in crypto.ts"
+    );
   }
 }
 
@@ -141,16 +157,26 @@ function verifyGate5() {
 function verifyGate6() {
   const policyFile = path.join(ROOT, "plugins/share-inpage/src/policy.ts");
   if (!fs.existsSync(policyFile)) {
-    fail("Gate 6: Snapshot Policy", "File not found: " + policyFile);
+    fail("Gate 6: Snapshot Policy", `File not found: ${policyFile}`);
     return;
   }
   const content = fs.readFileSync(policyFile, "utf-8");
 
   // Verify secret ballots are redacted when liveResults === false
-  if (/hideBallots\s*=\s*voting\?\.state\s*===\s*["']open["']\s*&&\s*voting\.liveResults\s*===\s*false/.test(content)) {
-    pass("Gate 6: Secret Ballot Redaction", "Ballots redacted during active voting when liveResults=false");
+  if (
+    /hideBallots\s*=\s*voting\?\.state\s*===\s*["']open["']\s*&&\s*voting\.liveResults\s*===\s*false/.test(
+      content
+    )
+  ) {
+    pass(
+      "Gate 6: Secret Ballot Redaction",
+      "Ballots redacted during active voting when liveResults=false"
+    );
   } else {
-    fail("Gate 6: Secret Ballot Redaction", "Ballot redaction logic missing or compromised in policy.ts");
+    fail(
+      "Gate 6: Secret Ballot Redaction",
+      "Ballot redaction logic missing or compromised in policy.ts"
+    );
   }
 
   // Verify hidden comment text is redacted
@@ -169,10 +195,20 @@ function verifyGate7() {
   const content = fs.readFileSync(policyFile, "utf-8");
 
   // Verify role !== 'contribute' returns read_only
-  if (/if\s*\(role\s*!==\s*["']contribute["']\)\s*\{\s*return\s*\{\s*ok:\s*false,\s*code:\s*["']read_only["']/.test(content)) {
-    pass("Gate 7: Protocol-Level Read-Only Gate", "Host strictly rejects incoming submissions when role != contribute");
+  if (
+    /if\s*\(role\s*!==\s*["']contribute["']\)\s*\{\s*return\s*\{\s*ok:\s*false,\s*code:\s*["']read_only["']/.test(
+      content
+    )
+  ) {
+    pass(
+      "Gate 7: Protocol-Level Read-Only Gate",
+      "Host strictly rejects incoming submissions when role != contribute"
+    );
   } else {
-    fail("Gate 7: Protocol-Level Read-Only Gate", "Host checkSubmission missing read_only validation");
+    fail(
+      "Gate 7: Protocol-Level Read-Only Gate",
+      "Host checkSubmission missing read_only validation"
+    );
   }
 }
 
@@ -184,12 +220,26 @@ function verifyGate8() {
   const indexHtml = path.join(ROOT, "apps/web/index.html");
   if (fs.existsSync(indexHtml)) {
     const html = fs.readFileSync(indexHtml, "utf-8");
-    const trackers = ["google-analytics", "gtag", "mixpanel", "segment", "hotjar", "clarity", "sentry"];
-    const foundTrackers = trackers.filter(t => html.toLowerCase().includes(t));
+    const trackers = [
+      "google-analytics",
+      "gtag",
+      "mixpanel",
+      "segment",
+      "hotjar",
+      "clarity",
+      "sentry",
+    ];
+    const foundTrackers = trackers.filter((t) => html.toLowerCase().includes(t));
     if (foundTrackers.length === 0) {
-      pass("Gate 8: Zero Telemetry in index.html", "No third-party surveillance or tracking scripts found");
+      pass(
+        "Gate 8: Zero Telemetry in index.html",
+        "No third-party surveillance or tracking scripts found"
+      );
     } else {
-      fail("Gate 8: Zero Telemetry in index.html", `Detected tracking scripts: ${foundTrackers.join(", ")}`);
+      fail(
+        "Gate 8: Zero Telemetry in index.html",
+        `Detected tracking scripts: ${foundTrackers.join(", ")}`
+      );
     }
   }
 
@@ -227,6 +277,8 @@ if (failedCount === 0) {
   console.log("The codebase complies with the Anonymous-First Security Protocol.\n");
   process.exit(0);
 } else {
-  console.error(`\x1b[31m✖ VERIFICATION FAILED: ${failedCount} checks failed out of ${passedCount + failedCount}.\x1b[0m\n`);
+  console.error(
+    `\x1b[31m✖ VERIFICATION FAILED: ${failedCount} checks failed out of ${passedCount + failedCount}.\x1b[0m\n`
+  );
   process.exit(1);
 }

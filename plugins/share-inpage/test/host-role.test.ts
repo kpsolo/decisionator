@@ -10,7 +10,10 @@ function connectPair(accept: (link: Link) => void): Link {
   return createLink(guestPipe);
 }
 
-async function startHost(project = new FakeProject(), initialRole: "contribute" | "view" = "contribute") {
+async function startHost(
+  project = new FakeProject(),
+  initialRole: "contribute" | "view" = "contribute"
+) {
   const host = new LiveShareHost({ project, role: initialRole });
   await host.start();
   return { host, project };
@@ -49,9 +52,7 @@ describe("dynamic host role toggle", () => {
     expect(guest.getState().role).toBe("view");
 
     // Submissions are rejected with read_only error
-    await expect(
-      guest.submit([{ kind: "grade", optionId: "b", value: 5 }])
-    ).rejects.toMatchObject({
+    await expect(guest.submit([{ kind: "grade", optionId: "b", value: 5 }])).rejects.toMatchObject({
       code: "read_only",
       message: "The host made this session view-only.",
     });

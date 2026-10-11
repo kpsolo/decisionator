@@ -147,7 +147,7 @@ export function listHostedProjectKeys(): string[] {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(HOST_KEY_PREFIX)) {
+      if (k?.startsWith(HOST_KEY_PREFIX)) {
         keys.push(k.slice(HOST_KEY_PREFIX.length));
       }
     }

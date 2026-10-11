@@ -77,9 +77,9 @@ test("User Story 5: Owner revokes link, connected guest ejected within 1s, cache
   await revokeDialog.getByRole("button", { name: "Revoke link" }).click();
 
   // 4. Guest is ejected within 1 second (< 1000 ms) (SC-003, FR-008)
-  await expect(
-    guest.getByText("This session link has been revoked by the owner.")
-  ).toBeVisible({ timeout: 2000 });
+  await expect(guest.getByText("This session link has been revoked by the owner.")).toBeVisible({
+    timeout: 2000,
+  });
   const ejectionElapsed = Date.now() - revokeStart;
   expect(ejectionElapsed).toBeLessThan(3000);
 

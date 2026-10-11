@@ -1,3 +1,4 @@
+import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import {
   AlertTriangle,
   Bot,
@@ -10,7 +11,6 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -30,7 +30,7 @@ import { projectKey, useLiveShare } from "./LiveShareContext.js";
 import { QrCode } from "./QrCode.js";
 import { RevokeSessionDialog } from "./RevokeSessionDialog.js";
 import { appBaseUrl, isLoopbackHost, joinUrl, savePublicBaseUrl } from "./live-config.js";
-import { buildRoster, type LiveParticipantProfile } from "./participant-roster.js";
+import { type LiveParticipantProfile, buildRoster } from "./participant-roster.js";
 
 /**
  * The live session panel. Closing it only hides it: the session keeps running (see the header
@@ -374,9 +374,8 @@ function LivePanel() {
 
       {/* Agent Moderation Proposals (US6, Staged Compliance D1) */}
       {proposals.length > 0 && (
-        <div
+        <section
           className="space-y-2 rounded-lg border border-agent-border bg-agent/5 p-3"
-          role="region"
           aria-label="Agent moderation proposals"
         >
           <div className="flex items-center justify-between">
@@ -438,7 +437,7 @@ function LivePanel() {
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Participant Roster (US5, FR-014, FR-030) */}
@@ -571,8 +570,8 @@ function LivePanel() {
               <DialogTitle>Drop votes from {dropTarget.name}?</DialogTitle>
               <DialogDescription>
                 This will reset all grades and the current round ballot submitted by{" "}
-                <span className="font-semibold text-foreground">{dropTarget.name}</span>. Historical audit
-                trail is preserved in project history.
+                <span className="font-semibold text-foreground">{dropTarget.name}</span>. Historical
+                audit trail is preserved in project history.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">

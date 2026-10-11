@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  deriveHostKeyPair,
-  deriveSessionKeys,
-  seal,
-  unseal,
-} from "../src/crypto.js";
-import {
-  NIP78_SNAPSHOT_KIND,
-  type NostrEvent,
-  signEvent,
-  verifyEvent,
-} from "../src/nostr.js";
+import { deriveHostKeyPair, deriveSessionKeys, seal, unseal } from "../src/crypto.js";
+import { NIP78_SNAPSHOT_KIND, type NostrEvent, signEvent, verifyEvent } from "../src/nostr.js";
 
 describe("NIP-78 host-signed replaceable snapshots", () => {
   const sessionId = "test-session-123";
@@ -102,7 +92,7 @@ describe("NIP-78 host-signed replaceable snapshots", () => {
     const unsealedJson = unseal(sessionKeys.signalKey, sessionKeys.topic, event.content);
     expect(unsealedJson).not.toBeNull();
 
-    const recovered = JSON.parse(unsealedJson!);
+    const recovered = JSON.parse(unsealedJson ?? "{}");
     expect(recovered).toEqual(payload);
     expect(recovered.rev).toBe(5);
   });
@@ -130,7 +120,7 @@ describe("NIP-78 host-signed replaceable snapshots", () => {
     expect(verifyEvent(event)).toBe(true);
 
     const unsealedJson = unseal(sessionKeys.signalKey, sessionKeys.topic, event.content);
-    const recovered = JSON.parse(unsealedJson!);
+    const recovered = JSON.parse(unsealedJson ?? "{}");
     expect(recovered.type).toBe("tombstone");
     expect(recovered.reason).toBe("revoked");
   });

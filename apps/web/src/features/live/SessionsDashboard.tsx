@@ -117,6 +117,7 @@ export function SessionsDashboard() {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when live session changes
   useEffect(() => {
     void loadData();
   }, [live.session]);
@@ -195,9 +196,12 @@ export function SessionsDashboard() {
           {hosted.length === 0 ? (
             <Card>
               <CardHeader className="text-center py-10">
-                <CardTitle className="text-base text-muted-foreground">No hosted sessions yet</CardTitle>
+                <CardTitle className="text-base text-muted-foreground">
+                  No hosted sessions yet
+                </CardTitle>
                 <CardDescription>
-                  Start a live session from any project to invite guests and collaborate in real time.
+                  Start a live session from any project to invite guests and collaborate in real
+                  time.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -222,7 +226,8 @@ export function SessionsDashboard() {
                           )}
                         </div>
                         <CardDescription className="text-xs">
-                          Created {new Date(h.createdAt).toLocaleDateString()} • Session {h.sessionId.slice(0, 8)}…
+                          Created {new Date(h.createdAt).toLocaleDateString()} • Session{" "}
+                          {h.sessionId.slice(0, 8)}…
                         </CardDescription>
                       </div>
 
@@ -261,7 +266,9 @@ export function SessionsDashboard() {
           {joined.length === 0 ? (
             <Card>
               <CardHeader className="text-center py-10">
-                <CardTitle className="text-base text-muted-foreground">No joined sessions on this device</CardTitle>
+                <CardTitle className="text-base text-muted-foreground">
+                  No joined sessions on this device
+                </CardTitle>
                 <CardDescription>
                   Sessions you join via invite links are saved here for instant offline access.
                 </CardDescription>
@@ -275,7 +282,9 @@ export function SessionsDashboard() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <CardTitle className="text-base font-semibold">{j.projectTitle}</CardTitle>
+                          <CardTitle className="text-base font-semibold">
+                            {j.projectTitle}
+                          </CardTitle>
                           <Badge variant="secondary" className="text-xs">
                             Joined as {j.displayName || j.name}
                           </Badge>

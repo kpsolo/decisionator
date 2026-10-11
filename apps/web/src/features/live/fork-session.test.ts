@@ -1,8 +1,8 @@
 import "fake-indexeddb/auto";
-import { describe, expect, it } from "vitest";
-import { FileProjectStore } from "@decisionator/store-file";
-import { snapshotToExport, restoreProject } from "../project/project-file.js";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
+import { FileProjectStore } from "@decisionator/store-file";
+import { describe, expect, it } from "vitest";
+import { restoreProject, snapshotToExport } from "../project/project-file.js";
 
 describe("Session Forking (User Story 4)", () => {
   it("restores a shared snapshot into a new independent store preserving author attributions and history", async () => {

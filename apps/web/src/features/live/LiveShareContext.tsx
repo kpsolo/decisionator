@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { getStorageManager } from "../../storage/storage-manager.js";
 import {
   hostCredentialsFor,
   loadNetworkConfig,
@@ -23,7 +24,6 @@ import {
   removeHostSessionIndex,
   rotateHostCredentials,
 } from "./live-config.js";
-import { getStorageManager } from "../../storage/storage-manager.js";
 
 export const ACTIVE_HOSTING_KEY = "deci.live.activeHosting";
 
@@ -261,7 +261,19 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
       setRole,
       revoke,
     }),
-    [session, dialogTarget, starting, startError, openFor, openActive, closeDialog, start, stop, setRole, revoke]
+    [
+      session,
+      dialogTarget,
+      starting,
+      startError,
+      openFor,
+      openActive,
+      closeDialog,
+      start,
+      stop,
+      setRole,
+      revoke,
+    ]
   );
 
   return <LiveShareContext.Provider value={value}>{children}</LiveShareContext.Provider>;

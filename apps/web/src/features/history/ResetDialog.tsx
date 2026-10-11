@@ -11,7 +11,7 @@ import {
 import { NativeSelect } from "../../components/ui/native-select.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { useResetTools } from "../option-view/OptionExtensionsProvider.js";
-import { participantVoteResets, type ResetEntry } from "./reset-entries.js";
+import { type ResetEntry, participantVoteResets } from "./reset-entries.js";
 
 const ALL = "__all__";
 

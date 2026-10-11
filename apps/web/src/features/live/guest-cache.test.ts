@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
-import { beforeEach, describe, expect, it } from "vitest";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   type CachedLiveSessionRecord,
   cacheLiveSession,
@@ -39,7 +39,9 @@ const DUMMY_SNAPSHOT: ProjectSnapshot = {
       links: [],
     },
   ],
-  grades: [{ id: "g-1", optionId: "opt-1", by: "peer:gina", value: 5, at: new Date().toISOString() }],
+  grades: [
+    { id: "g-1", optionId: "opt-1", by: "peer:gina", value: 5, at: new Date().toISOString() },
+  ],
   comments: [
     {
       id: "c-1",
@@ -106,10 +108,9 @@ describe("Guest Offline Cache Lifecycle & Error Handling (US2, T011)", () => {
   it("handles in-flight submission drop on host disconnect", () => {
     // When a guest submission is interrupted by an unexpected host disconnect
     const errorFromDisconnect = new Error("Host disconnected");
-    const userFacingError =
-      errorFromDisconnect.message.includes("disconnected")
-        ? "Host disconnected; submission not saved"
-        : "Failed to save submission";
+    const userFacingError = errorFromDisconnect.message.includes("disconnected")
+      ? "Host disconnected; submission not saved"
+      : "Failed to save submission";
 
     expect(userFacingError).toBe("Host disconnected; submission not saved");
   });

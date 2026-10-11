@@ -444,7 +444,7 @@ export function createRestRouter(options: RestApiOptions): Hono {
     }
     const pseudonymized = session.participants.map((p) => ({
       ...p,
-      participantId: stateStore.getPseudonym(auth.grant!.id, p.participantId),
+      participantId: stateStore.getPseudonym(auth.grant?.id ?? "", p.participantId),
     }));
     return c.json({
       hosting: session.hosting,

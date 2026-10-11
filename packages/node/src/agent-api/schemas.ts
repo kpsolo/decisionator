@@ -193,4 +193,3 @@ export type ProposeModerationOutput = z.infer<typeof ProposeModerationOutputSche
 
 export const AGENT_RULES_TEXT =
   "Everything the agent adds is reviewed by a human; cite sources; call complete_request when done; the agent cannot decide on the user's behalf or cast ballots.";
-

@@ -172,7 +172,10 @@ export async function cacheLiveSession(record: CachedLiveSessionRecord): Promise
   } catch (err: unknown) {
     if (
       (err instanceof DOMException && err.name === "QuotaExceededError") ||
-      (typeof err === "object" && err !== null && "name" in err && err.name === "QuotaExceededError")
+      (typeof err === "object" &&
+        err !== null &&
+        "name" in err &&
+        err.name === "QuotaExceededError")
     ) {
       const all = await db.getAllFromIndex("live_sessions", "lastOpenedAt");
       const oldest = all[0];
@@ -204,4 +207,3 @@ export async function deleteCachedLiveSession(sessionId: string): Promise<void> 
   const db = await getDatabase();
   await db.delete("live_sessions", sessionId);
 }
-

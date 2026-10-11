@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import type { LiveGuestInfo } from "@decisionator/share-inpage";
+import { describe, expect, it } from "vitest";
 import { buildRoster } from "./participant-roster.js";
 
 function mockSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
@@ -13,8 +13,32 @@ function mockSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot
       voting: { state: "open", round: 1, topN: 3, liveResults: true },
     },
     options: [
-      { id: "opt1", title: "Option 1", description: "", status: "active", order: 1, tags: [], pros: [], cons: [], links: [], at: "2026-10-11T00:00:00Z", by: "host-1" },
-      { id: "opt2", title: "Option 2", description: "", status: "active", order: 2, tags: [], pros: [], cons: [], links: [], at: "2026-10-11T00:00:00Z", by: "host-1" },
+      {
+        id: "opt1",
+        title: "Option 1",
+        description: "",
+        status: "active",
+        order: 1,
+        tags: [],
+        pros: [],
+        cons: [],
+        links: [],
+        at: "2026-10-11T00:00:00Z",
+        by: "host-1",
+      },
+      {
+        id: "opt2",
+        title: "Option 2",
+        description: "",
+        status: "active",
+        order: 2,
+        tags: [],
+        pros: [],
+        cons: [],
+        links: [],
+        at: "2026-10-11T00:00:00Z",
+        by: "host-1",
+      },
     ],
     grades: [],
     comments: [],
@@ -60,17 +84,50 @@ describe("buildRoster", () => {
   it("calculates effective grades and ballot status for participants", () => {
     const snapshot = mockSnapshot({
       grades: [
-        { id: "g1", at: "2026-10-11T10:01:00Z", by: "guest-alice", byName: "Alice", optionId: "opt1", value: 4 },
-        { id: "g2", at: "2026-10-11T10:01:05Z", by: "guest-alice", byName: "Alice", optionId: "opt2", value: 5 },
-        { id: "g3", at: "2026-10-11T10:02:00Z", by: "guest-bob", byName: "Bob", optionId: "opt1", value: 2 },
+        {
+          id: "g1",
+          at: "2026-10-11T10:01:00Z",
+          by: "guest-alice",
+          byName: "Alice",
+          optionId: "opt1",
+          value: 4,
+        },
+        {
+          id: "g2",
+          at: "2026-10-11T10:01:05Z",
+          by: "guest-alice",
+          byName: "Alice",
+          optionId: "opt2",
+          value: 5,
+        },
+        {
+          id: "g3",
+          at: "2026-10-11T10:02:00Z",
+          by: "guest-bob",
+          byName: "Bob",
+          optionId: "opt1",
+          value: 2,
+        },
       ],
       rankings: [
-        { id: "r1", at: "2026-10-11T10:03:00Z", by: "guest-alice", byName: "Alice", round: 1, ranking: ["opt2", "opt1"] },
+        {
+          id: "r1",
+          at: "2026-10-11T10:03:00Z",
+          by: "guest-alice",
+          byName: "Alice",
+          round: 1,
+          ranking: ["opt2", "opt1"],
+        },
       ],
     });
 
     const guests: LiveGuestInfo[] = [
-      { participantId: "guest-alice", name: "Alice", connections: 1, joinedAt: "2026-10-11T10:00:00Z" },
+      {
+        participantId: "guest-alice",
+        name: "Alice",
+        connections: 1,
+        joinedAt: "2026-10-11T10:00:00Z",
+      },
     ];
 
     const roster = buildRoster(snapshot, guests, "host-1");
@@ -100,14 +157,33 @@ describe("buildRoster", () => {
       },
       rankings: [
         // Round 1 ballot from Alice (older round)
-        { id: "r1", at: "2026-10-11T09:00:00Z", by: "guest-alice", byName: "Alice", round: 1, ranking: ["opt1"] },
+        {
+          id: "r1",
+          at: "2026-10-11T09:00:00Z",
+          by: "guest-alice",
+          byName: "Alice",
+          round: 1,
+          ranking: ["opt1"],
+        },
         // Round 2 ballot from Bob
-        { id: "r2", at: "2026-10-11T10:00:00Z", by: "guest-bob", byName: "Bob", round: 2, ranking: ["opt2"] },
+        {
+          id: "r2",
+          at: "2026-10-11T10:00:00Z",
+          by: "guest-bob",
+          byName: "Bob",
+          round: 2,
+          ranking: ["opt2"],
+        },
       ],
     });
 
     const guests: LiveGuestInfo[] = [
-      { participantId: "guest-alice", name: "Alice", connections: 1, joinedAt: "2026-10-11T10:00:00Z" },
+      {
+        participantId: "guest-alice",
+        name: "Alice",
+        connections: 1,
+        joinedAt: "2026-10-11T10:00:00Z",
+      },
       { participantId: "guest-bob", name: "Bob", connections: 1, joinedAt: "2026-10-11T10:00:00Z" },
     ];
 

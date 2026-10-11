@@ -481,13 +481,13 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         return {
           isError: true,
           content: [
-            { type: "text", text: `[404] NOT_HOSTING: No live session is currently hosted` },
+            { type: "text", text: "[404] NOT_HOSTING: No live session is currently hosted" },
           ],
         };
       }
       const pseudonymized = session.participants.map((p) => ({
         ...p,
-        participantId: stateStore.getPseudonym(auth.grant!.id, p.participantId),
+        participantId: stateStore.getPseudonym(auth.grant?.id ?? "", p.participantId),
       }));
       return {
         content: [
@@ -524,7 +524,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         return {
           isError: true,
           content: [
-            { type: "text", text: `[404] NOT_HOSTING: No live session is currently hosted` },
+            { type: "text", text: "[404] NOT_HOSTING: No live session is currently hosted" },
           ],
         };
       }

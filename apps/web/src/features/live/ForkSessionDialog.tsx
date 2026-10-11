@@ -1,3 +1,4 @@
+import type { ProjectRef, ProjectSnapshot } from "@decisionator/plugin-sdk";
 import { GitFork, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,9 +13,8 @@ import {
 } from "../../components/ui/dialog.js";
 import { NativeSelect } from "../../components/ui/native-select.js";
 import { toast } from "../../components/ui/use-toast.js";
-import type { ProjectRef, ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { snapshotToExport, restoreProject } from "../project/project-file.js";
 import { useStorage } from "../../storage/StorageContext.js";
+import { restoreProject, snapshotToExport } from "../project/project-file.js";
 
 export interface ForkSessionDialogProps {
   open: boolean;
@@ -86,8 +86,8 @@ export function ForkSessionDialog({
             <span>Save to my workspace</span>
           </DialogTitle>
           <DialogDescription className="text-left text-sm">
-            Create an independent permanent copy of this deliberation in your workspace. All options,
-            ratings, comments, and voting history will be preserved.
+            Create an independent permanent copy of this deliberation in your workspace. All
+            options, ratings, comments, and voting history will be preserved.
           </DialogDescription>
         </DialogHeader>
 

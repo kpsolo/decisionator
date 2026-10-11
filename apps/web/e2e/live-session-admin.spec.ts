@@ -82,15 +82,15 @@ test("User Story 5: Host toggles read-only mode and drops participant votes with
   await readOnlyToggle.click();
 
   // Guest immediately sees read-only banner within 1000ms (< 1000 ms) (FR-015, SC-003)
-  await expect(
-    guest.getByText("The host made this session view-only.")
-  ).toBeVisible({ timeout: 2000 });
+  await expect(guest.getByText("The host made this session view-only.")).toBeVisible({
+    timeout: 2000,
+  });
 
   // Host turns off Read-only mode
   await readOnlyToggle.click();
-  await expect(
-    guest.getByText("The host made this session view-only.")
-  ).not.toBeVisible({ timeout: 2000 });
+  await expect(guest.getByText("The host made this session view-only.")).not.toBeVisible({
+    timeout: 2000,
+  });
 
   // 6. Host drops Tom's votes
   await dialog.getByRole("button", { name: "Drop votes" }).click();
