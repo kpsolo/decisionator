@@ -19,7 +19,7 @@ export function checkSubmission(
   submitted: GuestEntry[]
 ): SubmissionCheck {
   if (role !== "contribute") {
-    return { ok: false, code: "read_only", message: "This session is view-only." };
+    return { ok: false, code: "read_only", message: "The host made this session view-only." };
   }
   const active = new Set(snapshot.options.filter((o) => o.status === "active").map((o) => o.id));
   const voting = snapshot.project.voting;

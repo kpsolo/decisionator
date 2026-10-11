@@ -107,6 +107,7 @@ const SnapshotUpdate = z.object({
   t: z.literal("snapshot"),
   rev: z.number().int(),
   snapshot: Snapshot,
+  role: LiveRoleSchema.optional(),
 });
 export const AckErrorCodeSchema = z.enum([
   "invalid",
@@ -123,7 +124,13 @@ const Ack = z.object({
   code: AckErrorCodeSchema.optional(),
   message: z.string().optional(),
 });
-const Closing = z.object({ t: z.literal("closing"), reason: z.string() });
+export const ClosingCodeSchema = z.enum(["session_revoked", "ended"]);
+export type ClosingCode = z.infer<typeof ClosingCodeSchema>;
+const Closing = z.object({
+  t: z.literal("closing"),
+  reason: z.string(),
+  code: ClosingCodeSchema.optional(),
+});
 export const FatalErrorCodeSchema = z.enum(["protocol_mismatch", "session_full", "bad_hello"]);
 const Fatal = z.object({ t: z.literal("error"), code: FatalErrorCodeSchema, message: z.string() });
 

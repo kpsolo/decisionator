@@ -1,7 +1,8 @@
 import type { ProjectSnapshot, Unsubscribe } from "@decisionator/plugin-sdk";
-import { participantIdFromKey } from "./crypto.js";
+import { deriveHostKeyPair, participantIdFromKey } from "./crypto.js";
 import type { HostedProject } from "./hosted-project.js";
 import type { Link } from "./link.js";
+import type { RelayPayload } from "./nostr.js";
 import { checkSubmission, redactSnapshotFor } from "./policy.js";
 import {
   type AckErrorCode,
@@ -33,6 +34,9 @@ export interface LiveShareHostOptions {
   helloTimeoutMs?: number;
   /** Per-guest submission limit: a burst of `burst`, refilled at `perSecond` (default 20, 5/s). */
   rateLimit?: { burst: number; perSecond: number };
+  relaySecret?: string;
+  sessionId?: string;
+  onPublishRelay?: (type: "snapshot" | "tombstone", payload: RelayPayload) => void;
 }
 
 interface LinkState {
@@ -51,11 +55,13 @@ const DEFAULT_RATE_LIMIT = { burst: 20, perSecond: 5 };
  * (WebRTC, an in-memory pipe in tests) hands it to {@link LiveShareHost.accept}.
  */
 export class LiveShareHost {
+  private readonly opts: LiveShareHostOptions;
   private readonly project: HostedProject;
-  private readonly role: LiveRole;
+  private role: LiveRole;
   private readonly maxLinks: number;
   private readonly helloTimeoutMs: number;
   private readonly rateLimit: { burst: number; perSecond: number };
+  private readonly hostKey: string | null = null;
 
   private links = new Set<LinkState>();
   private current: ProjectSnapshot | null = null;
@@ -64,17 +70,24 @@ export class LiveShareHost {
   private unwatch: Unsubscribe | null = null;
   private writes: Promise<void> = Promise.resolve();
   private broadcastTimer: ReturnType<typeof setTimeout> | null = null;
+  private relayPublishTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastRelayPublishAt = 0;
   private listeners = new Set<(state: LiveHostState) => void>();
   private joinedAt = new Map<string, string>();
   /** Name given to each participant, by the name they asked for, so a reconnect keeps it. */
   private names = new Map<string, { asked: string; given: string }>();
 
   constructor(opts: LiveShareHostOptions) {
+    this.opts = opts;
     this.project = opts.project;
     this.role = opts.role ?? "contribute";
     this.maxLinks = opts.maxLinks ?? 64;
     this.helloTimeoutMs = opts.helloTimeoutMs ?? 10_000;
     this.rateLimit = opts.rateLimit ?? DEFAULT_RATE_LIMIT;
+    if (opts.relaySecret && opts.sessionId) {
+      const { hostKey } = deriveHostKeyPair(opts.relaySecret, opts.sessionId);
+      this.hostKey = hostKey;
+    }
   }
 
   /** Loads the project; throws if the store cannot open it (e.g. it is still locked). */
@@ -139,16 +152,67 @@ export class LiveShareHost {
     });
   }
 
+  getRole(): LiveRole {
+    return this.role;
+  }
+
+  getSnapshot(): ProjectSnapshot | null {
+    return this.current;
+  }
+
+  setRole(role: LiveRole): void {
+    if (this.role === role) return;
+    this.role = role;
+    if (this.status !== "live") return;
+    this.rev++;
+    for (const s of this.links) {
+      if (!s.participantId) continue;
+      send(s.link, {
+        t: "snapshot",
+        rev: this.rev,
+        snapshot: this.viewFor(s.participantId),
+        role: this.role,
+      });
+    }
+  }
+
   close(reason = "The host ended the session."): void {
     if (this.status === "closed") return;
     this.status = "closed";
     this.unwatch?.();
     this.unwatch = null;
     if (this.broadcastTimer) clearTimeout(this.broadcastTimer);
+    if (this.relayPublishTimer) clearTimeout(this.relayPublishTimer);
     for (const s of [...this.links]) {
       clearTimeout(s.helloTimer);
-      send(s.link, { t: "closing", reason });
+      send(s.link, { t: "closing", reason, code: "ended" });
       s.link.close("host closed");
+    }
+    this.links.clear();
+    this.emit();
+    this.listeners.clear();
+  }
+
+  revoke(reason = "This session link has been revoked by the owner."): void {
+    if (this.status === "closed") return;
+    this.status = "closed";
+    this.unwatch?.();
+    this.unwatch = null;
+    if (this.broadcastTimer) clearTimeout(this.broadcastTimer);
+    if (this.relayPublishTimer) clearTimeout(this.relayPublishTimer);
+    if (this.opts.onPublishRelay) {
+      const tombstone: RelayPayload = {
+        v: 1,
+        type: "tombstone",
+        publishedAt: Date.now(),
+        reason: "revoked",
+      };
+      this.opts.onPublishRelay("tombstone", tombstone);
+    }
+    for (const s of [...this.links]) {
+      clearTimeout(s.helloTimer);
+      send(s.link, { t: "closing", reason, code: "session_revoked" });
+      s.link.close("host revoked");
     }
     this.links.clear();
     this.emit();
@@ -275,10 +339,17 @@ export class LiveShareHost {
 
   private viewFor(participantId: string): Record<string, unknown> {
     if (!this.current) return {};
-    return redactSnapshotFor(this.current, participantId, this.role) as unknown as Record<
+    const view = redactSnapshotFor(this.current, participantId, this.role) as unknown as Record<
       string,
       unknown
     >;
+    if (this.hostKey) {
+      view.live = {
+        ...((view.live as Record<string, unknown> | undefined) ?? {}),
+        hostKey: this.hostKey,
+      };
+    }
+    return view;
   }
 
   /** Coalesces bursts of store notifications into one update per guest. */
@@ -289,9 +360,52 @@ export class LiveShareHost {
       this.rev++;
       for (const s of this.links) {
         if (!s.participantId) continue;
-        send(s.link, { t: "snapshot", rev: this.rev, snapshot: this.viewFor(s.participantId) });
+        send(s.link, {
+          t: "snapshot",
+          rev: this.rev,
+          snapshot: this.viewFor(s.participantId),
+          role: this.role,
+        });
       }
+      this.scheduleRelayPublish();
     }, 30);
+  }
+
+  private scheduleRelayPublish(): void {
+    if (!this.opts.onPublishRelay || !this.current || this.status !== "live") return;
+    const now = Date.now();
+    const elapsed = now - this.lastRelayPublishAt;
+    if (elapsed >= 2000) {
+      this.doRelayPublish();
+    } else if (!this.relayPublishTimer) {
+      this.relayPublishTimer = setTimeout(() => {
+        this.relayPublishTimer = null;
+        this.doRelayPublish();
+      }, 2000 - elapsed);
+    }
+  }
+
+  private doRelayPublish(): void {
+    if (!this.opts.onPublishRelay || !this.current || this.status !== "live") return;
+    this.lastRelayPublishAt = Date.now();
+    const mostRestrictive = redactSnapshotFor(this.current, "", this.role) as unknown as Record<
+      string,
+      unknown
+    >;
+    if (this.hostKey) {
+      mostRestrictive.live = {
+        ...((mostRestrictive.live as Record<string, unknown> | undefined) ?? {}),
+        hostKey: this.hostKey,
+      };
+    }
+    const payload: RelayPayload = {
+      v: 1,
+      type: "snapshot",
+      rev: this.rev,
+      publishedAt: Date.now(),
+      snapshot: mostRestrictive,
+    };
+    this.opts.onPublishRelay("snapshot", payload);
   }
 
   private emit(): void {

@@ -3,12 +3,15 @@ import {
   type LiveNetworkConfig,
   type SessionCredentials,
   createSessionCredentials,
+  deriveHostKeyPair,
   joinPath,
   randomId,
 } from "@decisionator/share-inpage";
 
 const NETWORK_KEY = "deci.live.network";
 const HOST_KEY_PREFIX = "deci.live.host.";
+const BY_SESSION_KEY_PREFIX = "deci.live.bySession.";
+const REVOKED_KEY_PREFIX = "deci.live.revoked.";
 const DEVICE_KEY = "deci.live.device";
 const NAME_KEY = "deci.live.name";
 const PUBLIC_BASE_KEY = "deci.live.publicBase";
@@ -86,24 +89,144 @@ export function saveNetworkConfig(config: LiveNetworkConfig | null): void {
   write(NETWORK_KEY, config ? JSON.stringify(config) : null);
 }
 
+export interface HostSessionRecord extends SessionCredentials {
+  sessionId: string;
+  secret: string;
+  /** 256-bit base64url; NEVER leaves this browser. Seeds the relay signing key. */
+  relaySecret: string;
+  createdAt: string;
+  hostKey?: string;
+}
+
+export function saveHostSessionIndex(sessionId: string, projectKey: string): void {
+  write(`${BY_SESSION_KEY_PREFIX}${sessionId}`, projectKey);
+}
+
+export function resolveHostProject(sessionId: string): string | null {
+  return read(`${BY_SESSION_KEY_PREFIX}${sessionId}`);
+}
+
+export function removeHostSessionIndex(sessionId: string): void {
+  write(`${BY_SESSION_KEY_PREFIX}${sessionId}`, null);
+}
+
+export interface SessionRevocationRecord {
+  revokedAt: string;
+  reason?: string;
+}
+
+export function isSessionRevoked(sessionId: string): boolean {
+  return read(`${REVOKED_KEY_PREFIX}${sessionId}`) !== null;
+}
+
+export function getSessionRevocation(sessionId: string): SessionRevocationRecord | null {
+  const raw = read(`${REVOKED_KEY_PREFIX}${sessionId}`);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as SessionRevocationRecord;
+  } catch {
+    return { revokedAt: new Date().toISOString() };
+  }
+}
+
+export function markSessionRevoked(sessionId: string, reason?: string): void {
+  const record: SessionRevocationRecord = {
+    revokedAt: new Date().toISOString(),
+    ...(reason ? { reason } : {}),
+  };
+  write(`${REVOKED_KEY_PREFIX}${sessionId}`, JSON.stringify(record));
+  removeHostSessionIndex(sessionId);
+}
+
+export function clearSessionRevocation(sessionId: string): void {
+  write(`${REVOKED_KEY_PREFIX}${sessionId}`, null);
+}
+
+export function listHostedProjectKeys(): string[] {
+  const keys: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(HOST_KEY_PREFIX)) {
+        keys.push(k.slice(HOST_KEY_PREFIX.length));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return keys;
+}
+
 /**
  * A project keeps the same join link on this device, so a QR code handed out earlier keeps
  * working after the host reloads, and returning guests keep their identity (and their votes).
  */
-export function hostCredentialsFor(projectKey: string): SessionCredentials {
+export function hostCredentialsFor(projectKey: string): HostSessionRecord {
   const key = HOST_KEY_PREFIX + projectKey;
   const raw = read(key);
   if (raw) {
     try {
-      const saved = JSON.parse(raw) as SessionCredentials;
-      if (saved.sessionId && saved.secret) return saved;
+      const saved = JSON.parse(raw) as Partial<HostSessionRecord>;
+      if (saved.sessionId && saved.secret) {
+        let changed = false;
+        let relaySecret = saved.relaySecret;
+        if (!relaySecret) {
+          relaySecret = randomId(32);
+          changed = true;
+        }
+        const createdAt = saved.createdAt ?? new Date().toISOString();
+        if (!saved.createdAt) changed = true;
+
+        const { hostKeyLink } = deriveHostKeyPair(relaySecret, saved.sessionId);
+        const record: HostSessionRecord = {
+          sessionId: saved.sessionId,
+          secret: saved.secret,
+          relaySecret,
+          createdAt,
+          hostKey: hostKeyLink,
+        };
+        if (changed || saved.hostKey !== hostKeyLink) {
+          write(key, JSON.stringify(record));
+        }
+        saveHostSessionIndex(record.sessionId, projectKey);
+        return record;
+      }
     } catch {
       // regenerate below
     }
   }
   const creds = createSessionCredentials();
-  write(key, JSON.stringify(creds));
-  return creds;
+  const relaySecret = randomId(32);
+  const createdAt = new Date().toISOString();
+  const { hostKeyLink } = deriveHostKeyPair(relaySecret, creds.sessionId);
+  const record: HostSessionRecord = {
+    sessionId: creds.sessionId,
+    secret: creds.secret,
+    relaySecret,
+    createdAt,
+    hostKey: hostKeyLink,
+  };
+  write(key, JSON.stringify(record));
+  saveHostSessionIndex(record.sessionId, projectKey);
+  return record;
+}
+
+export function rotateHostCredentials(projectKey: string): HostSessionRecord {
+  const key = HOST_KEY_PREFIX + projectKey;
+  const creds = createSessionCredentials();
+  const relaySecret = randomId(32);
+  const createdAt = new Date().toISOString();
+  const { hostKeyLink } = deriveHostKeyPair(relaySecret, creds.sessionId);
+  const record: HostSessionRecord = {
+    sessionId: creds.sessionId,
+    secret: creds.secret,
+    relaySecret,
+    createdAt,
+    hostKey: hostKeyLink,
+  };
+  write(key, JSON.stringify(record));
+  saveHostSessionIndex(record.sessionId, projectKey);
+  return record;
 }
 
 /** Device-wide secret guest identities are derived from (never sent as is). */

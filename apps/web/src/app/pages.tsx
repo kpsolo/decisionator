@@ -553,3 +553,6 @@ export function SettingsPage() {
     </div>
   );
 }
+
+export { SessionsDashboard } from "../features/live/SessionsDashboard.js";
+

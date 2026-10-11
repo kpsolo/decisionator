@@ -114,6 +114,45 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByRole("dialog")).toBeVisible();
       await checkA11y(page, `Plugin settings dialog (${theme})`);
     });
+
+    test("sessions dashboard page", async ({ page }) => {
+      await page.goto("./#/sessions");
+      await expect(page.getByRole("heading", { name: "Shared Sessions" })).toBeVisible();
+      await checkA11y(page, `Sessions dashboard (${theme})`);
+    });
+
+    test("live session, revoke, and fork session dialogs", async ({ page, context, browserName }) => {
+      test.skip(browserName !== "chromium", "WebRTC loopback in CI is exercised on Chromium");
+      await page.goto("./#/new");
+      await page.getByRole("textbox", { name: "Ideas or options JSON" }).fill("");
+      await pasteInto(page, `\`\`\`json\n${OPTIONS_JSON}\n\`\`\``);
+      await page.getByRole("button", { name: "Create Project →" }).click();
+      await expect(page.getByRole("heading", { name: "Weekend plans" })).toBeVisible({ timeout: 15000 });
+
+      await page.getByRole("button", { name: "More project actions" }).click();
+      await page.getByRole("menuitem", { name: "Live session…" }).click();
+      const liveDialog = page.getByRole("dialog");
+      await expect(liveDialog.getByText("Live", { exact: true })).toBeVisible({ timeout: 10000 });
+      await checkA11y(page, `Live session dialog (${theme})`);
+
+      await liveDialog.getByRole("button", { name: "Revoke link" }).click();
+      await expect(page.getByRole("heading", { name: "Revoke access link" })).toBeVisible();
+      await checkA11y(page, `Revoke session dialog (${theme})`);
+      await page.getByRole("button", { name: "Cancel" }).click();
+
+      const joinUrl = await liveDialog.getByRole("textbox", { name: "Join link" }).inputValue();
+      const guest = await context.newPage();
+      await setup(guest, theme);
+      await guest.goto(joinUrl);
+      await guest.getByRole("textbox", { name: "Your name" }).fill("Guest User");
+      await guest.getByRole("button", { name: "Join" }).click();
+      await expect(guest.getByRole("heading", { name: "Weekend plans" })).toBeVisible({ timeout: 20000 });
+
+      await guest.getByRole("button", { name: "Save to my workspace" }).click();
+      await expect(guest.getByRole("dialog")).toBeVisible();
+      await checkA11y(guest, `Fork session dialog (${theme})`);
+      await guest.close();
+    });
   });
 }
 

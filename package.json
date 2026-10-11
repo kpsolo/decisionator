@@ -9,7 +9,8 @@
     "typecheck": "pnpm -r --parallel run typecheck",
     "test": "vitest run",
     "test:contract": "vitest run test/contract",
-    "test:e2e": "pnpm --filter @decisionator/web test:e2e"
+    "test:e2e": "pnpm --filter @decisionator/web test:e2e",
+    "verify:security": "node scripts/verify-security.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

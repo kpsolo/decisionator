@@ -11,8 +11,7 @@ import {
 import { NativeSelect } from "../../components/ui/native-select.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { useResetTools } from "../option-view/OptionExtensionsProvider.js";
-
-type ResetEntry = Extract<Entry, { kind: "reset" }>;
+import { participantVoteResets, type ResetEntry } from "./reset-entries.js";
 
 const ALL = "__all__";
 
@@ -89,15 +88,13 @@ export function ResetDialog({
   const summary = resetSummary({ snapshot, who: target, name, votes, properties: chosenLabels });
 
   const confirm = async () => {
-    const scope =
-      target === null
-        ? ({ scope: "all" } as const)
-        : ({ scope: "participant", participantId: target } as const);
     const voteResets: ResetEntry[] = votes
-      ? [
-          { kind: "reset", ...scope, targets: ["grades"] },
-          { kind: "reset", ...scope, targets: ["ballots"], round },
-        ]
+      ? target === null
+        ? [
+            { kind: "reset", scope: "all", targets: ["grades"] },
+            { kind: "reset", scope: "all", targets: ["ballots"], round },
+          ]
+        : participantVoteResets(target, round)
       : [];
     const propertyResets: ResetEntry[] = sharedDefs
       .filter((d) => props.includes(`${d.plugin}/${d.key}`))
