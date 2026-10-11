@@ -124,3 +124,37 @@
 - **Alternatives considered**:
   - *Hard-deleting host credentials without tombstone*: Leaves old snapshots on Nostr relays indefinitely, where anyone with the old URL fragment could still decrypt them. A tombstone guarantees relay state is purged.
 
+---
+
+### R8 — Live Participant Roster, Drop User Votes & Dynamic Read-Only Toggle
+
+- **Problem**: During a live deliberation, a session host currently has minimal visibility and control over who has submitted input. The peer list in `LiveSessionDialog` displays raw peer identifiers or names without their submission state. If a participant makes an error, submits a joke vote, or spams inputs, the host has no targeted way to drop their vote short of a nuclear global reset. Furthermore, after deliberation concludes or during presentation phases, the host cannot dynamically freeze the session into read-only mode to prevent late edits without kicking participants out.
+- **Decision**:
+  1. **Interactive Live Participant Roster**:
+     - The host tracks participant activity by combining peer connection status from `LiveShareHost` with the authoritative project state.
+     - For each participant, the host calculates:
+       - Display name and assigned numbered name.
+       - Online / connected indicator.
+       - Number of options graded (`gradeCount`).
+       - Whether a ranking ballot has been cast (`hasBallot`).
+     - Exposed in `LiveSessionDialog` as a clear roster with administrative actions.
+  2. **Targeted Vote Dropping (Append-Only Participant Reset)**:
+     - The project store's append-only journal natively supports scoped resets:
+       `{ kind: "reset", scope: "participant", participantId, targets: ["grades", "ballots"] }`.
+     - When the host clicks "Drop votes" for a participant:
+       - The host appends a participant-scoped reset entry via `store.append(...)`.
+       - The host coalescer generates a new snapshot and broadcasts it to all peers.
+       - The target participant's grades and ballots are eliminated from the calculated tallies across all screens immediately.
+       - **Audit Trail & Integrity**: Because this is an append-only entry rather than an in-place mutation, historical audit integrity is 100% preserved (Principle VI compliant).
+  3. **Dynamic Read-Only Toggle (`setRole`)**:
+     - `LiveRole` is typed as `"contribute" | "view"`.
+     - In `LiveShareHost`, make `role` mutable and add `setRole(role: LiveRole)`.
+     - When the host toggles "Read-only mode", `setRole("view")`:
+       - Emits a fresh `snapshot` message containing `role: "view"`.
+       - Rejects any subsequent guest submission with `{ t: "error", code: "read_only", message: "The host made this session view-only." }`.
+     - In `LiveShareGuest`, update `state.role` whenever a `snapshot` arrives.
+     - `GuestSession.tsx` uses `canContribute = live && state.role === "contribute"`. When `role === "view"`, guest controls (sliders, stars, drag-and-drop ballots, comments) are instantly locked, displaying the banner: *"The host made this session view-only."*
+- **Alternatives considered**:
+  - *Disconnect/kick participants instead of dropping votes*: Kicking disconnects WebRTC, but their previously submitted grades would linger in the project tally unless also reset. Targeted vote dropping cleans the tally while allowing the participant to remain in the room.
+  - *Client-side-only UI lock for read-only*: Insufficient; malicious or outdated clients could still send submission frames over the data channel. The host policy layer must enforce read-only validation.
+

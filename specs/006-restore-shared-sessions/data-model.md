@@ -117,6 +117,50 @@ Allows owners to revoke previously shared links and invalidate snapshots on rela
 
 ---
 
+### 6. Live Participant Profile (`in-memory / computed`)
+
+Represents a session participant in the host's administrative roster, combining WebRTC connection status with project submission counts.
+
+- **Storage Location**: Computed in-memory on host from `session.state.guests` and `project` state.
+- **Schema**:
+
+```ts
+interface LiveParticipantProfile {
+  /** Unique participant identifier derived from deviceSecret + sessionId */
+  participantId: string;
+  /** Resolved human-readable name ("Gina 2") */
+  name: string;
+  /** Whether this participant is the session host */
+  isHost: boolean;
+  /** Whether the participant is currently connected via WebRTC data channel */
+  online: boolean;
+  /** Active WebRTC peer ID if connected */
+  peerId?: string;
+  /** Total number of options graded by this participant */
+  gradeCount: number;
+  /** Whether this participant has submitted a ballot in the current round */
+  hasBallot: boolean;
+  /** Effective role assigned to this participant */
+  role: "contribute" | "view";
+}
+```
+
+- **Drop Votes Reset Entry**:
+  When the host drops votes for `participantId`, an append-only entry is added to the project journal:
+  ```ts
+  interface ParticipantResetEntry {
+    id: string; // UUID
+    timestamp: string; // ISO-8601
+    author: AuthorSignature; // host identity
+    kind: "reset";
+    scope: "participant";
+    participantId: string;
+    targets: ("grades" | "ballots")[];
+  }
+  ```
+
+---
+
 ## State Transitions
 
 ### 1. Hosted Session Lifecycle
@@ -159,4 +203,16 @@ stateDiagram-v2
     Live --> [*]: User leaves
     RevokedView --> [*]: User leaves / clears cache
 ```
+
+### 3. Session Contribution Mode Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> ContributionMode: Host starts session (default role = contribute)
+    ContributionMode --> ReadOnlyMode: Host toggles "Read-only mode" (setRole("view"))
+    ReadOnlyMode --> ContributionMode: Host toggles "Allow contributions" (setRole("contribute"))
+    ReadOnlyMode --> [*]: Session ended / revoked
+    ContributionMode --> [*]: Session ended / revoked
+```
+
 

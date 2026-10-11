@@ -173,3 +173,96 @@ The dashboard exposes:
 3. `revokeSession(projectKey)`: Triggers the revocation procedure above.
 4. `purgeJoinedSession(sessionId)`: Deletes the cached record from IndexedDB.
 
+---
+
+## 7. Dynamic Role Control & Participant Vote Dropping
+
+### 7.1 Dynamic Role Toggle (`setRole`)
+
+1. **Host State Transition**:
+   - `LiveShareHost` manages a mutable `role: LiveRole` (initial value `"contribute"` or `"view"` per config).
+   - The host exposes `setRole(role: LiveRole): void`.
+   - When `setRole` is invoked:
+     1. Internal state updates: `this.role = role`.
+     2. Host triggers a snapshot broadcast to all connected guests over WebRTC data channels, including the new role in the frame:
+        ```json
+        {
+          "t": "snapshot",
+          "rev": 14,
+          "snapshot": { ... },
+          "role": "view"
+        }
+        ```
+     3. Incoming guest submission messages received while `this.role === "view"` are rejected immediately with:
+        ```json
+        {
+          "t": "error",
+          "code": "read_only",
+          "message": "The host made this session view-only."
+        }
+        ```
+2. **Guest Reaction**:
+   - In `LiveShareGuest`, the `onMessage` handler for `snapshot` messages updates the guest's cached role:
+     ```ts
+     if (msg.role) {
+       this.state.role = msg.role;
+       this.emitChange();
+     }
+     ```
+   - In `GuestSession.tsx`:
+     - `canContribute = live && state.role === "contribute"`.
+     - When `state.role === "view"`, all input elements (rating sliders, star widgets, comment inputs, ballot rankings) are disabled.
+     - A banner is displayed: *"The host made this session view-only."*
+     - If the host switches back to `setRole("contribute")`, inputs are immediately re-enabled.
+
+### 7.2 Interactive Participant Roster
+
+1. **Profile Derivation**:
+   - The host computes `LiveParticipantProfile[]` by mapping over all known participants in the session:
+     ```ts
+     const roster: LiveParticipantProfile[] = participants.map((p) => {
+       const isConnected = guestPeers.some((g) => g.participantId === p.id);
+       const gradesCount = countGradesForParticipant(project, p.id);
+       const hasBallot = checkBallotForParticipant(project, p.id);
+       return {
+         participantId: p.id,
+         name: p.name,
+         isHost: p.id === hostParticipantId,
+         online: isConnected,
+         gradeCount: gradesCount,
+         hasBallot,
+         role: hostRole,
+       };
+     });
+     ```
+2. **UI Presentation**:
+   - Roster is rendered inside `LiveSessionDialog.tsx` under a **"Participants"** tab/section.
+   - For each non-host participant, the row displays:
+     - Name and online badge (Green = connected, Gray = offline).
+     - Submissions summary: e.g. "3 grades submitted", "Ballot cast".
+     - Action button / menu: **"Drop votes"**.
+
+### 7.3 Participant Vote Dropping Protocol
+
+1. **Execution**:
+   - When the host clicks **"Drop votes"** for a specific participant:
+     ```ts
+     const resetEntry: ProjectEntry = {
+       id: crypto.randomUUID(),
+       timestamp: new Date().toISOString(),
+       author: hostAuthor,
+       kind: "reset",
+       scope: "participant",
+       participantId: targetParticipantId,
+       targets: ["grades", "ballots"],
+     };
+     await store.append(projectRef.id, resetEntry);
+     ```
+2. **Tally Recalculation & Broadcast**:
+   - Appending the reset entry updates the authoritative project store.
+   - The host coalescer builds a fresh redacted snapshot reflecting the updated scores and rankings.
+   - The snapshot is broadcast to all peers within 30 ms.
+   - All connected peers and the host recalculate decision tallies in real-time, removing the dropped votes.
+3. **Audit Trail Compliance**:
+   - Per Constitution Principle VI, no entries are physically deleted or mutated in-place. The reset entry records that the host dropped the participant's votes at that timestamp, ensuring historical replayability and verification.
+

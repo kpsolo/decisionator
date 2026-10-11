@@ -11,7 +11,7 @@ Enable seamless restoration and complete lifecycle control of shared live sessio
 2. **Guest Local Snapshot Cache**: Cache deliberations in IndexedDB (`live_sessions`) so returning guests can immediately view decisions, options, comments, and outcomes even when the host is offline.
 3. **Asynchronous Relay Snapshots**: Use Nostr NIP-78 parameterized replaceable events (`kind 30078`) to store AES-256-GCM sealed snapshots on public relays, allowing first-time visitors to bootstrap the decision state even when the host tab is offline.
 4. **Workspace Project Ingestion**: A "Save to my workspace" action forks the shared deliberation into an independent permanent project in the user's chosen storage backend, preserving all author attributions, ratings, rankings, and history.
-5. **Central Session Control & Revocation**: A central Sessions Dashboard (`/sessions`) for owners to monitor all shared decisions, revoke access links (rotating credentials and ejecting peers), and purge published snapshots from public relays via tombstone events. Guests can view their deliberation history and purge local cached data.
+5. **Central Session Control, Revocation & Admin Oversight**: A central Sessions Dashboard (`/sessions`) and interactive live session panel for owners to monitor all shared decisions, view connected and participating users with real-time submission counts, drop errant votes from specific participants via append-only resets, toggle live sessions between contribution and read-only modes, revoke access links (rotating credentials and ejecting peers), and purge published snapshots from public relays via tombstone events. Guests can view their deliberation history and purge local cached data.
 
 Design artifacts: [research.md](./research.md), [data-model.md](./data-model.md), [contracts/session-restore.md](./contracts/session-restore.md), [quickstart.md](./quickstart.md).
 
@@ -37,8 +37,8 @@ No new runtime dependencies added.
 - Relays: Opaque sealed snapshots on public Nostr relays (NIP-78 `kind 30078`) and tombstone retractions.
 
 **Testing**:
-- Vitest: Unit and contract tests for NIP-78 snapshot transport, reverse index, cache store, revocation ejection, and restoration pipeline.
-- Playwright: Multi-browser E2E testing host reload resilience, guest offline view, link revocation, and workspace forking.
+- Vitest: Unit and contract tests for NIP-78 snapshot transport, reverse index, cache store, revocation ejection, dynamic role toggle, vote dropping, and restoration pipeline.
+- Playwright: Multi-browser E2E testing host reload resilience, guest offline view, link revocation, participant vote dropping, read-only mode, and workspace forking.
 
 **Target Platform**: Modern desktop and mobile browsers (Chrome, Firefox, Safari).
 
@@ -47,6 +47,8 @@ No new runtime dependencies added.
 - SC-002: Host tab reload re-establishes guest connections in under 5 s.
 - SC-004: First-time guests fetch asynchronous snapshot from relays in under 5 s.
 - SC-005: Revoked links refuse connection attempts within 1 s.
+- SC-006: Host toggling read-only mode locks 100% of guest controls within 1 s.
+- SC-007: Dropped votes update all connected peer tallies within 1 s.
 
 ---
 
@@ -60,9 +62,9 @@ No new runtime dependencies added.
 | **II. Versioned contracts** | Wire protocol stays `proto: 3` (additive signaling capability). New contract `contracts/session-restore.md` v3.1.0. Storage uses existing `ProjectStore` 1.4.0. | PASS |
 | **III. Simple by default** | Single link format (`#/join/:sessionId/:secret`) handles live joining, host re-entry, and offline viewing transparently. Central session management lives behind `/sessions`. | PASS |
 | **IV. Agent-native** | Projects restored into workspaces are standard Deci projects accessible by user agents via the public API. | PASS |
-| **V. User owns the data** | Full control: owners can revoke links and purge relay snapshots with tombstones at any time. Relays see only ciphertext blobs. Zero metadata leakage. | PASS |
-| **VI. Reproducible, append-only** | Forking sessions into workspace projects preserves full append-only entry logs, timestamps, and author attributions via `copyEntriesAsAuthors`. | PASS |
-| **VII. Test-first for contracts** | Contract tests for NIP-78 sealed snapshot transport, revocation ejection, and cache lifecycle written before UI implementation. | PASS |
+| **V. User owns the data** | Full control: owners can revoke links, purge relay snapshots with tombstones, drop errant votes, and toggle read-only mode at any time. Relays see only ciphertext blobs. Zero metadata leakage. | PASS |
+| **VI. Reproducible, append-only** | Forking sessions into workspace projects preserves full append-only entry logs, timestamps, and author attributions via `copyEntriesAsAuthors`. Vote dropping uses append-only resets without deleting history. | PASS |
+| **VII. Test-first for contracts** | Contract tests for NIP-78 sealed snapshot transport, revocation ejection, role toggling, and cache lifecycle written before UI implementation. | PASS |
 | **Dependencies** | No new dependencies added (`idb` and `@noble/*` already in workspace). | PASS |
 | **Accessibility** | All new dialogs, banners, and status indicators meet WCAG 2.1 AA with axe validation. | PASS |
 
@@ -92,15 +94,16 @@ specs/006-restore-shared-sessions/
 plugins/share-inpage/src/
 ├── nostr.ts            # NIP-78 kind 30078 replaceable event publish, subscribe & tombstones
 ├── signaling.ts        # SignalingRoom support for replaceable snapshot events
-├── host.ts             # Host broadcast triggers NIP-78 sealed snapshot publish & revocation ejection
-├── guest.ts            # Guest bootstrap from NIP-78 snapshot & revocation error handling
+├── host.ts             # Host broadcast triggers NIP-78 sealed snapshot publish, setRole(role), rejection in read-only mode, revocation ejection
+├── guest.ts            # Guest bootstrap from NIP-78 snapshot, dynamic role adoption on snapshot, revocation error handling
 └── session.ts          # Wire options & network configuration
 
 apps/web/src/
 ├── features/live/
 │   ├── live-config.ts          # Reverse index: deci.live.bySession.<sessionId>, revocation registry
 │   ├── LiveShareContext.tsx    # sessionStorage activeHosting reload auto-resume
-│   ├── GuestSession.tsx        # Cached snapshot render, "Restore to workspace" button, revocation state
+│   ├── LiveSessionDialog.tsx   # Interactive participant roster, "Drop votes" action, "Read-only" toggle switch
+│   ├── GuestSession.tsx        # Cached snapshot render, "Restore to workspace" button, dynamic read-only banner & lock, revocation state
 │   ├── ForkSessionDialog.tsx   # Modal to choose target store for project restoration
 │   ├── SessionsDashboard.tsx   # Central /sessions dashboard (hosted & joined sessions)
 │   └── RevokeSessionDialog.tsx # Modal to confirm link revocation & relay snapshot purging

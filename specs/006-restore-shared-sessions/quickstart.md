@@ -140,6 +140,47 @@ This guide details end-to-end validation scenarios for testing session restorati
 
 ---
 
+## Scenario 8: Host Dropping Specific Participant Votes in Real Time
+
+**Goal**: Verify that an owner can drop grades and ballots from a specific participant, immediately recalculating the tally and broadcasting the update to all peers.
+
+1. **Setup session with multiple participants**:
+   - Browser A (Host): Hosts "Team Lunch".
+   - Browser B (Guest "Gina"): Grades Option 1 with 5 stars, Option 2 with 2 stars.
+   - Browser C (Guest "Tom"): Submits joke 1-star grades on all options and casts a ballot.
+2. **Inspect participant roster**:
+   - In Browser A, open the Live Session dialog and view the **Participants** tab.
+   - Both Gina and Tom are listed as online, with Tom showing "2 grades submitted, ballot cast".
+3. **Drop Tom's votes**:
+   - Host clicks **"Drop votes"** on Tom's row.
+4. **Expected outcome**:
+   - A participant-scoped reset is appended to the project store.
+   - Tom's grades and ballot are instantly removed from the project scores.
+   - Browser A, Browser B, and Browser C instantly reflect the updated tally (Tom's 1-star ratings no longer skew the result).
+   - Tom's screen displays a notice: *"Your votes were reset by the host"*, allowing Tom to re-grade if appropriate.
+   - Historical audit integrity is intact: prior snapshots can still be audited via the append-only journal.
+
+---
+
+## Scenario 9: Dynamic Read-Only Session Toggle
+
+**Goal**: Verify that toggling a session to read-only locks inputs for all connected guests within 1 second and rejects late submissions.
+
+1. **Active deliberation**:
+   - Browser A (Host) and Browser B (Guest) are connected.
+   - Browser B can freely adjust rating sliders and cast ballots.
+2. **Host engages read-only mode**:
+   - In Browser A, open Live Session controls and toggle **"Read-only mode"** ON.
+3. **Expected outcome on guest**:
+   - Within 1 second, Browser B's voting controls, sliders, and ballot ranking UI are locked.
+   - A banner appears across the top: *"The host made this session view-only."*
+   - If an outdated or adversarial client sends a submission frame, the host returns error: `read_only`.
+4. **Host re-enables contribution**:
+   - In Browser A, toggle **"Read-only mode"** OFF ("Allow contributions").
+   - Browser B's inputs are unlocked immediately and the banner disappears.
+
+---
+
 ## Automated Test Suites
 
 Run the automated contract and end-to-end suites:
@@ -151,4 +192,5 @@ pnpm vitest run apps/web
 # Playwright E2E tests
 pnpm --filter @decisionator/web test:e2e e2e/live-session.spec.ts
 ```
+
 
