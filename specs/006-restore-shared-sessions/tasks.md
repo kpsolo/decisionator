@@ -118,12 +118,12 @@
 **Independent Test**: Gina views a shared session (live or offline), clicks "Save to my workspace", selects Local File store; a new project is created with all options, comments, and votes preserved.
 
 ### Tests for User Story 4
-- [ ] T034 [P] [US4] Write unit test for session forking in `apps/web/src/features/live/fork-session.test.ts` verifying `snapshotToExport` and `restoreProject` preserve author attributions and history
+- [X] T034 [P] [US4] Write unit test for session forking in `apps/web/src/features/live/fork-session.test.ts` verifying `snapshotToExport` and `restoreProject` preserve author attributions and history
 
 ### Implementation for User Story 4
-- [ ] T035 [US4] Implement `ForkSessionDialog` in `apps/web/src/features/live/ForkSessionDialog.tsx` prompting user to select destination store (Local File, Local IndexedDB, Google Sheets, or Firestore) and calling `restoreProject`
-- [ ] T036 [US4] Add "Save to my workspace" button in `apps/web/src/features/live/GuestSession.tsx` header (visible in live, offline, and ended states), opening `ForkSessionDialog` and redirecting to the new project
-- [ ] T037 [US4] Add Playwright test in `apps/web/e2e/live-session-fork.spec.ts` proving a guest can fork a session into an independent local project
+- [X] T035 [US4] Implement `ForkSessionDialog` in `apps/web/src/features/live/ForkSessionDialog.tsx` prompting user to select destination store (Local File, Local IndexedDB, Google Sheets, or Firestore) and calling `restoreProject`
+- [X] T036 [US4] Add "Save to my workspace" button in `apps/web/src/features/live/GuestSession.tsx` header (visible in live, offline, and ended states), opening `ForkSessionDialog` and redirecting to the new project
+- [X] T037 [US4] Add Playwright test in `apps/web/e2e/live-session-fork.spec.ts` proving a guest can fork a session into an independent local project
 
 **Checkpoint**: User Stories 1 through 5 are functional and independently testable.
 
@@ -136,12 +136,12 @@
 **Independent Test**: The owner grants their agent access with `moderate_session`. The agent reads the roster, sees Tom's 1-star ballot, and proposes "Drop votes for Tom". The owner accepts the proposal in the live panel; the reset entries are recorded and attributed to the owner with the agent logged in audit trail.
 
 ### Tests for User Story 6
-- [ ] T038 [P] [US6] Write contract tests for `get_live_session` and `propose_moderation` (MCP tool and REST) in `packages/node/test/agent-api-live-session.test.ts` testing schema parity, pseudonymization, `moderate_session` permission enforcement, and proposal lifecycle
+- [X] T038 [P] [US6] Write contract tests for `get_live_session` and `propose_moderation` (MCP tool and REST) in `packages/node/test/agent-api-live-session.test.ts` testing schema parity, pseudonymization, `moderate_session` permission enforcement, and proposal lifecycle
 
 ### Implementation for User Story 6
-- [ ] T039 [US6] Implement `get_live_session` and `propose_moderation` endpoints and MCP tools in `packages/node/src/agent-api/mcp.ts` and `packages/node/src/agent-api/rest.ts`
-- [ ] T040 [US6] Add live session state bridge and pending `ModerationProposal` queue in `packages/node/src/agent-api/state.ts` and audit logging (`agent_moderation_proposed`, `agent_moderation_accepted`, `agent_moderation_dismissed`)
-- [ ] T041 [US6] Update `apps/web/src/features/live/LiveSessionDialog.tsx` to display pending moderation proposals from agents with "Accept" and "Dismiss" buttons
+- [X] T039 [US6] Implement `get_live_session` and `propose_moderation` endpoints and MCP tools in `packages/node/src/agent-api/mcp.ts` and `packages/node/src/agent-api/rest.ts`
+- [X] T040 [US6] Add live session state bridge and pending `ModerationProposal` queue in `packages/node/src/agent-api/state.ts` and audit logging (`agent_moderation_proposed`, `agent_moderation_accepted`, `agent_moderation_dismissed`)
+- [X] T041 [US6] Update `apps/web/src/features/live/LiveSessionDialog.tsx` to display pending moderation proposals from agents with "Accept" and "Dismiss" buttons
 
 **Checkpoint**: Staged Compliance deferral D1 is resolved; Principle IV satisfied with full agent API parity.
 
@@ -151,9 +151,9 @@
 
 **Purpose**: Quality gates, accessibility verification, and release preparation.
 
-- [ ] T042 [P] Run automated accessibility audit on `SessionsDashboard`, `LiveSessionDialog`, `RevokeSessionDialog`, and `ForkSessionDialog` using axe in `apps/web/e2e/a11y.spec.ts`
-- [ ] T043 [P] Create Changeset in `.changeset/restore-shared-sessions.md` marking minor bumps for `@decisionator/share-inpage` (3.1.0) and `@decisionator/node` (1.2.0), and patch for `@decisionator/web`
-- [ ] T044 Validate all 10 end-to-end scenarios in `specs/006-restore-shared-sessions/quickstart.md` pass against the test suite
+- [X] T042 [P] Run automated accessibility audit on `SessionsDashboard`, `LiveSessionDialog`, `RevokeSessionDialog`, and `ForkSessionDialog` using axe in `apps/web/e2e/a11y.spec.ts`
+- [X] T043 [P] Create Changeset in `.changeset/restore-shared-sessions.md` marking minor bumps for `@decisionator/share-inpage` (3.1.0) and `@decisionator/node` (1.2.0), and patch for `@decisionator/web`
+- [X] T044 Validate all 10 end-to-end scenarios in `specs/006-restore-shared-sessions/quickstart.md` pass against the test suite
 
 ---
 

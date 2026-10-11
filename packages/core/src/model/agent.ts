@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { TargetRefSchema } from "./contribution.js";
 
-export const AgentPermissionSchema = z.enum(["read", "contribute", "propose_options"]);
+export const AgentPermissionSchema = z.enum([
+  "read",
+  "contribute",
+  "propose_options",
+  "moderate_session",
+]);
 export type AgentPermission = z.infer<typeof AgentPermissionSchema>;
 
 export const AgentRequestStatusSchema = z.enum(["open", "completed", "revoked", "expired"]);
@@ -39,6 +44,9 @@ export const AuditEventSchema = z.object({
     "agent_refused_limit",
     "agent_grant_revoked",
     "agent_request_completed",
+    "agent_moderation_proposed",
+    "agent_moderation_accepted",
+    "agent_moderation_dismissed",
   ]),
   details: z.record(z.string(), z.unknown()),
 });

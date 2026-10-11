@@ -1,4 +1,14 @@
-import { AlertTriangle, Check, Copy, Info, Loader2, Radio, ShieldAlert, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  Copy,
+  Info,
+  Loader2,
+  Radio,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
 import { Badge } from "../../components/ui/badge.js";
@@ -86,6 +96,16 @@ export function LiveSessionDialog() {
   );
 }
 
+export interface LiveModerationProposal {
+  id: string;
+  agentName: string;
+  action: "drop_votes" | "set_read_only" | "allow_contributions" | "revoke_link";
+  participantId?: string;
+  reason: string;
+  status: "pending" | "accepted" | "dismissed";
+  createdAt: string;
+}
+
 function LivePanel() {
   const live = useLiveShare();
   const session = live.session;
@@ -161,12 +181,124 @@ function LivePanel() {
     }
   };
 
+  const [proposals, setProposals] = useState<LiveModerationProposal[]>([]);
+
   const handleRevokeConfirm = () => {
     live.revoke("This session link has been revoked by the owner.");
     live.closeDialog();
     toast({
       title: "Session link revoked",
       description: "Connected guests were disconnected and the link was deactivated.",
+    });
+  };
+
+  // Sync state with local agent bridge and fetch pending moderation proposals (US6)
+  useEffect(() => {
+    let active = true;
+    const syncAgentBridge = async () => {
+      try {
+        await fetch("http://127.0.0.1:4178/api/v1/live-session", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer deci_agent_token_local",
+          },
+          body: JSON.stringify({
+            hosting: true,
+            readOnly: currentRole === "view",
+            revoked: false,
+            participants: roster.map((r) => ({
+              participantId: r.participantId,
+              name: r.name,
+              isHost: r.isHost,
+              online: r.online,
+              gradeCount: r.gradeCount,
+              hasBallot: r.hasBallot,
+            })),
+          }),
+        });
+
+        const res = await fetch("http://127.0.0.1:4178/api/v1/live-session/proposals", {
+          headers: { Authorization: "Bearer deci_agent_token_local" },
+        });
+        if (res.ok && active) {
+          const data = (await res.json()) as { proposals?: LiveModerationProposal[] };
+          if (Array.isArray(data.proposals)) {
+            setProposals(data.proposals.filter((p) => p.status === "pending"));
+          }
+        }
+      } catch {
+        // Node not running locally
+      }
+    };
+
+    void syncAgentBridge();
+    const interval = setInterval(syncAgentBridge, 2000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [currentRole, roster]);
+
+  const handleAcceptProposal = async (prop: LiveModerationProposal) => {
+    try {
+      if (prop.action === "drop_votes" && prop.participantId && snapshot) {
+        const round = snapshot.project.voting?.round ?? 1;
+        const resets = participantVoteResets(prop.participantId, round);
+        await session.target.store.append(session.target.projectRef, resets);
+      } else if (prop.action === "set_read_only") {
+        live.setRole("view");
+      } else if (prop.action === "allow_contributions") {
+        live.setRole("contribute");
+      } else if (prop.action === "revoke_link") {
+        live.revoke("This session link has been revoked by the owner.");
+      }
+
+      try {
+        await fetch(`http://127.0.0.1:4178/api/v1/live-session/proposals/${prop.id}/decision`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer deci_agent_token_local",
+          },
+          body: JSON.stringify({ decision: "accepted" }),
+        });
+      } catch {
+        // Node not running
+      }
+
+      setProposals((prev) => prev.filter((p) => p.id !== prop.id));
+      toast({
+        title: "Proposal accepted",
+        description: `Applied ${prop.action} proposed by ${prop.agentName || "Agent"}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to apply proposal",
+        description: err instanceof Error ? err.message : "Failed to execute proposed action",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDismissProposal = async (prop: LiveModerationProposal) => {
+    try {
+      await fetch(`http://127.0.0.1:4178/api/v1/live-session/proposals/${prop.id}/decision`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer deci_agent_token_local",
+        },
+        body: JSON.stringify({ decision: "dismissed" }),
+      });
+    } catch {
+      // Node not running
+    }
+
+    setProposals((prev) => prev.filter((p) => p.id !== prop.id));
+    toast({
+      title: "Proposal dismissed",
+      description: `Dismissed proposal from ${prop.agentName || "Agent"}.`,
     });
   };
 
@@ -239,6 +371,75 @@ function LivePanel() {
           onCheckedChange={(checked) => live.setRole(checked ? "view" : "contribute")}
         />
       </div>
+
+      {/* Agent Moderation Proposals (US6, Staged Compliance D1) */}
+      {proposals.length > 0 && (
+        <div
+          className="space-y-2 rounded-lg border border-agent-border bg-agent/5 p-3"
+          role="region"
+          aria-label="Agent moderation proposals"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-agent">
+              <Bot className="h-4 w-4" aria-hidden />
+              <span>Agent Moderation Proposals ({proposals.length})</span>
+            </div>
+            <span className="text-[11px] text-muted-foreground">Requires owner decision</span>
+          </div>
+
+          <div className="space-y-2">
+            {proposals.map((prop) => {
+              const participant = roster.find((r) => r.participantId === prop.participantId);
+              const targetName = participant?.name ?? prop.participantId ?? "participant";
+              const actionText =
+                prop.action === "drop_votes"
+                  ? `Drop votes for ${targetName}`
+                  : prop.action === "set_read_only"
+                    ? "Set session to read-only"
+                    : prop.action === "allow_contributions"
+                      ? "Allow contributions"
+                      : "Revoke session link";
+
+              return (
+                <div
+                  key={prop.id}
+                  className="space-y-2 rounded-md border border-border bg-card p-3 text-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground">
+                        {prop.agentName || "Agent"} proposes: {actionText}
+                      </span>
+                      <Badge variant="secondary" className="text-[10px]">
+                        Pending
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground">{prop.reason}</p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-border/50">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs"
+                      onClick={() => handleDismissProposal(prop)}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 px-2.5 text-xs bg-agent text-agent-foreground hover:bg-agent/90"
+                      onClick={() => handleAcceptProposal(prop)}
+                    >
+                      Accept
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Participant Roster (US5, FR-014, FR-030) */}
       <div className="space-y-2">

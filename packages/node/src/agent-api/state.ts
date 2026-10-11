@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   type Contribution,
   type Option,
@@ -10,9 +11,29 @@ import {
   effectivePropertyValues,
   propertyValueBytes,
 } from "@decisionator/core";
+import type { LiveParticipantProfile, ProposeModerationInput } from "./schemas.js";
 
 /** A property declaration together with the enabled plugin that declares it. */
 export type DeclaredOptionProperty = OptionPropertyDefinition & { plugin: string };
+
+export interface LiveSessionData {
+  hosting: boolean;
+  readOnly: boolean;
+  revoked: boolean;
+  participants: LiveParticipantProfile[];
+}
+
+export interface ModerationProposal {
+  id: string;
+  grantId: string;
+  agentName: string;
+  action: "drop_votes" | "set_read_only" | "allow_contributions" | "revoke_link";
+  participantId?: string;
+  reason: string;
+  status: "pending" | "accepted" | "dismissed";
+  createdAt: string;
+  decidedAt?: string;
+}
 
 export interface ProjectData {
   title: string;
@@ -42,6 +63,10 @@ export const PERSON_PROPERTY_REFUSAL = "Only the person it belongs to can set th
 export class AgentStateStore {
   private projects = new Map<string, ProjectData>();
   private contributionsByRequest = new Map<string, Contribution[]>();
+  private liveSessions = new Map<string, LiveSessionData>();
+  private proposals = new Map<string, ModerationProposal[]>();
+  private pseudonymMaps = new Map<string, Map<string, string>>();
+  private reversePseudonymMaps = new Map<string, Map<string, string>>();
 
   setProject(projectId: string, data: ProjectData): void {
     this.projects.set(projectId, {
@@ -197,4 +222,92 @@ export class AgentStateStore {
     }
     return newOption;
   }
+
+  setLiveSession(projectId: string, data: LiveSessionData | null): void {
+    if (!data) {
+      this.liveSessions.delete(projectId);
+    } else {
+      this.liveSessions.set(projectId, data);
+    }
+  }
+
+  getLiveSession(projectId: string): LiveSessionData | undefined {
+    return this.liveSessions.get(projectId);
+  }
+
+  getPseudonym(grantId: string, realParticipantId: string): string {
+    let forward = this.pseudonymMaps.get(grantId);
+    if (!forward) {
+      forward = new Map();
+      this.pseudonymMaps.set(grantId, forward);
+    }
+    let reverse = this.reversePseudonymMaps.get(grantId);
+    if (!reverse) {
+      reverse = new Map();
+      this.reversePseudonymMaps.set(grantId, reverse);
+    }
+    const existing = forward.get(realParticipantId);
+    if (existing) return existing;
+    const pseudo = `p_${createHash("sha256")
+      .update(`${grantId}:${realParticipantId}`)
+      .digest("hex")
+      .slice(0, 8)}`;
+    forward.set(realParticipantId, pseudo);
+    reverse.set(pseudo, realParticipantId);
+    return pseudo;
+  }
+
+  resolvePseudonym(grantId: string, pseudoOrReal: string): string {
+    const reverse = this.reversePseudonymMaps.get(grantId);
+    return reverse?.get(pseudoOrReal) ?? pseudoOrReal;
+  }
+
+  proposeModeration(
+    projectId: string,
+    grantId: string,
+    agentName: string,
+    input: ProposeModerationInput
+  ): ModerationProposal {
+    const realParticipantId = input.participant
+      ? this.resolvePseudonym(grantId, input.participant)
+      : undefined;
+    const proposal: ModerationProposal = {
+      id: `prop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      grantId,
+      agentName,
+      action: input.action,
+      participantId: realParticipantId,
+      reason: input.reason,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    const list = this.proposals.get(projectId) ?? [];
+    list.push(proposal);
+    this.proposals.set(projectId, list);
+    return proposal;
+  }
+
+  getPendingProposals(projectId: string): ModerationProposal[] {
+    return (this.proposals.get(projectId) ?? []).filter((p) => p.status === "pending");
+  }
+
+  getAllProposals(projectId: string): ModerationProposal[] {
+    return this.proposals.get(projectId) ?? [];
+  }
+
+  decideProposal(
+    proposalId: string,
+    decision: "accepted" | "dismissed"
+  ): ModerationProposal | null {
+    for (const list of this.proposals.values()) {
+      const found = list.find((p) => p.id === proposalId);
+      if (found) {
+        found.status = decision;
+        found.decidedAt = new Date().toISOString();
+        return found;
+      }
+    }
+    return null;
+  }
 }
+

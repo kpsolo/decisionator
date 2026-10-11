@@ -7,11 +7,17 @@ import {
   AddContributionInputSchema,
   AgentHelloInputSchema,
   CompleteRequestInputSchema,
+  ProposeModerationInputSchema,
   ProposeOptionInputSchema,
   SetOptionPropertyBodySchema,
   UpdateContributionInputSchema,
 } from "./schemas.js";
-import type { AgentStateStore, DeclaredOptionProperty, SetSharedPropertyInput } from "./state.js";
+import type {
+  AgentStateStore,
+  DeclaredOptionProperty,
+  LiveSessionData,
+  SetSharedPropertyInput,
+} from "./state.js";
 
 export type AgentPropertyWriteResult =
   | { ok: true; value: PropertyValue }
@@ -425,7 +431,120 @@ export function createRestRouter(options: RestApiOptions): Hono {
     return c.json({ status: "completed", summary: body.summary });
   });
 
-  // 9. GET /openapi.json (OpenAPI 3.1 schema)
+  // 9. GET /live-session (get_live_session)
+  router.get("/live-session", async (c) => {
+    const token = c.get("token" as never) as string;
+    const auth = grantManager.verifyAccess(token, null);
+    if (!auth.valid || !auth.grant) {
+      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    }
+    const session = stateStore.getLiveSession(auth.grant.projectId);
+    if (!session || !session.hosting) {
+      return c.json({ error: "NOT_HOSTING", message: "No live session is currently hosted" }, 404);
+    }
+    const pseudonymized = session.participants.map((p) => ({
+      ...p,
+      participantId: stateStore.getPseudonym(auth.grant!.id, p.participantId),
+    }));
+    return c.json({
+      hosting: session.hosting,
+      readOnly: session.readOnly,
+      revoked: session.revoked,
+      participants: pseudonymized,
+    });
+  });
+
+  // 10. POST /live-session/proposals (propose_moderation)
+  router.post("/live-session/proposals", async (c) => {
+    const token = c.get("token" as never) as string;
+    const auth = grantManager.verifyAccess(token, "moderate_session");
+    if (!auth.valid || !auth.grant) {
+      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    }
+    const session = stateStore.getLiveSession(auth.grant.projectId);
+    if (!session || !session.hosting) {
+      return c.json({ error: "NOT_HOSTING", message: "No live session is currently hosted" }, 404);
+    }
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return c.json({ error: "INVALID_PARAMS", message: "Request body must be an object" }, 400);
+    }
+    const parsed = ProposeModerationInputSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "INVALID_PARAMS",
+          message: parsed.error.issues[0]?.message || "Invalid moderation proposal",
+        },
+        400
+      );
+    }
+    const proposal = stateStore.proposeModeration(
+      auth.grant.projectId,
+      auth.grant.id,
+      auth.grant.agentName || "Agent",
+      parsed.data
+    );
+    grantManager.recordAudit("agent_moderation_proposed", {
+      grantId: auth.grant.id,
+      proposalId: proposal.id,
+      action: proposal.action,
+      reason: proposal.reason,
+    });
+    return c.json({ id: proposal.id, status: "pending" }, 201);
+  });
+
+  // Host bridge endpoints:
+  router.put("/live-session", async (c) => {
+    const token = c.get("token" as never) as string;
+    const auth = grantManager.verifyAccess(token, null);
+    if (!auth.valid || !auth.grant) {
+      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    }
+    const body = (await c.req.json().catch(() => null)) as LiveSessionData | null;
+    stateStore.setLiveSession(auth.grant.projectId, body);
+    return c.json({ ok: true });
+  });
+
+  router.get("/live-session/proposals", async (c) => {
+    const token = c.get("token" as never) as string;
+    const auth = grantManager.verifyAccess(token, null);
+    if (!auth.valid || !auth.grant) {
+      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    }
+    return c.json({ proposals: stateStore.getAllProposals(auth.grant.projectId) });
+  });
+
+  router.post("/live-session/proposals/:id/decision", async (c) => {
+    const token = c.get("token" as never) as string;
+    const auth = grantManager.verifyAccess(token, null);
+    if (!auth.valid || !auth.grant) {
+      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    }
+    const body = (await c.req.json().catch(() => null)) as { decision?: "accepted" | "dismissed" };
+    if (body?.decision !== "accepted" && body?.decision !== "dismissed") {
+      return c.json(
+        { error: "INVALID_PARAMS", message: "Decision must be accepted or dismissed" },
+        400
+      );
+    }
+    const updated = stateStore.decideProposal(c.req.param("id"), body.decision);
+    if (!updated) {
+      return c.json({ error: "NOT_FOUND", message: "Proposal not found" }, 404);
+    }
+    grantManager.recordAudit(
+      body.decision === "accepted" ? "agent_moderation_accepted" : "agent_moderation_dismissed",
+      {
+        grantId: updated.grantId,
+        proposalId: updated.id,
+        action: updated.action,
+        decidedBy: "owner",
+      }
+    );
+    return c.json({ ok: true, proposal: updated });
+  });
+
+  // 11. GET /openapi.json (OpenAPI 3.1 schema)
   router.get("/openapi.json", (c) => {
     const openapi = generateOpenApiSpec();
     return c.json(openapi);
@@ -594,6 +713,35 @@ export function generateOpenApiSpec(): Record<string, unknown> {
           },
           responses: {
             "200": { description: "Request completed" },
+          },
+        },
+      },
+      "/live-session": {
+        get: {
+          operationId: "get_live_session",
+          summary: "Inspects active shared session state",
+          responses: {
+            "200": { description: "Live session state" },
+            "404": { description: "No session currently hosted" },
+          },
+        },
+      },
+      "/live-session/proposals": {
+        post: {
+          operationId: "propose_moderation",
+          summary: "Proposes a moderation action to session owner",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: zodToJsonSchema(ProposeModerationInputSchema),
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Proposal created" },
+            "403": { description: "Missing moderate_session permission" },
+            "404": { description: "No session currently hosted" },
           },
         },
       },

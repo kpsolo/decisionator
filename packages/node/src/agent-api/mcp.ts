@@ -7,6 +7,8 @@ import {
   AddContributionInputSchema,
   AgentHelloInputSchema,
   CompleteRequestInputSchema,
+  ProposeModerationBodySchema,
+  ProposeModerationInputSchema,
   ProposeOptionInputSchema,
   SetOptionPropertyInputSchema,
   UpdateContributionInputSchema,
@@ -23,7 +25,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   const { grantManager, stateStore } = options;
   const server = new McpServer({
     name: "decisionator-agent-mcp",
-    version: "1.1.0",
+    version: "1.2.0",
   });
 
   const getToken = (extra: unknown): string => {
@@ -454,6 +456,107 @@ export function createMcpServer(options: McpServerOptions): McpServer {
           {
             type: "text",
             text: JSON.stringify({ status: "completed", summary: args.summary }),
+          },
+        ],
+      };
+    }
+  );
+
+  // 9. get_live_session
+  server.tool(
+    "get_live_session",
+    "Inspects active shared session for participant roster, connection health, and deliberation status.",
+    {},
+    async (_args, extra) => {
+      const token = getToken(extra);
+      const auth = grantManager.verifyAccess(token, null);
+      if (!auth.valid || !auth.grant) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `[${auth.status}] ${auth.code}: ${auth.message}` }],
+        };
+      }
+      const session = stateStore.getLiveSession(auth.grant.projectId);
+      if (!session || !session.hosting) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `[404] NOT_HOSTING: No live session is currently hosted` },
+          ],
+        };
+      }
+      const pseudonymized = session.participants.map((p) => ({
+        ...p,
+        participantId: stateStore.getPseudonym(auth.grant!.id, p.participantId),
+      }));
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              hosting: session.hosting,
+              readOnly: session.readOnly,
+              revoked: session.revoked,
+              participants: pseudonymized,
+            }),
+          },
+        ],
+      };
+    }
+  );
+
+  // 10. propose_moderation
+  server.tool(
+    "propose_moderation",
+    "Proposes a moderation action (drop errant votes, set read-only, etc.) for review and decision by the session owner.",
+    ProposeModerationBodySchema.shape,
+    async (args, extra) => {
+      const token = getToken(extra);
+      const auth = grantManager.verifyAccess(token, "moderate_session");
+      if (!auth.valid || !auth.grant) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `[${auth.status}] ${auth.code}: ${auth.message}` }],
+        };
+      }
+      const session = stateStore.getLiveSession(auth.grant.projectId);
+      if (!session || !session.hosting) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `[404] NOT_HOSTING: No live session is currently hosted` },
+          ],
+        };
+      }
+      const parsed = ProposeModerationInputSchema.safeParse(args);
+      if (!parsed.success) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[400] INVALID_PARAMS: ${parsed.error.issues[0]?.message || "Invalid proposal"}`,
+            },
+          ],
+        };
+      }
+      const proposal = stateStore.proposeModeration(
+        auth.grant.projectId,
+        auth.grant.id,
+        auth.grant.agentName || "Agent",
+        parsed.data
+      );
+      grantManager.recordAudit("agent_moderation_proposed", {
+        grantId: auth.grant.id,
+        proposalId: proposal.id,
+        action: proposal.action,
+        reason: proposal.reason,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: proposal.id, status: "pending" }),
           },
         ],
       };

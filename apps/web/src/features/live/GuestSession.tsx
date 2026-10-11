@@ -7,6 +7,7 @@ import {
   joinSession,
 } from "@decisionator/share-inpage";
 import {
+  Copy,
   Download,
   Eye,
   Link2Off,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ForkSessionDialog } from "./ForkSessionDialog.js";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -516,6 +518,8 @@ function GuestWorkspace({
   const round = voting?.round ?? 1;
   const myBallot = snapshot.rankings.find((r) => r.by === me && (r.round ?? 1) === round);
 
+  const [forkDialogOpen, setForkDialogOpen] = useState(false);
+
   return (
     <OptionExtensionsProvider
       viewerId={me || null}
@@ -535,13 +539,23 @@ function GuestWorkspace({
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge
-              status={state?.status ?? "connecting"}
-              isOfflineCached={isOfflineCached}
-              lastSyncedAt={cachedSession?.lastSyncedAt}
-            />
-            <span className="text-xs text-muted-foreground">{`You're ${myName}`}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge
+                status={state?.status ?? "connecting"}
+                isOfflineCached={isOfflineCached}
+                lastSyncedAt={cachedSession?.lastSyncedAt}
+              />
+              <span className="text-xs text-muted-foreground">{`You're ${myName}`}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setForkDialogOpen(true)}
+              leftIcon={<Copy className="h-4 w-4" aria-hidden />}
+            >
+              Save to my workspace
+            </Button>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">
             {snapshot.project.title}
@@ -552,6 +566,12 @@ function GuestWorkspace({
             </p>
           )}
         </header>
+
+        <ForkSessionDialog
+          open={forkDialogOpen}
+          onOpenChange={setForkDialogOpen}
+          snapshot={snapshot}
+        />
 
         {isOfflineCached && (
           <Banner icon={<WifiOff className="h-4 w-4" />}>

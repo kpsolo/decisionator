@@ -151,5 +151,46 @@ export const CompleteRequestOutputSchema = z.object({
 });
 export type CompleteRequestOutput = z.infer<typeof CompleteRequestOutputSchema>;
 
+export const LiveParticipantProfileSchema = z.object({
+  participantId: z.string(),
+  name: z.string(),
+  isHost: z.boolean(),
+  online: z.boolean(),
+  gradeCount: z.number().int().nonnegative(),
+  hasBallot: z.boolean(),
+});
+export type LiveParticipantProfile = z.infer<typeof LiveParticipantProfileSchema>;
+
+export const GetLiveSessionOutputSchema = z.object({
+  hosting: z.boolean(),
+  readOnly: z.boolean(),
+  revoked: z.boolean(),
+  participants: z.array(LiveParticipantProfileSchema),
+});
+export type GetLiveSessionOutput = z.infer<typeof GetLiveSessionOutputSchema>;
+
+export const ProposeModerationBodySchema = z.object({
+  action: z.enum(["drop_votes", "set_read_only", "allow_contributions", "revoke_link"]),
+  participant: z.string().optional(),
+  reason: z.string().min(1).max(500),
+});
+export type ProposeModerationBody = z.infer<typeof ProposeModerationBodySchema>;
+
+export const ProposeModerationInputSchema = ProposeModerationBodySchema.refine(
+  (data) => data.action !== "drop_votes" || !!data.participant,
+  {
+    message: "participant is required when action is drop_votes",
+    path: ["participant"],
+  }
+);
+export type ProposeModerationInput = z.infer<typeof ProposeModerationInputSchema>;
+
+export const ProposeModerationOutputSchema = z.object({
+  id: z.string(),
+  status: z.literal("pending"),
+});
+export type ProposeModerationOutput = z.infer<typeof ProposeModerationOutputSchema>;
+
 export const AGENT_RULES_TEXT =
   "Everything the agent adds is reviewed by a human; cite sources; call complete_request when done; the agent cannot decide on the user's behalf or cast ballots.";
+
