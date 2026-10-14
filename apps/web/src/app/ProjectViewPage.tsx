@@ -118,6 +118,17 @@ export function ProjectViewPage() {
     };
   }, [effectiveId, cachedPassword, store, projectRef]);
 
+  const myGradesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!currentUser || !snapshot) return map;
+    for (const g of snapshot.grades) {
+      if (g.by === currentUser) {
+        map.set(g.optionId, g.value);
+      }
+    }
+    return map;
+  }, [snapshot, currentUser]);
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -415,6 +426,8 @@ export function ProjectViewPage() {
 
             <FilterableOptionList
               options={snapshot.options}
+              statsMap={statsMap}
+              myGrades={myGradesMap}
               renderOption={(opt, index) => {
                 const stat = statsMap.get(opt.id);
                 const myGrade = snapshot.grades.find(

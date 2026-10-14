@@ -22,10 +22,20 @@ export function useProjectStore(): ProjectRoute {
   const { fileId, storeId: routeStoreId, id } = useParams();
   const { storageManager } = useStorage();
 
-  const projectId = id || fileId || "";
-  // Legacy links carry no store segment; infer it from the id prefix.
+  // If a legacy route like /p/:fileId/:subpage is accessed, :storeId might match the fileId
+  // and :id might match the subpage (e.g. vote, results, stats, share) when :storeId is not a registered store.
+  const isLegacySubpath =
+    routeStoreId &&
+    id &&
+    ["vote", "results", "stats", "share"].includes(id) &&
+    !["file", "firestore", "google-sheets", "memory"].some(
+      (s) => routeStoreId === s || routeStoreId.endsWith(`.${s}`)
+    );
+
+  const projectId = isLegacySubpath ? routeStoreId : id || fileId || "";
+  const effectiveRouteStoreId = isLegacySubpath ? undefined : routeStoreId;
   const storeId =
-    routeStoreId ||
+    effectiveRouteStoreId ||
     (projectId.startsWith("file_")
       ? "file"
       : projectId.startsWith("fs_")

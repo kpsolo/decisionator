@@ -18,6 +18,7 @@ import { PreviewEditor } from "../preview/PreviewEditor.js";
 import { createProjectFlow } from "../project/createProject.js";
 import { FormatStep } from "./FormatStep.js";
 import { PasteStep } from "./PasteStep.js";
+import type { DecisionTemplate } from "./decision-templates.js";
 import { type DraftState, clearDraftState, loadDraftState, saveDraftState } from "./draft.js";
 import type { ProjectMeta } from "./options-json.js";
 
@@ -97,6 +98,19 @@ export function NewProjectWizard() {
     setPastedText(rawText);
     setAiAnswer("");
     goToPreview(jsonOptions, project, { pastedText: rawText, aiAnswer: "" });
+  };
+
+  const handleSelectTemplate = (template: DecisionTemplate) => {
+    setPastedText("");
+    setAiAnswer("");
+    goToPreview(
+      template.options,
+      { title: template.title, description: template.description },
+      {
+        pastedText: "",
+        aiAnswer: "",
+      }
+    );
   };
 
   const handleValidAiOptions = (validated: Option[], rawAnswer: string, project?: ProjectMeta) => {
@@ -271,6 +285,7 @@ export function NewProjectWizard() {
           onFormatWithAi={handleFormatWithAi}
           onUsePlainList={handleUsePlainList}
           onUseJson={handleUseJson}
+          onSelectTemplate={handleSelectTemplate}
         />
       )}
 

@@ -28,12 +28,18 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
   const [options, setOptions] = useState<Option[]>(initialOptions);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Check empty titles
+  const hasEmptyOptionTitle = useMemo(() => {
+    return options.some((o) => !o.title.trim());
+  }, [options]);
+
   // Check duplicate titles
   const duplicateTitles = useMemo(() => {
     const seen = new Set<string>();
     const dupes = new Set<string>();
     for (const opt of options) {
       const lower = opt.title.trim().toLowerCase();
+      if (!lower) continue;
       if (seen.has(lower)) {
         dupes.add(lower);
       } else {
@@ -69,7 +75,7 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
   };
 
   const handleConfirm = () => {
-    if (!title.trim() || options.length === 0) return;
+    if (!title.trim() || options.length === 0 || hasEmptyOptionTitle) return;
     onConfirm({ title, description, options });
   };
 
@@ -128,6 +134,16 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
           </div>
         </div>
 
+        {hasEmptyOptionTitle && (
+          <div
+            role="alert"
+            className="shrink-0 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive font-medium"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Every option must have a title. Please add a title or remove empty options.</span>
+          </div>
+        )}
+
         {duplicateTitles.size > 0 && (
           <div
             role="alert"
@@ -155,15 +171,18 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
           >
             {options.map((opt, index) => {
               const isDupe = duplicateTitles.has(opt.title.trim().toLowerCase());
+              const isEmpty = !opt.title.trim();
               const isEditing = editingId === opt.id;
 
               return (
                 <div
                   key={opt.id}
                   className={`rounded-lg border p-3.5 transition-colors ${
-                    isDupe
-                      ? "border-warning/60 bg-warning/5"
-                      : "border-border bg-card/60 hover:bg-accent/30"
+                    isEmpty
+                      ? "border-destructive/60 bg-destructive/5"
+                      : isDupe
+                        ? "border-warning/60 bg-warning/5"
+                        : "border-border bg-card/60 hover:bg-accent/30"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -251,7 +270,7 @@ export const PreviewEditor: React.FC<PreviewEditorProps> = ({
           type="button"
           variant="default"
           onClick={handleConfirm}
-          disabled={!title.trim() || options.length === 0}
+          disabled={!title.trim() || options.length === 0 || hasEmptyOptionTitle}
         >
           Create Project &rarr;
         </Button>

@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "../../components/ui/card.js";
 import { Textarea } from "../../components/ui/textarea.js";
+import { DECISION_TEMPLATES, type DecisionTemplate } from "./decision-templates.js";
 import { type ProjectMeta, detectOptionsJson } from "./options-json.js";
 
 export interface PasteStepProps {
@@ -21,6 +22,8 @@ export interface PasteStepProps {
   onUsePlainList: (options: Option[]) => void;
   /** Called with already-structured options when the pasted text is a Deci options JSON. */
   onUseJson: (options: Option[], rawText: string, project?: ProjectMeta) => void;
+  /** Called when the user chooses a ready-made decision template */
+  onSelectTemplate?: (template: DecisionTemplate) => void;
 }
 
 const MAX_BYTES = 200 * 1024; // 200 KB limit
@@ -30,6 +33,7 @@ export const PasteStep: React.FC<PasteStepProps> = ({
   onFormatWithAi,
   onUsePlainList,
   onUseJson,
+  onSelectTemplate,
 }) => {
   const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
@@ -206,6 +210,34 @@ export const PasteStep: React.FC<PasteStepProps> = ({
               <span className="text-xs text-muted-foreground">
                 Send it to your agent, or use “Format with my AI” to start from this text.
               </span>
+            </div>
+          </div>
+        )}
+
+        {onSelectTemplate && (
+          <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Or start from a sample template:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {DECISION_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => onSelectTemplate(tpl)}
+                  className="flex flex-col items-start p-2.5 rounded-lg border border-border bg-card hover:bg-accent/60 hover:border-primary/50 text-left transition-all group cursor-pointer shadow-2xs"
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                    <span aria-hidden="true">{tpl.icon}</span>
+                    <span className="group-hover:text-primary transition-colors">{tpl.name}</span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                    {tpl.options.length} options · {tpl.badge}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         )}

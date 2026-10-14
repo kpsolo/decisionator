@@ -165,6 +165,17 @@ export function ProjectVotePage() {
     load();
   }, [fileId, store, projectRef]);
 
+  const myGradesMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    if (!currentUser || !snapshot) return map;
+    for (const g of snapshot.grades) {
+      if (g.by === currentUser) {
+        map.set(g.optionId, g.value);
+      }
+    }
+    return map;
+  }, [snapshot, currentUser]);
+
   if (loadError) {
     return <ProjectUnavailable reason="not_found" details={loadError} />;
   }
@@ -186,6 +197,10 @@ export function ProjectVotePage() {
     await store.append(projectRef, [{ kind: "ranking", ranking, round: currentRound }]);
     const updated = await store.openProject(projectRef);
     setSnapshot(updated);
+    toast({
+      title: "Ballot recorded",
+      description: `Your ranked preferences for Round ${currentRound} have been saved.`,
+    });
   };
 
   const handleUpdateVoting = async (voting: NonNullable<ProjectSnapshot["project"]["voting"]>) => {
@@ -290,6 +305,7 @@ export function ProjectVotePage() {
           options={snapshot.options}
           topN={topN}
           initialRanking={myBallot?.ranking}
+          ownGrades={myGradesMap}
           disabled={!roleCaps.canVote || snapshot.project.voting?.state === "closed"}
           disabledReason={
             snapshot.project.voting?.state === "closed"

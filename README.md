@@ -150,6 +150,7 @@ examples/
 
 ## Documentation & Guides
 
+- [Agentic MCP Guide](docs/agentic-mcp.md): Connecting AI agents (Claude, Cursor, Antigravity) via Model Context Protocol and REST.
 - [Self-Hosting Guide](docs/self-hosting.md): In-depth setup for Google Cloud projects and static hosts.
 - [Plugin Authoring Guide](docs/plugin-authors.md): Build custom storage backends, decision strategies, or idea sources.
 - [Release Notes (v0.1.0)](docs/releases/v0.1.md): Summary of MVP release metrics, performance, and staged compliance.

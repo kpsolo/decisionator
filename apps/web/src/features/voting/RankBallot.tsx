@@ -16,9 +16,17 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, CheckCircle2, GripVertical, Send } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  GripVertical,
+  RotateCcw,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
@@ -34,11 +42,14 @@ export interface RankBallotProps {
   onSubmitBallot: (ranking: string[]) => Promise<void>;
   /** Time tooltip on the submit button: "Submitted {first} · updated {latest}" (FR-028). */
   submittedText?: string;
+  /** Voter's own grades for options to assist in ranking (FR-027). */
+  ownGrades?: Map<string, number>;
 }
 
 interface SortableOptionItemProps {
   option: Option;
   rank: number;
+  grade?: number;
   onMoveUp: () => void;
   onMoveDown: () => void;
   canMoveUp: boolean;
@@ -49,6 +60,7 @@ interface SortableOptionItemProps {
 const SortableOptionItem: React.FC<SortableOptionItemProps> = ({
   option,
   rank,
+  grade,
   onMoveUp,
   onMoveDown,
   canMoveUp,
@@ -99,7 +111,17 @@ const SortableOptionItem: React.FC<SortableOptionItemProps> = ({
           <GripVertical className="h-4 w-4" aria-hidden />
         </button>
         <div className="min-w-0">
-          <div className="font-semibold text-sm text-foreground truncate">{option.title}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm text-foreground truncate">{option.title}</span>
+            {grade !== undefined && grade > 0 && (
+              <Badge
+                variant="outline"
+                className="text-[10px] py-0 px-1 font-normal text-muted-foreground"
+              >
+                ★ {grade}
+              </Badge>
+            )}
+          </div>
           {option.description && (
             <div className="mt-0.5 text-xs text-muted-foreground truncate max-w-sm sm:max-w-md">
               {option.description}
@@ -145,6 +167,7 @@ export const RankBallot: React.FC<RankBallotProps> = ({
   disabledReason,
   onSubmitBallot,
   submittedText,
+  ownGrades,
 }) => {
   const [orderedIds, setOrderedIds] = useState<string[]>(() => {
     const active = options.filter((o) => o.status === "active").map((o) => o.id);
@@ -157,6 +180,35 @@ export const RankBallot: React.FC<RankBallotProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const hasGrades = useMemo(() => {
+    if (!ownGrades || ownGrades.size === 0) return false;
+    return options.some((o) => (ownGrades.get(o.id) ?? 0) > 0);
+  }, [ownGrades, options]);
+
+  const handleSortByGrades = () => {
+    if (!ownGrades) return;
+    setOrderedIds((prev) => {
+      return [...prev].sort((aId, bId) => {
+        const gradeA = ownGrades.get(aId) ?? 0;
+        const gradeB = ownGrades.get(bId) ?? 0;
+        if (gradeB !== gradeA) {
+          return gradeB - gradeA;
+        }
+        return prev.indexOf(aId) - prev.indexOf(bId);
+      });
+    });
+  };
+
+  const handleResetOrder = () => {
+    const active = options.filter((o) => o.status === "active").map((o) => o.id);
+    if (initialRanking && initialRanking.length > 0) {
+      const rest = active.filter((id) => !initialRanking.includes(id));
+      setOrderedIds([...initialRanking.filter((id) => active.includes(id)), ...rest]);
+    } else {
+      setOrderedIds(active);
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -224,6 +276,45 @@ export const RankBallot: React.FC<RankBallotProps> = ({
           </div>
         )}
 
+        {initialRanking && (
+          <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3.5 py-2 text-xs text-foreground font-medium">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+            <span>
+              Your ballot is recorded. You can adjust your ranking anytime and click &ldquo;Update
+              Ballot&rdquo; before voting closes.
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 pb-1">
+          <div className="flex items-center gap-2">
+            {hasGrades && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSortByGrades}
+                disabled={disabled}
+                className="h-7 text-xs"
+                leftIcon={<Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />}
+              >
+                Sort by my ratings
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleResetOrder}
+              disabled={disabled}
+              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+              leftIcon={<RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />}
+            >
+              Reset order
+            </Button>
+          </div>
+        </div>
+
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
             <div>
@@ -235,6 +326,7 @@ export const RankBallot: React.FC<RankBallotProps> = ({
                     <SortableOptionItem
                       option={opt}
                       rank={index + 1}
+                      grade={ownGrades?.get(opt.id)}
                       disabled={disabled}
                       canMoveUp={index > 0}
                       canMoveDown={index < orderedIds.length - 1}

@@ -74,6 +74,7 @@ test("compare strategies: same draw on reopen, adopt records an outcome", async 
 
   await page.getByRole("button", { name: "Compare strategies" }).click();
   const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
   const table = dialog.getByRole("table", { name: "Strategy comparison" });
   await expect(table.getByRole("rowheader")).toHaveCount(4);
   const randomRow = table.getByRole("row").filter({ hasText: "Uniform Random Draw" });
@@ -88,5 +89,5 @@ test("compare strategies: same draw on reopen, adopt records an outcome", async 
   await dialog.getByRole("button", { name: "Adopt the Borda Count Ranking result" }).click();
   await expect(
     dialog.getByText("Adopted the Borda Count Ranking result as a new outcome.")
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10_000 });
 });

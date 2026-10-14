@@ -1,7 +1,7 @@
 import type { Option } from "@decisionator/core";
 import {
-  ArrowUpRight,
   ChevronDown,
+  ChevronRight,
   Clock,
   ExternalLink,
   Folder,
@@ -128,6 +128,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
     <li
       ref={exposureRef}
       data-option-id={option.id}
+      title="Click card to view details, pros/cons, and comments"
       className={cn(
         "group relative flex flex-col items-start p-5 w-full rounded-[14px] transition-all duration-200 cursor-pointer",
         // Light mode
@@ -180,8 +181,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
               >
                 {option.title}
               </h4>
-              <ArrowUpRight
-                className="h-4 w-4 shrink-0 text-[#0066CC] dark:text-[#0B84FE]"
+              <ChevronRight
+                className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
                 aria-hidden="true"
               />
             </div>
