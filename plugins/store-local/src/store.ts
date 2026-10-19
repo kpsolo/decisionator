@@ -43,6 +43,8 @@ import {
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
+import { announceChange, instanceId, listenForChanges, withProjectLock } from "./cross-tab.js";
+import { openOption, sealOption } from "./option-seal.js";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
 
@@ -155,8 +157,10 @@ export class LocalProjectStore implements ProjectStore {
   private listeners = new Map<string, Set<(snapshot: ProjectSnapshot) => void>>();
   /** Keys of protected projects unlocked in this session, by project id. Memory only. */
   private keys = new Map<string, CryptoKey>();
-  /** Tail of the per-project mutation chain; serializes read-modify-write cycles. */
-  private locks = new Map<string, Promise<void>>();
+  /** Names this instance in change announcements, so it ignores its own. */
+  private readonly instance = instanceId();
+  /** Stops listening for other tabs' changes, by project id; open while anyone watches. */
+  private crossTabListeners = new Map<string, () => void>();
 
   constructor(
     private currentUser = "local-user@device",
@@ -236,15 +240,7 @@ export class LocalProjectStore implements ProjectStore {
 
       initialTitle = await encrypt(input.title, cryptoKey);
       initialDesc = input.description ? await encrypt(input.description, cryptoKey) : "";
-      initialOptions = await Promise.all(
-        initialOptions.map(async (opt) => ({
-          ...opt,
-          title: await encrypt(opt.title, cryptoKey),
-          description: await encrypt(opt.description, cryptoKey),
-          pros: await Promise.all(opt.pros.map((p) => encrypt(p, cryptoKey))),
-          cons: await Promise.all(opt.cons.map((c) => encrypt(c, cryptoKey))),
-        }))
-      );
+      initialOptions = await Promise.all(initialOptions.map((opt) => sealOption(opt, cryptoKey)));
     }
 
     const initialDoc: AutomergeProjectDoc = {
@@ -317,15 +313,7 @@ export class LocalProjectStore implements ProjectStore {
       }
       finalTitle = await openSealed(finalTitle, cryptoKey);
       finalDesc = await openSealed(finalDesc, cryptoKey);
-      finalOptions = await Promise.all(
-        doc.options.map(async (o) => ({
-          ...o,
-          title: await openSealed(o.title, cryptoKey),
-          description: await openSealed(o.description, cryptoKey),
-          pros: await Promise.all(o.pros.map((p) => openSealed(p, cryptoKey))),
-          cons: await Promise.all(o.cons.map((c) => openSealed(c, cryptoKey))),
-        }))
-      );
+      finalOptions = await Promise.all(doc.options.map((o) => openOption(o, cryptoKey)));
       finalComments = await Promise.all(
         doc.comments.map(async (c) => ({ ...c, body: await openSealed(c.body, cryptoKey) }))
       );
@@ -402,9 +390,26 @@ export class LocalProjectStore implements ProjectStore {
       this.listeners.set(ref.id, set);
     }
     set.add(onChange);
+    // Changes made by other tabs (or other instances on the same database) are announced.
+    if (!this.crossTabListeners.has(ref.id)) {
+      this.crossTabListeners.set(
+        ref.id,
+        listenForChanges(ref.id, this.instance, () => void this.notify(ref))
+      );
+    }
     return () => {
       set?.delete(onChange);
+      if (set?.size === 0) {
+        this.crossTabListeners.get(ref.id)?.();
+        this.crossTabListeners.delete(ref.id);
+      }
     };
+  }
+
+  /** Tells this instance's watchers and the other tabs that the project changed. */
+  private async changed(ref: ProjectRef): Promise<void> {
+    announceChange(ref.id, this.instance);
+    await this.notify(ref);
   }
 
   private async notify(ref: ProjectRef): Promise<void> {
@@ -428,6 +433,9 @@ export class LocalProjectStore implements ProjectStore {
 
       if (role === "view") {
         throw new Error("PERMISSION_DENIED: View role cannot append");
+      }
+      if (role !== "owner" && entries.some((e) => e.kind === "outcome")) {
+        throw new Error("PERMISSION_DENIED: Only the project owner may record an outcome");
       }
       // Validates the whole call before anything is written.
       const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
@@ -503,7 +511,15 @@ export class LocalProjectStore implements ProjectStore {
           } else if (entry.kind === "outcome") {
             d.outcomes.push(entry.outcome);
           } else if (entry.kind === "contribution") {
-            d.contributions.push(entry.contribution);
+            // Stamped like every entry (rule 1); contributions are never delegated. The JSON copy
+            // drops `undefined` values, which Automerge rejects.
+            const contribution = JSON.parse(JSON.stringify(entry.contribution)) as Contribution;
+            d.contributions.push({
+              ...contribution,
+              id: contribution.id || newId("ctb"),
+              by,
+              at,
+            });
           } else if (entry.kind === "property") {
             // `propertyRecord` omits `byName` when absent, and a cleared value is stored as
             // `null`, never `undefined`.
@@ -523,7 +539,7 @@ export class LocalProjectStore implements ProjectStore {
       });
     });
 
-    await this.notify(ref);
+    await this.changed(ref);
     return { queued: 0, sent: entries.length };
   }
 
@@ -536,17 +552,8 @@ export class LocalProjectStore implements ProjectStore {
       // Protected projects keep option text encrypted, so edits need the session key.
       // `A.change` is synchronous, so options are sealed up front.
       const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
-      const seal = async <T extends Partial<Option>>(o: T): Promise<T> => {
-        if (!key) return o;
-        const sealed = { ...o };
-        if (typeof o.title === "string") sealed.title = await encrypt(o.title, key);
-        if (typeof o.description === "string") {
-          sealed.description = await encrypt(o.description, key);
-        }
-        if (o.pros) sealed.pros = await Promise.all(o.pros.map((p) => encrypt(p, key)));
-        if (o.cons) sealed.cons = await Promise.all(o.cons.map((c) => encrypt(c, key)));
-        return sealed;
-      };
+      const seal = <T extends Partial<Option>>(o: T): Promise<T> =>
+        key ? sealOption(o, key) : Promise.resolve(o);
       const sealedOps = await Promise.all(
         ops.map(async (op): Promise<OptionOp> => {
           if (op.op === "add") return { ...op, option: await seal(op.option) };
@@ -578,7 +585,7 @@ export class LocalProjectStore implements ProjectStore {
         }
       });
     });
-    await this.notify(ref);
+    await this.changed(ref);
   }
 
   async updateMeta(ref: ProjectRef, patch: MetaPatch): Promise<void> {
@@ -629,7 +636,7 @@ export class LocalProjectStore implements ProjectStore {
         }
       });
     });
-    await this.notify(ref);
+    await this.changed(ref);
   }
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
@@ -678,7 +685,7 @@ export class LocalProjectStore implements ProjectStore {
   }
 
   async deleteProject(ref: ProjectRef): Promise<void> {
-    await this.withLock(ref.id, async () => {
+    await withProjectLock(ref.id, async () => {
       const doc = await this.loadDoc(ref.id);
       if (doc.meta.owner !== this.currentUser) {
         throw new Error("PERMISSION_DENIED: Only owner can delete project");
@@ -692,7 +699,7 @@ export class LocalProjectStore implements ProjectStore {
   }
 
   async forgetProject(ref: ProjectRef): Promise<void> {
-    await this.withLock(ref.id, async () => {
+    await withProjectLock(ref.id, async () => {
       const db = await this.dbPromise;
       await db.delete("docs", ref.id);
     });
@@ -732,27 +739,16 @@ export class LocalProjectStore implements ProjectStore {
     return key;
   }
 
-  /** Runs `fn` after every earlier mutation of the same project has settled. */
-  private withLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this.locks.get(projectId) ?? Promise.resolve();
-    const run = previous.then(fn);
-    const tail = run.then(
-      () => undefined,
-      () => undefined
-    );
-    this.locks.set(projectId, tail);
-    void tail.then(() => {
-      if (this.locks.get(projectId) === tail) this.locks.delete(projectId);
-    });
-    return run;
-  }
-
-  /** Serialized load-change-save cycle of one live project document. */
+  /**
+   * Load-change-save cycle of one live project document under the project's lock, which every
+   * instance and tab on the same database honours, so concurrent writers never overwrite each
+   * other's changes. The document is loaded inside the lock.
+   */
   private mutate(
     projectId: string,
     fn: (doc: A.Doc<AutomergeProjectDoc>) => Promise<A.Doc<AutomergeProjectDoc>>
   ): Promise<void> {
-    return this.withLock(projectId, async () => {
+    return withProjectLock(projectId, async () => {
       const doc = await fn(await this.loadDoc(projectId));
       await this.saveDoc(projectId, doc);
     });

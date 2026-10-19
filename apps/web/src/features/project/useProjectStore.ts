@@ -14,6 +14,28 @@ export interface ProjectRoute {
   baseUrl: string;
 }
 
+/** A stand-in store whose every call rejects with the reason the real store can't be used. */
+function unavailableStore(storeId: string, reason: unknown): ProjectStore {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  const fail = () => Promise.reject(error);
+  return {
+    id: storeId,
+    signIn: fail,
+    listProjects: fail,
+    createProject: fail,
+    openProject: fail,
+    watch: () => () => {},
+    append: fail,
+    updateOptions: fail,
+    updateMeta: fail,
+    share: fail,
+    getShareState: fail,
+    export: fail,
+    deleteProject: fail,
+    forgetProject: fail,
+  };
+}
+
 /**
  * Resolves the current route's project and its store. Every project page must use this rather
  * than constructing a specific store, so local-file and Firestore projects work everywhere.
@@ -46,10 +68,14 @@ export function useProjectStore(): ProjectRoute {
     () => ({ store: storeId, id: projectId }),
     [storeId, projectId]
   );
-  const store = useMemo(
-    () => storageManager.resolveStore(projectRef),
-    [storageManager, projectRef]
-  );
+  const store = useMemo(() => {
+    try {
+      return storageManager.resolveStore(projectRef);
+    } catch (err) {
+      // A link to a store this app doesn't have: pages show their usual "unavailable" state.
+      return unavailableStore(storeId, err);
+    }
+  }, [storageManager, projectRef, storeId]);
 
   return { projectId, storeId, projectRef, store, baseUrl: `/p/${storeId}/${projectId}` };
 }

@@ -42,6 +42,8 @@ import {
   resolveDelegatedAuthor,
 } from "@decisionator/plugin-sdk";
 import { type IDBPDatabase, openDB } from "idb";
+import { announceChange, instanceId, listenForChanges, withProjectLock } from "./cross-tab.js";
+import { openOption, sealOption } from "./option-seal.js";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
 
@@ -115,6 +117,19 @@ async function openStrategy(
     settings = JSON.parse(await decrypt(stored.sealedSettings, key)) as Record<string, unknown>;
   }
   return { id: stored.id, version: stored.version, settings, at: stored.at, by: stored.by };
+}
+
+/** A failed write of a project's linked JSON file (see `FileProjectStore.onFileSyncError`). */
+export interface FileSyncError {
+  projectId: string;
+  /** Message starts with `FILE_WRITE_FAILED`. */
+  error: Error;
+}
+
+interface WritableLike {
+  write: (data: string) => Promise<void>;
+  close: () => Promise<void>;
+  abort?: () => Promise<void>;
 }
 
 function newId(prefix: string): string {
@@ -198,8 +213,13 @@ export class FileProjectStore implements ProjectStore {
   private handles = new Map<string, FileSystemFileHandle>();
   /** Keys of protected projects unlocked in this session, by project id. Memory only. */
   private keys = new Map<string, CryptoKey>();
-  /** Tail of the per-project mutation chain; serializes read-modify-write cycles. */
-  private locks = new Map<string, Promise<void>>();
+  /** Names this instance in change announcements, so it ignores its own. */
+  private readonly instance = instanceId();
+  /** Stops listening for other tabs' changes, by project id; open while anyone watches. */
+  private crossTabListeners = new Map<string, () => void>();
+  /** The last failed write of each project's linked file, cleared by the next good write. */
+  private syncErrors = new Map<string, Error>();
+  private syncErrorListeners = new Set<(e: FileSyncError) => void>();
 
   constructor(
     private currentUser = "local-user@device",
@@ -220,6 +240,23 @@ export class FileProjectStore implements ProjectStore {
 
   getFileHandle(projectId: string): FileSystemFileHandle | undefined {
     return this.handles.get(projectId);
+  }
+
+  /**
+   * The error of the last write of the project's linked file, or `undefined` when it was written
+   * (or has no linked file). A failed write keeps the change in the browser; the next change
+   * rewrites the whole file.
+   */
+  getFileSyncError(projectId: string): Error | undefined {
+    return this.syncErrors.get(projectId);
+  }
+
+  /** Calls `listener` whenever a write of a linked file fails. */
+  onFileSyncError(listener: (e: FileSyncError) => void): Unsubscribe {
+    this.syncErrorListeners.add(listener);
+    return () => {
+      this.syncErrorListeners.delete(listener);
+    };
   }
 
   async signIn(): Promise<Identity> {
@@ -284,13 +321,7 @@ export class FileProjectStore implements ProjectStore {
       initialTitle = await encrypt(initialTitle, key);
       initialDesc = await encrypt(initialDesc, key);
 
-      initialOptions = await Promise.all(
-        initialOptions.map(async (opt) => ({
-          ...opt,
-          title: await encrypt(opt.title, key),
-          description: await encrypt(opt.description, key),
-        }))
-      );
+      initialOptions = await Promise.all(initialOptions.map((opt) => sealOption(opt, key)));
     }
 
     const doc: StoredFileProject = {
@@ -338,13 +369,7 @@ export class FileProjectStore implements ProjectStore {
     const open = (value: string) => (key ? openSealed(value, key) : Promise.resolve(value));
 
     const options = key
-      ? await Promise.all(
-          doc.options.map(async (opt) => ({
-            ...opt,
-            title: await openSealed(opt.title, key),
-            description: await openSealed(opt.description, key),
-          }))
-        )
+      ? await Promise.all(doc.options.map((opt) => openOption(opt, key)))
       : [...doc.options];
     const comments = await Promise.all(
       doc.comments.map(async (c) => ({ ...c, body: await open(c.body) }))
@@ -393,9 +418,26 @@ export class FileProjectStore implements ProjectStore {
       this.listeners.set(ref.id, set);
     }
     set.add(onChange);
+    // Changes made by other tabs (or other instances on the same database) are announced.
+    if (!this.crossTabListeners.has(ref.id)) {
+      this.crossTabListeners.set(
+        ref.id,
+        listenForChanges(ref.id, this.instance, () => void this.notifyListeners(ref))
+      );
+    }
     return () => {
       set?.delete(onChange);
+      if (set?.size === 0) {
+        this.crossTabListeners.get(ref.id)?.();
+        this.crossTabListeners.delete(ref.id);
+      }
     };
+  }
+
+  /** Tells this instance's watchers and the other tabs that the project changed. */
+  private async changed(ref: ProjectRef): Promise<void> {
+    announceChange(ref.id, this.instance);
+    await this.notifyListeners(ref);
   }
 
   private async notifyListeners(ref: ProjectRef): Promise<void> {
@@ -417,6 +459,9 @@ export class FileProjectStore implements ProjectStore {
       const role = this.resolveRole(doc, this.currentUser);
       if (role === "view") {
         throw new Error("PERMISSION_DENIED: View role cannot append");
+      }
+      if (role !== "owner" && entries.some((e) => e.kind === "outcome")) {
+        throw new Error("PERMISSION_DENIED: Only the project owner may record an outcome");
       }
       // Validates the whole call before anything is written.
       const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
@@ -483,7 +528,13 @@ export class FileProjectStore implements ProjectStore {
           doc.outcomes.push(e.outcome);
           sent++;
         } else if (e.kind === "contribution") {
-          doc.contributions.push(e.contribution);
+          // Stamped like every entry (rule 1); contributions are never delegated.
+          doc.contributions.push({
+            ...e.contribution,
+            id: e.contribution.id || newId("ctb"),
+            by,
+            at: now,
+          });
           sent++;
         } else if (e.kind === "property") {
           const record = propertyRecord(
@@ -508,13 +559,13 @@ export class FileProjectStore implements ProjectStore {
       return sent;
     });
 
-    await this.notifyListeners(ref);
+    await this.changed(ref);
     return { queued: 0, sent: sentCount };
   }
 
   async updateOptions(ref: ProjectRef, ops: OptionOp[]): Promise<void> {
     await this.mutate(ref.id, (db, doc) => this.applyOptionOps(db, doc, ops));
-    await this.notifyListeners(ref);
+    await this.changed(ref);
   }
 
   private async applyOptionOps(
@@ -527,15 +578,8 @@ export class FileProjectStore implements ProjectStore {
 
     // Protected projects keep option text encrypted, so edits need the session key.
     const key = doc.meta.protected ? this.requireKey(doc.id) : undefined;
-    const seal = async <T extends Partial<Option>>(o: T): Promise<T> => {
-      if (!key) return o;
-      const sealed = { ...o };
-      if (typeof o.title === "string") sealed.title = await encrypt(o.title, key);
-      if (typeof o.description === "string") {
-        sealed.description = await encrypt(o.description, key);
-      }
-      return sealed;
-    };
+    const seal = <T extends Partial<Option>>(o: T): Promise<T> =>
+      key ? sealOption(o, key) : Promise.resolve(o);
 
     const now = new Date().toISOString();
 
@@ -591,7 +635,7 @@ export class FileProjectStore implements ProjectStore {
       await db.put("projects", doc);
       await this.syncToHandleIfAvailable(doc);
     });
-    await this.notifyListeners(ref);
+    await this.changed(ref);
   }
 
   async share(ref: ProjectRef, req: ShareRequest): Promise<ShareState> {
@@ -657,11 +701,12 @@ export class FileProjectStore implements ProjectStore {
   }
 
   async forgetProject(ref: ProjectRef): Promise<void> {
-    await this.withLock(ref.id, async () => {
+    await withProjectLock(ref.id, async () => {
       const db = await this.dbPromise;
       await db.delete("projects", ref.id);
     });
     this.handles.delete(ref.id);
+    this.syncErrors.delete(ref.id);
     this.keys.delete(ref.id);
   }
 
@@ -693,27 +738,16 @@ export class FileProjectStore implements ProjectStore {
     return key;
   }
 
-  /** Runs `fn` after every earlier mutation of the same project has settled. */
-  private withLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this.locks.get(projectId) ?? Promise.resolve();
-    const run = previous.then(fn);
-    const tail = run.then(
-      () => undefined,
-      () => undefined
-    );
-    this.locks.set(projectId, tail);
-    void tail.then(() => {
-      if (this.locks.get(projectId) === tail) this.locks.delete(projectId);
-    });
-    return run;
-  }
-
-  /** Serialized read-modify-write of one live (not trashed) project document. */
+  /**
+   * Read-modify-write of one live (not trashed) project document under the project's lock, which
+   * every instance and tab on the same database honours, so concurrent writers never overwrite
+   * each other's changes. The document is read inside the lock.
+   */
   private mutate<T>(
     projectId: string,
     fn: (db: IDBPDatabase, doc: StoredFileProject) => Promise<T>
   ): Promise<T> {
-    return this.withLock(projectId, async () => {
+    return withProjectLock(projectId, async () => {
       const db = await this.dbPromise;
       const doc: StoredFileProject | undefined = await db.get("projects", projectId);
       if (!doc || doc.trashed) throw new Error("Project unavailable or not found");
@@ -727,43 +761,78 @@ export class FileProjectStore implements ProjectStore {
     return found ? found.role : "view";
   }
 
+  /**
+   * Writes the project to its linked JSON file, if it has one. A protected project is written as
+   * stored (encrypted) together with its key derivation parameters (`project.kdf`), so the file
+   * can be unlocked with the password when it is opened again. A failed write does not undo the
+   * change, which is kept in the browser; it is reported through `getFileSyncError` and
+   * `onFileSyncError`.
+   */
   private async syncToHandleIfAvailable(doc: StoredFileProject): Promise<void> {
     const handle = this.handles.get(doc.id);
-    if (handle && "createWritable" in handle) {
+    if (!handle) return;
+    let writable: WritableLike | undefined;
+    try {
+      if (!("createWritable" in handle)) {
+        throw new Error("this browser cannot write to files");
+      }
+      writable = await (
+        handle as unknown as { createWritable: () => Promise<WritableLike> }
+      ).createWritable();
+      const { salt, iterations, verifier } = doc.meta;
+      const exportData = {
+        format: "decisionator.project/v1",
+        exportedAt: new Date().toISOString(),
+        project: {
+          title: doc.meta.title,
+          description: doc.meta.description,
+          protected: doc.meta.protected,
+          ...(doc.meta.protected && salt && iterations
+            ? {
+                kdf: {
+                  alg: "pbkdf2-sha256",
+                  iterations,
+                  salt,
+                  ...(verifier ? { verifier } : {}),
+                },
+              }
+            : {}),
+          formatVersion: 2,
+          voting: doc.meta.voting,
+          ...(doc.meta.strategy ? { strategy: doc.meta.strategy } : {}),
+          ...(doc.meta.strategyChanges ? { strategyChanges: doc.meta.strategyChanges } : {}),
+        },
+        options: doc.options,
+        grades: doc.grades,
+        comments: doc.comments,
+        rankings: doc.rankings,
+        outcomes: doc.outcomes,
+        contributions: doc.contributions,
+        properties: doc.properties ?? [],
+        resets: doc.resets ?? [],
+      };
+      await writable.write(JSON.stringify(exportData, null, 2));
+      await writable.close();
+      this.syncErrors.delete(doc.id);
+    } catch (err) {
+      await writable?.abort?.().catch(() => undefined);
+      this.reportSyncError(doc.id, handle, err);
+    }
+  }
+
+  private reportSyncError(projectId: string, handle: FileSystemFileHandle, err: unknown): void {
+    const reason = err instanceof Error ? err.message : String(err);
+    const name = typeof handle.name === "string" && handle.name ? `"${handle.name}"` : "file";
+    const error = new Error(
+      `FILE_WRITE_FAILED: The linked ${name} could not be written: ${reason}. The change is saved in this browser only.`,
+      { cause: err }
+    );
+    this.syncErrors.set(projectId, error);
+    for (const listener of this.syncErrorListeners) {
       try {
-        const writable = await (
-          handle as unknown as {
-            createWritable: () => Promise<{
-              write: (data: string) => Promise<void>;
-              close: () => Promise<void>;
-            }>;
-          }
-        ).createWritable();
-        const exportData = {
-          format: "decisionator.project/v1",
-          exportedAt: new Date().toISOString(),
-          project: {
-            title: doc.meta.title,
-            description: doc.meta.description,
-            protected: doc.meta.protected,
-            formatVersion: 2,
-            voting: doc.meta.voting,
-            ...(doc.meta.strategy ? { strategy: doc.meta.strategy } : {}),
-            ...(doc.meta.strategyChanges ? { strategyChanges: doc.meta.strategyChanges } : {}),
-          },
-          options: doc.options,
-          grades: doc.grades,
-          comments: doc.comments,
-          rankings: doc.rankings,
-          outcomes: doc.outcomes,
-          contributions: doc.contributions,
-          properties: doc.properties ?? [],
-          resets: doc.resets ?? [],
-        };
-        await writable.write(JSON.stringify(exportData, null, 2));
-        await writable.close();
+        listener({ projectId, error });
       } catch {
-        // Fallback: handle write failure silently
+        // A failing listener must not hide the error from the others.
       }
     }
   }

@@ -35,8 +35,12 @@ export function StorageSettings() {
   );
 
   const handleSelectActive = (storeId: string) => {
-    setActiveStoreId(storeId);
-    setSavedMessage(`Active storage switched to ${storeId.toUpperCase()}`);
+    try {
+      setActiveStoreId(storeId);
+      setSavedMessage(`Active storage switched to ${storeId.toUpperCase()}`);
+    } catch (err) {
+      setSavedMessage(err instanceof Error ? err.message : String(err));
+    }
     setTimeout(() => setSavedMessage(null), 3000);
   };
 
@@ -53,7 +57,13 @@ export function StorageSettings() {
         },
       },
     };
-    storageManager.saveConfig(newConfig);
+    try {
+      // The saved active store may no longer be registered (e.g. Google not configured).
+      storageManager.saveConfig({ ...newConfig, activeStoreId: storageManager.getActiveStoreId() });
+    } catch (err) {
+      setSavedMessage(err instanceof Error ? err.message : String(err));
+      return;
+    }
     setConfig(newConfig);
     setSavedMessage("Firestore configuration saved successfully!");
     setTimeout(() => setSavedMessage(null), 3000);

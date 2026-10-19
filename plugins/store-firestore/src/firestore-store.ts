@@ -44,6 +44,7 @@ import {
   setupPasswordProtection,
   verifyAndDerivePasswordKey,
 } from "./crypto.js";
+import { openOption, sealOption } from "./option-seal.js";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
 
@@ -161,46 +162,33 @@ export class FirestoreProjectStore implements ProjectStore {
     const projectOptions = new Map<string, FirestoreOptionDoc>();
     const inputOpts = input.options || [];
 
+    let key: CryptoKey | undefined;
     if (opts?.password) {
       const p = await setupPasswordProtection(opts.password);
       salt = p.salt;
       verifier = p.verifier;
       iterations = p.iterations;
+      key = p.key;
 
       initialTitle = await encrypt(initialTitle, p.key);
       initialDesc = await encrypt(initialDesc, p.key);
+    }
 
-      for (const [idx, o] of inputOpts.entries()) {
-        const encTitle = await encrypt(o.title, p.key);
-        const encDesc = await encrypt(o.description || "", p.key);
-        projectOptions.set(o.id, {
-          ...o,
-          order: o.order ?? idx + 1,
-          status: o.status ?? "active",
-          tags: o.tags ?? [],
-          pros: o.pros ?? [],
-          cons: o.cons ?? [],
-          links: o.links ?? [],
-          at: o.at ?? now,
-          by: this.currentUser,
-          title: encTitle,
-          description: encDesc,
-        });
-      }
-    } else {
-      for (const [idx, o] of inputOpts.entries()) {
-        projectOptions.set(o.id, {
-          ...o,
-          order: o.order ?? idx + 1,
-          status: o.status ?? "active",
-          tags: o.tags ?? [],
-          pros: o.pros ?? [],
-          cons: o.cons ?? [],
-          links: o.links ?? [],
-          at: o.at ?? now,
-          by: this.currentUser,
-        });
-      }
+    for (const [idx, o] of inputOpts.entries()) {
+      const optionDoc: FirestoreOptionDoc = {
+        ...o,
+        description: o.description || "",
+        order: o.order ?? idx + 1,
+        status: o.status ?? "active",
+        tags: o.tags ?? [],
+        pros: o.pros ?? [],
+        cons: o.cons ?? [],
+        links: o.links ?? [],
+        at: o.at ?? now,
+        by: this.currentUser,
+      };
+      // Every user-content field of an option is sealed in a protected project.
+      projectOptions.set(o.id, key ? await sealOption(optionDoc, key) : optionDoc);
     }
 
     const doc: FirestoreProjectDoc = {
@@ -244,11 +232,7 @@ export class FirestoreProjectStore implements ProjectStore {
 
       const decryptedOptions: Option[] = [];
       for (const opt of optsMap.values()) {
-        decryptedOptions.push({
-          ...opt,
-          title: await openSealed(opt.title, key),
-          description: await openSealed(opt.description, key),
-        });
+        decryptedOptions.push(await openOption(opt, key));
       }
 
       const { grades, comments, rankings, outcomes, contributions, properties, history } =
@@ -343,6 +327,9 @@ export class FirestoreProjectStore implements ProjectStore {
     if (role === "view") {
       throw new Error("PERMISSION_DENIED: View role cannot append");
     }
+    if (role !== "owner" && entries.some((e) => e.kind === "outcome")) {
+      throw new Error("PERMISSION_DENIED: Only the project owner may record an outcome");
+    }
     // Validates the whole call before anything is written.
     const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
     const by = delegated?.by ?? this.currentUser;
@@ -416,11 +403,12 @@ export class FirestoreProjectStore implements ProjectStore {
         });
         sentCount++;
       } else if (e.kind === "contribution") {
+        // Stamped like every entry (rule 1); contributions are never delegated.
         entryList.push({
           id: entryId,
           kind: "contribution",
-          contribution: e.contribution,
-          by: this.currentUser,
+          contribution: { ...e.contribution, id: e.contribution.id || entryId, by, at: now },
+          by,
           at: now,
         });
         sentCount++;
@@ -463,15 +451,8 @@ export class FirestoreProjectStore implements ProjectStore {
 
     // Protected projects keep option text encrypted, so edits need the session key.
     const key = doc.protected ? this.requireKey(ref.id) : undefined;
-    const seal = async <T extends Partial<Option>>(o: T): Promise<T> => {
-      if (!key) return o;
-      const sealed = { ...o };
-      if (typeof o.title === "string") sealed.title = await encrypt(o.title, key);
-      if (typeof o.description === "string") {
-        sealed.description = await encrypt(o.description, key);
-      }
-      return sealed;
-    };
+    const seal = <T extends Partial<Option>>(o: T): Promise<T> =>
+      key ? sealOption(o, key) : Promise.resolve(o);
     // Sealed before anything is written, so a failure leaves no partial update.
     const sealedOps = await Promise.all(
       ops.map(async (op): Promise<OptionOp> => {
@@ -691,7 +672,8 @@ export class FirestoreProjectStore implements ProjectStore {
       } else if (e.kind === "outcome") {
         outcomes.push(e.outcome);
       } else if (e.kind === "contribution") {
-        contributions.push(e.contribution);
+        // The author and time are the entry's stamp, never what the caller put in the payload.
+        contributions.push({ ...e.contribution, by: e.by, at: e.at });
       } else if (e.kind === "property") {
         properties.push({
           id: e.id,

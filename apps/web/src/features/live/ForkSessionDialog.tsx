@@ -37,9 +37,10 @@ export function ForkSessionDialog({
   onForked,
 }: ForkSessionDialogProps) {
   const navigate = useNavigate();
-  const { registeredStores, activeStoreId } = useStorage();
+  const { storageManager, registeredStores, activeStoreId } = useStorage();
+  // The active id is the short form ("file"); the options below use the stores' full ids.
   const [selectedStoreId, setSelectedStoreId] = useState(
-    activeStoreId || registeredStores[0]?.id || "file"
+    storageManager.getStore(activeStoreId)?.id || registeredStores[0]?.id || "file"
   );
   const [forking, setForking] = useState(false);
   const [error, setError] = useState<string | null>(null);

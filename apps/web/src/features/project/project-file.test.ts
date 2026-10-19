@@ -106,7 +106,7 @@ function comparable(snapshot: Awaited<ReturnType<FileProjectStore["openProject"]
     comments: strip(bundle.comments),
     rankings: strip(bundle.rankings),
     outcomes: bundle.outcomes,
-    contributions: bundle.contributions,
+    contributions: bundle.contributions.map(({ at: _at, ...rest }) => rest),
     properties: [...bundle.properties]
       .map(({ id: _id, at: _at, ...rest }) => rest)
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),

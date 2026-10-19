@@ -196,3 +196,134 @@ describe("FirestoreProjectStore password-protected projects", () => {
     await expect(store.openProject(ref, { password: PASSWORD })).rejects.toThrow();
   });
 });
+
+describe("FirestoreProjectStore option sealing", () => {
+  const secretOption: Option = {
+    ...option,
+    id: "opt_secret",
+    title: "Title_x1",
+    description: "Desc_x2",
+    category: "Category_x3",
+    tags: ["Tag_x4"],
+    pros: ["Pro_x5"],
+    cons: ["Con_x6"],
+    links: [{ title: "Link_x7", url: "https://example.com/Url_x8" }],
+  };
+  const plaintexts = [
+    "Title_x1",
+    "Desc_x2",
+    "Category_x3",
+    "Tag_x4",
+    "Pro_x5",
+    "Con_x6",
+    "Link_x7",
+    "Url_x8",
+    "Pro_x9",
+    "Tag_y1",
+    "Url_y2",
+  ];
+
+  it("stores no plaintext option field of a protected project", async () => {
+    const store = new FirestoreProjectStore(OWNER);
+    const ref = await store.createProject(
+      { title: "Secret", options: [secretOption] },
+      { password: PASSWORD }
+    );
+    await store.openProject(ref, { password: PASSWORD });
+    await store.updateOptions(ref, [
+      { op: "update", option: { id: "opt_secret", pros: ["Pro_x5", "Pro_x9"] } },
+      {
+        op: "add",
+        option: {
+          ...secretOption,
+          id: "opt_added",
+          tags: ["Tag_y1"],
+          links: [{ url: "https://example.com/Url_y2" }],
+        },
+      },
+    ]);
+
+    const raw = JSON.stringify(readRaw(store, ref));
+    for (const text of plaintexts) expect(raw).not.toContain(text);
+
+    const snap = await otherClient(store).openProject(ref, { password: PASSWORD });
+    const [first, added] = snap.options;
+    expect(first).toMatchObject({
+      title: "Title_x1",
+      description: "Desc_x2",
+      category: "Category_x3",
+      tags: ["Tag_x4"],
+      pros: ["Pro_x5", "Pro_x9"],
+      cons: ["Con_x6"],
+      links: [{ title: "Link_x7", url: "https://example.com/Url_x8" }],
+    });
+    expect(added?.tags).toEqual(["Tag_y1"]);
+    expect(added?.links).toEqual([{ url: "https://example.com/Url_y2" }]);
+  });
+});
+
+describe("FirestoreProjectStore author stamping", () => {
+  const contribution = {
+    id: "ctb_1",
+    at: "1999-01-01T00:00:00Z",
+    by: "mallory@example.com",
+    targetKind: "option" as const,
+    targetId: OPT,
+    type: "note" as const,
+    body: "Note",
+    author: { kind: "human" as const },
+    reviewStatus: "pending" as const,
+  };
+  const outcome = {
+    strategy: { id: "org.decisionator.strategy.owner-pick", version: "1.0.0" },
+    settings: {},
+    inputs: { options: [{ id: OPT, title: "Option 1" }] },
+    result: { winner: OPT, order: [{ optionId: OPT }] },
+    tieBreak: "none" as const,
+    triggeredBy: OWNER,
+    at: "2026-10-06T00:00:00Z",
+  };
+
+  /** Another participant's client of the same Firestore project. */
+  function clientOf(store: FirestoreProjectStore, user: string): FirestoreProjectStore {
+    const other = new FirestoreProjectStore(user);
+    Object.assign(other, {
+      projects: collections(store).projects,
+      options: collections(store).options,
+      entries: collections(store).entries,
+    });
+    return other;
+  }
+
+  it("stamps contributions with the signed-in author and time", async () => {
+    const store = new FirestoreProjectStore(OWNER);
+    const ref = await store.createProject({ title: "Stamped", options: [option] });
+
+    await store.append(ref, [{ kind: "contribution", contribution }]);
+
+    const [stored] = (await store.openProject(ref)).contributions ?? [];
+    expect(stored?.by).toBe(OWNER);
+    expect(stored?.at).not.toBe("1999-01-01T00:00:00Z");
+    expect(stored?.id).toBe("ctb_1");
+  });
+
+  it("refuses outcomes from non-owners and writes nothing from that call", async () => {
+    const owner = new FirestoreProjectStore(OWNER);
+    const ref = await owner.createProject({ title: "Owned", options: [option] });
+    await owner.share(ref, { inviteUsers: [{ email: "bob@example.com", role: "contribute" }] });
+    const bob = clientOf(owner, "bob@example.com");
+
+    await expect(
+      bob.append(ref, [
+        { kind: "grade", optionId: OPT, value: 3 },
+        { kind: "outcome", outcome },
+      ])
+    ).rejects.toThrow(/^PERMISSION_DENIED/);
+    const snap = await owner.openProject(ref);
+    expect(snap.outcomes).toHaveLength(0);
+    expect(snap.grades).toHaveLength(0);
+
+    await owner.append(ref, [{ kind: "outcome", outcome }]);
+    expect((await owner.openProject(ref)).outcomes).toHaveLength(1);
+  });
+});
