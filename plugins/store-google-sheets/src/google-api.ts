@@ -23,6 +23,14 @@ export class BadRequestError extends Error {
   }
 }
 
+/** HTTP 401 that persisted after one token refresh: the user has to sign in again. */
+export class UnauthorizedError extends Error {
+  constructor(message = "Google API 401 Unauthorized: sign in again") {
+    super(message);
+    this.name = "UnauthorizedError";
+  }
+}
+
 export interface GoogleDriveFile {
   id: string;
   name: string;
@@ -52,19 +60,38 @@ export interface GoogleSpreadsheet {
 }
 
 export class GoogleApiClient {
-  constructor(private getAuthToken: () => Promise<string>) {}
+  /**
+   * @param getAuthToken returns the current access token.
+   * @param refreshAuthToken called once when a request gets 401: drops the rejected token and
+   *   returns a fresh one. Without it, a 401 fails with `UnauthorizedError` right away.
+   */
+  constructor(
+    private getAuthToken: () => Promise<string>,
+    private refreshAuthToken?: (rejectedToken: string) => Promise<string>
+  ) {}
 
   private async request<T>(url: string, init?: RequestInit): Promise<T> {
+    const send = (token: string) => {
+      const headers = new Headers(init?.headers);
+      headers.set("Authorization", `Bearer ${token}`);
+      if (init?.body && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+      return fetch(url, { ...init, headers });
+    };
+
     const token = await this.getAuthToken();
-    const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Bearer ${token}`);
-    if (init?.body && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
+    let res = await send(token);
+    if (res.status === 401 && this.refreshAuthToken) {
+      // An expired or revoked token: refresh once and retry once.
+      res = await send(await this.refreshAuthToken(token));
     }
 
-    const res = await fetch(url, { ...init, headers });
-
     if (!res.ok) {
+      if (res.status === 401) {
+        throw new UnauthorizedError();
+      }
+
       if (res.status === 429) {
         const retryAfter = res.headers.get("Retry-After");
         const seconds = retryAfter ? Number.parseInt(retryAfter, 10) : undefined;

@@ -14,6 +14,9 @@ export const TAB_HEADERS = {
 
 export type SheetTabName = keyof typeof TAB_HEADERS;
 
+/** Drive file name of a password-protected project: it must not reveal the title. */
+export const PROTECTED_FILE_NAME = "Deci project (protected)";
+
 export interface SheetCreationMetadata {
   title: string;
   description?: string;
@@ -54,7 +57,10 @@ export async function createProjectSpreadsheet(
   ];
 
   // 1. Create spreadsheet with all required tabs
-  const spreadsheet = await client.createSpreadsheet(meta.title, tabNames);
+  const spreadsheet = await client.createSpreadsheet(
+    meta.passwordProtected ? PROTECTED_FILE_NAME : meta.title,
+    tabNames
+  );
   const spreadsheetId = spreadsheet.spreadsheetId;
 
   // 2. Set Drive appProperties

@@ -21,6 +21,8 @@ declare global {
             client_id: string;
             scope: string;
             callback: (response: TokenResponse | { error: string }) => void;
+            /** Called instead of `callback` when the popup is blocked, closed or fails. */
+            error_callback?: (error: { type: string; message?: string }) => void;
           }): {
             requestAccessToken(opts?: { prompt?: string }): void;
           };
@@ -77,6 +79,11 @@ export class GoogleAuthService {
             this.tokenExpiresAt = Date.now() + tokenResp.expires_in * 1000;
             resolve(tokenResp.access_token);
           },
+          // Without it a blocked or closed popup leaves the promise pending forever.
+          error_callback: (err) => {
+            const detail = err?.message ? `${err.type}: ${err.message}` : err?.type || "unknown";
+            reject(new Error(`Google OAuth error: ${detail}`));
+          },
         });
 
         if (!client) {
@@ -102,6 +109,22 @@ export class GoogleAuthService {
   }
 
   /**
+   * Drops a token Google rejected (HTTP 401), so the next `getValidToken` requests a new one.
+   * With `rejectedToken`, only that token is dropped: a token refreshed meanwhile is kept.
+   */
+  invalidateToken(rejectedToken?: string): void {
+    if (rejectedToken !== undefined && rejectedToken !== this.currentToken) return;
+    this.currentToken = null;
+    this.tokenExpiresAt = 0;
+  }
+
+  /** For `GoogleApiClient`: drops the rejected token and silently requests a new one. */
+  async refreshToken(rejectedToken?: string): Promise<string> {
+    this.invalidateToken(rejectedToken);
+    return this.getValidToken({ interactive: false });
+  }
+
+  /**
    * Fetches user identity from Drive about.get
    */
   async getIdentity(): Promise<Identity> {
@@ -117,14 +140,17 @@ export class GoogleAuthService {
       throw new Error("Not signed in to Google");
     }
 
-    const res = await fetch(
-      "https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)",
-      {
+    const fetchAbout = (bearer: string) =>
+      fetch("https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)", {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${bearer}`,
         },
-      }
-    );
+      });
+    let res = await fetchAbout(token);
+    if (res.status === 401) {
+      // Expired or revoked: refresh once and retry once.
+      res = await fetchAbout(await this.refreshToken(token));
+    }
 
     if (!res.ok) {
       throw new Error(`Failed to fetch Google profile: ${res.statusText}`);

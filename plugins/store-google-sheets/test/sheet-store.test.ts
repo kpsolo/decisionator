@@ -1,9 +1,10 @@
 import "fake-indexeddb/auto";
 import type { Contribution } from "@decisionator/core";
 import { fakeGoogleServer, fakeGoogleState } from "@decisionator/plugin-sdk/testing";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GoogleAuthService } from "../src/auth.js";
 import { GoogleApiClient } from "../src/google-api.js";
+import { WriteQueue } from "../src/queue.js";
 import { GoogleSheetsProjectStore } from "../src/sheet-store.js";
 
 const PASSWORD = "correct-horse-battery-staple-123";
@@ -381,6 +382,189 @@ describe("GoogleSheetsProjectStore", () => {
       expect(snap.properties).toEqual([]);
       expect(snap.history?.resets).toHaveLength(1);
       expect(snap.warnings?.some((w) => w.startsWith("resets row 3:"))).toBe(true);
+    });
+  });
+
+  describe("createProject with a password", () => {
+    it("names the Drive file neutrally instead of with the plaintext title", async () => {
+      const { store } = setupStore();
+      const ref = await store.createProject(
+        { title: "Layoffs shortlist", options: [option] },
+        { password: PASSWORD }
+      );
+      const name = fakeGoogleState.files.get(ref.id)?.name ?? "";
+      expect(name).toBe("Deci project (protected)");
+      expect(name).not.toContain("Layoffs");
+    });
+  });
+
+  describe("updateOptions with a corrupted row", () => {
+    const opt = (id: string, title: string, order: number) => ({ ...option, id, title, order });
+
+    it("updates rows in place and never rewrites a row it could not decode", async () => {
+      const { store, client } = setupStore();
+      const ref = await store.createProject({
+        title: "Rows",
+        options: [opt("a", "A", 1), opt("b", "B", 2), opt("c", "C", 3)],
+      });
+      // A direct edit breaks option b (sheet row 3).
+      const grid = fakeGoogleState.sheets.get(ref.id);
+      const bRow = grid?.tabs.get("options")?.[2];
+      if (bRow) bRow[5] = "{ broken";
+
+      await store.updateOptions(ref, [
+        { op: "update", option: opt("a", "A2", 1) },
+        { op: "remove", id: "c" },
+        { op: "add", option: opt("d", "D", 4) },
+      ]);
+
+      const rows = (await client.batchGetValues(ref.id, ["options!A:F"])).valueRanges[0]?.values;
+      expect(rows?.map((r) => r[0])).toEqual(["id", "a", "b", "c", "d"]);
+      expect(rows?.[2]?.[5]).toBe("{ broken");
+      expect(rows?.[3]?.[2]).toBe("removed");
+
+      const snap = await store.openProject(ref);
+      expect(snap.options.map((o) => [o.id, o.title, o.status])).toEqual([
+        ["a", "A2", "active"],
+        ["c", "C", "removed"],
+        ["d", "D", "active"],
+      ]);
+    });
+  });
+
+  describe("append authorship", () => {
+    async function sharedProject() {
+      const { store } = setupStore();
+      const ref = await store.createProject({ title: "Shared", options: [option] });
+      await store.share(ref, {
+        inviteUsers: [{ email: "contributor@example.com", role: "contribute" }],
+      });
+      return ref;
+    }
+
+    it("stamps a contribution's by and at from the signed-in user", async () => {
+      const ref = await sharedProject();
+      const { store, client } = setupStore("contributor@example.com");
+      await store.append(ref, [
+        { kind: "contribution", contribution: { ...contribution, at: "2000-01-01T00:00:00.000Z" } },
+      ]);
+
+      const rows = (await client.batchGetValues(ref.id, ["contributions!A:F"])).valueRanges[0]
+        ?.values;
+      expect(rows?.[1]?.[2]).toBe("contributor@example.com");
+      expect(rows?.[1]?.[1]).not.toBe("2000-01-01T00:00:00.000Z");
+    });
+
+    it("refuses outcomes from a non-owner and writes nothing", async () => {
+      const ref = await sharedProject();
+      const { store } = setupStore("contributor@example.com");
+      const outcome = {
+        strategy: { id: "org.decisionator.strategy.owner-pick", version: "1.0.0" },
+        settings: {},
+        inputs: { options: [{ id: OPT, title: "Option" }] },
+        result: { winner: OPT, order: [{ optionId: OPT }] },
+        tieBreak: "none" as const,
+        triggeredBy: "contributor@example.com",
+        at: "2026-10-06T00:00:00Z",
+      };
+      await expect(store.append(ref, [{ kind: "outcome", outcome }])).rejects.toThrow(
+        /^PERMISSION_DENIED/
+      );
+      const snap = await setupStore().store.openProject(ref);
+      expect(snap.outcomes).toEqual([]);
+    });
+  });
+
+  describe("duplicate rows", () => {
+    it("counts a row appended twice (two tabs flushing the same queue) once", async () => {
+      const { store, client } = setupStore();
+      const ref = await store.createProject({ title: "Dupes", options: [option] });
+      await store.append(ref, [
+        { kind: "grade", optionId: OPT, value: 4 },
+        { kind: "comment", optionId: OPT, body: "Once" },
+      ]);
+      const raw = await client.batchGetValues(ref.id, ["grades!A:E", "comments!A:E"]);
+      const grade = raw.valueRanges[0]?.values?.[1] ?? [];
+      const comment = raw.valueRanges[1]?.values?.[1] ?? [];
+      await client.appendValues(ref.id, "grades!A:E", [grade]);
+      await client.appendValues(ref.id, "comments!A:E", [comment]);
+
+      const snap = await store.openProject(ref);
+      expect(snap.grades).toHaveLength(1);
+      expect(snap.history?.grades ?? []).toHaveLength(0);
+      expect(snap.comments.map((c) => c.body)).toEqual(["Once"]);
+    });
+  });
+
+  describe("watch", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it("reads the whole project only when the Drive version changed", async () => {
+      const { store, client } = setupStore();
+      const ref = await store.createProject({ title: "Watched", options: [option] });
+      const getFile = vi.spyOn(client, "getFile");
+      const batchGet = vi.spyOn(client, "batchGetValues");
+      const onChange = vi.fn();
+
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const stop = store.watch(ref, onChange);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(getFile).toHaveBeenCalled();
+      expect(batchGet).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+
+      await client.appendValues(ref.id, "grades!A:E", [
+        ["g_x", "2026-10-06T00:00:00Z", "x@example.com", OPT, JSON.stringify({ value: 2 })],
+      ]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      stop();
+    });
+
+    it("does not poll while the tab is hidden", async () => {
+      const { store, client } = setupStore();
+      const ref = await store.createProject({ title: "Hidden", options: [option] });
+      const getFile = vi.spyOn(client, "getFile");
+      vi.stubGlobal("document", { visibilityState: "hidden", hidden: true });
+
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const stop = store.watch(ref, vi.fn());
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(getFile).not.toHaveBeenCalled();
+      stop();
+    });
+  });
+
+  describe("append with a permanently failing project in the queue", () => {
+    it("still sends this project's rows and reports the failure separately", async () => {
+      fakeGoogleState.setCurrentUser("owner@example.com");
+      const auth = new GoogleAuthService({ clientId: "test-client" });
+      auth.setTokenInMemory("fake-token-123");
+      const client = new GoogleApiClient(() => auth.getValidToken());
+      const queue = new WriteQueue(`test-store-park-${Date.now()}`);
+      const store = new GoogleSheetsProjectStore(auth, client, queue);
+      // Left over from a project that was deleted while offline.
+      await queue.enqueue("sheet_deleted", "grades", [
+        "g_old",
+        "now",
+        "owner@example.com",
+        OPT,
+        "{}",
+      ]);
+
+      const ok = await store.createProject({ title: "Ok", options: [option] });
+      const res = await store.append(ok, [{ kind: "grade", optionId: OPT, value: 3 }]);
+      expect(res).toMatchObject({ queued: 0, sent: 1 });
+      const snap = await store.openProject(ok);
+      expect(snap.grades.map((g) => g.value)).toEqual([3]);
+      expect((await queue.getFailed("sheet_deleted")).map((i) => i.row[0])).toEqual(["g_old"]);
+
+      // A later flush triggered without an append does not retry the parked rows.
+      const again = await store.flushPending();
+      expect(again).toMatchObject({ queued: 0, sent: 0 });
     });
   });
 });

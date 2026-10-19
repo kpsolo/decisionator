@@ -38,8 +38,8 @@ import {
 } from "@decisionator/plugin-sdk";
 import type { GoogleAuthService } from "./auth.js";
 import { BadRequestError, GoogleApiClient } from "./google-api.js";
-import { TAB_HEADERS } from "./layout.js";
-import { WriteQueue } from "./queue.js";
+import { PROTECTED_FILE_NAME, TAB_HEADERS } from "./layout.js";
+import { type FlushResult, WriteQueue } from "./queue.js";
 import {
   type RowDecodeResult,
   decodeCommentRow,
@@ -51,6 +51,7 @@ import {
   decodeRankingRow,
   decodeResetRow,
 } from "./rows.js";
+import { watchProjectChanges } from "./watch.js";
 
 function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
@@ -155,7 +156,6 @@ const PAYLOAD_TABS: [string, string, number][] = [
 
 /** Tabs added after format v1 was released; a project may lack them until it is migrated. */
 const LATER_TABS = ["contributions", "properties", "resets"];
-
 export class GoogleSheetsProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.google-sheets";
   private client: GoogleApiClient;
@@ -170,14 +170,60 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   private rounds = new Map<string, number>();
   /** Option ids seen at the last open, so `append` can check property entries without a read. */
   private optionIds = new Map<string, Set<string>>();
+  /**
+   * Sheet row (1-based) of each option decoded at the last open, and the options tab's row count,
+   * so `updateOptions` writes rows in place and never touches rows it could not decode.
+   */
+  private optionRows = new Map<string, { rowOf: Map<string, number>; rowCount: number }>();
 
   constructor(
     private auth: GoogleAuthService,
     client?: GoogleApiClient,
     queue?: WriteQueue
   ) {
-    this.client = client || new GoogleApiClient(() => this.auth.getValidToken());
+    this.client =
+      client ||
+      new GoogleApiClient(
+        () => this.auth.getValidToken(),
+        (rejected) => this.auth.refreshToken(rejected)
+      );
     this.queue = queue || new WriteQueue();
+  }
+
+  /** The write queue, e.g. for a sync banner (`budget`, `getQueuedCount`, `getFailed`). */
+  get writeQueue(): WriteQueue {
+    return this.queue;
+  }
+
+  /**
+   * Sends queued rows now, without a new append. Call it when the browser comes back online or
+   * the tab becomes visible (`startAutoFlush` does both). Rows Google refuses for good are parked
+   * and listed in `failed`.
+   */
+  flushPending(): Promise<FlushResult> {
+    return this.queue.flush(this.client);
+  }
+
+  /**
+   * Flushes the write queue now and whenever the browser goes back online or the tab becomes
+   * visible again. Returns a function that removes the listeners. No-op outside a browser.
+   */
+  startAutoFlush(): Unsubscribe {
+    const flush = () => {
+      this.flushPending().catch(() => undefined);
+    };
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "hidden") flush();
+    };
+    const win = typeof window !== "undefined" ? window : undefined;
+    const doc = typeof document !== "undefined" ? document : undefined;
+    win?.addEventListener?.("online", flush);
+    doc?.addEventListener?.("visibilitychange", onVisible);
+    flush();
+    return () => {
+      win?.removeEventListener?.("online", flush);
+      doc?.removeEventListener?.("visibilitychange", onVisible);
+    };
   }
 
   async signIn(opts?: { interactive: boolean }): Promise<Identity> {
@@ -212,7 +258,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       "properties",
       "resets",
     ];
-    const spreadsheet = await this.client.createSpreadsheet(input.title, sheetTitles);
+    // A protected project's Drive file name must not reveal its title (same name as
+    // `enablePassword` uses).
+    const fileName = opts?.password ? PROTECTED_FILE_NAME : input.title;
+    const spreadsheet = await this.client.createSpreadsheet(fileName, sheetTitles);
     const spreadsheetId = spreadsheet.spreadsheetId;
 
     // Tag file in Drive
@@ -434,21 +483,40 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const hook = key ? (payload: string) => decrypt(payload, key) : undefined;
     const decodeTab = async <T>(
       tab: string,
-      decode: (row: string[], rowIndex: number) => Promise<RowDecodeResult<T>>
+      decode: (row: string[], rowIndex: number) => Promise<RowDecodeResult<T>>,
+      onEntity?: (entity: T, rowIndex: number) => void
     ): Promise<T[]> => {
       const entities: T[] = [];
+      // Append-only rows carry a unique id. The same row twice (e.g. two tabs flushed one write
+      // queue, or a flush was interrupted before its rows were removed) counts once.
+      const seenIds = new Set<string>();
       for (const [i, row] of tabRows(tab).slice(1).entries()) {
         if (row.every((cell) => !cell)) continue;
+        const rowId = row[0];
+        if (tab !== "options" && rowId) {
+          if (seenIds.has(rowId)) continue;
+          seenIds.add(rowId);
+        }
         // Sheet row numbers are 1-based and row 1 is the header.
         const res = await decode(row, i + 2);
-        if (res.entity) entities.push(res.entity);
-        else if (res.warning) warnings.push(res.warning);
+        if (res.entity) {
+          entities.push(res.entity);
+          onEntity?.(res.entity, i + 2);
+        } else if (res.warning) warnings.push(res.warning);
       }
       return entities;
     };
 
-    const options = await decodeTab("options", (row, n) => decodeOptionRow(row, n, hook));
+    const optionRowOf = new Map<string, number>();
+    const options = await decodeTab(
+      "options",
+      (row, n) => decodeOptionRow(row, n, hook),
+      (option, n) => {
+        if (!optionRowOf.has(option.id)) optionRowOf.set(option.id, n);
+      }
+    );
     this.optionIds.set(ref.id, new Set(options.map((o) => o.id)));
+    this.optionRows.set(ref.id, { rowOf: optionRowOf, rowCount: tabRows("options").length });
 
     const grades = await decodeTab("grades", (row, n) => decodeGradeRow(row, n, undefined, hook));
 
@@ -485,22 +553,18 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     };
   }
 
+  /**
+   * Checks the Drive file `version` every 10 s while the tab is visible and reads the whole
+   * project only when it changed, at most every 15 s (sheet-store contract, quota budget).
+   */
   watch(ref: ProjectRef, onChange: (s: ProjectSnapshot) => void): Unsubscribe {
-    let active = true;
-    const interval = setInterval(async () => {
-      if (!active) return;
-      try {
-        const snap = await this.openProject(ref);
-        onChange(snap);
-      } catch {
-        // Ignored in background poll
-      }
-    }, 10_000);
-
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
+    return watchProjectChanges({
+      client: this.client,
+      ref,
+      budget: this.queue.budget,
+      onUpdate: () => this.openProject(ref),
+      onChange,
+    });
   }
 
   async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
@@ -520,6 +584,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     }
     // Validates the whole call before anything is written.
     const delegated = resolveDelegatedAuthor(entries, opts, role === "owner");
+    // The outcomes tab is written by the owner only (sheet-store contract).
+    if (role !== "owner" && entries.some((e) => e.kind === "outcome")) {
+      throw new Error("PERMISSION_DENIED: Only the project owner may record outcomes");
+    }
     const by = delegated?.by ?? identity.participantId;
     const byName = delegated?.byName;
     if (entries.some((e) => e.kind === "property")) {
@@ -616,12 +684,15 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         rows.push({ tab: "resets", row: [entryId, now, by, await seal({ ...payload, byName })] });
       } else if (entry.kind === "contribution") {
         const c = entry.contribution;
+        // Rule 1: the store stamps the author and time; caller-supplied `by`/`at` are ignored.
+        // Contributions cannot be delegated (`resolveDelegatedAuthor` refused that above), so
+        // the author is always the signed-in user.
         rows.push({
           tab: "contributions",
           row: [
             c.id || entryId,
-            c.at || now,
-            c.by || identity.participantId,
+            now,
+            identity.participantId,
             c.targetKind,
             c.targetId,
             await seal({
@@ -642,12 +713,17 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       await this.queue.enqueue(ref.id, tab, row);
     }
 
+    let result: FlushResult;
     try {
-      return await this.queue.flush(this.client);
+      result = await this.queue.flush(this.client);
     } catch {
-      const remaining = await this.queue.getQueuedCount(ref.id);
-      return { queued: remaining, sent: 0 };
+      return { queued: await this.queue.getQueuedCount(ref.id), sent: 0 };
     }
+    // Google refused this project's rows for good (access revoked, file deleted): say so instead
+    // of reporting them as queued. Other projects' failures do not concern this call.
+    const mine = result.failed?.find((f) => f.spreadsheetId === ref.id);
+    if (mine) throw mine.error;
+    return { queued: await this.queue.getQueuedCount(ref.id), sent: result.sent };
   }
 
   async updateOptions(ref: ProjectRef, ops: OptionOp[]): Promise<void> {
@@ -661,36 +737,63 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       throw new Error("Password required to decrypt project");
     }
 
-    let updatedOptions = [...snap.options];
+    // Each option keeps its sheet row: changed options are written in place and added ones after
+    // the last row. Rows that could not be decoded (direct edits) are never rewritten, so no
+    // row shifts onto another option's.
+    const layout = this.optionRows.get(ref.id) ?? { rowOf: new Map<string, number>(), rowCount: 0 };
+    const rowOf = new Map(layout.rowOf);
+    // Row 1 is the header, so data starts at row 2 even in an empty tab.
+    let nextRow = Math.max(1, layout.rowCount) + 1;
+    const current = new Map(snap.options.map((o) => [o.id, o]));
+    const changed = new Set<string>();
     for (const op of ops) {
       if (op.op === "add") {
-        updatedOptions.push(op.option);
+        if (!rowOf.has(op.option.id)) rowOf.set(op.option.id, nextRow++);
+        current.set(op.option.id, op.option);
+        changed.add(op.option.id);
       } else if (op.op === "update") {
-        updatedOptions = updatedOptions.map((o) =>
-          o.id === op.option.id ? ({ ...o, ...op.option } as Option) : o
-        );
+        const existing = current.get(op.option.id);
+        if (!existing) continue;
+        current.set(op.option.id, { ...existing, ...op.option } as Option);
+        changed.add(op.option.id);
       } else if (op.op === "remove") {
-        updatedOptions = updatedOptions.map((o) =>
-          o.id === op.id ? { ...o, status: "removed" as const } : o
-        );
+        const existing = current.get(op.id);
+        if (!existing) continue;
+        current.set(op.id, { ...existing, status: "removed" as const });
+        changed.add(op.id);
       }
     }
+    if (changed.size === 0) return;
 
-    const rows: string[][] = [["id", "order", "status", "at", "by", "payload"]];
     const identity = await this.auth.getIdentity();
-    for (const opt of updatedOptions) {
+    const updates: { range: string; values: string[][] }[] = [];
+    if (layout.rowCount === 0) {
+      // An empty tab gets its header back so data keeps starting at row 2.
+      updates.push({ range: "options!A1:F1", values: [[...TAB_HEADERS.options]] });
+    }
+    for (const id of changed) {
+      const opt = current.get(id);
+      const row = rowOf.get(id);
+      if (!opt || row === undefined) continue;
       const json = JSON.stringify(opt);
-      rows.push([
-        opt.id,
-        String(opt.order ?? 0),
-        opt.status,
-        opt.at || "",
-        identity.participantId,
-        key ? await encrypt(json, key) : json,
-      ]);
+      updates.push({
+        range: `options!A${row}:F${row}`,
+        values: [
+          [
+            opt.id,
+            String(opt.order ?? 0),
+            opt.status,
+            opt.at || "",
+            identity.participantId,
+            key ? await encrypt(json, key) : json,
+          ],
+        ],
+      });
     }
 
-    await this.client.batchUpdateValues(ref.id, [{ range: "options!A:F", values: rows }]);
+    await this.client.batchUpdateValues(ref.id, updates);
+    this.optionRows.set(ref.id, { rowOf, rowCount: nextRow - 1 });
+    this.optionIds.set(ref.id, new Set(current.keys()));
   }
 
   async updateMeta(ref: ProjectRef, patch: MetaPatch): Promise<void> {
@@ -877,9 +980,9 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const cryptoKey = await deriveKey(password, salt, 600_000);
     const verifier = await makeVerifier(cryptoKey);
 
-    // 1. Rename Sheet to "Deci project (protected)"
+    // 1. Rename the file so its name no longer reveals the title.
     await this.client.updateFile(ref.id, {
-      name: "Deci project (protected)",
+      name: PROTECTED_FILE_NAME,
     });
 
     // 2. Read all existing data to encrypt
