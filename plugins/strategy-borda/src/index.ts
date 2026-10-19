@@ -14,9 +14,16 @@ export interface BordaOrderItem {
 
 export interface BordaDecideResult extends StrategyResult {
   order: BordaOrderItem[];
+  /** How first and second place were separated. */
   tieBreak: "none" | "average-grade" | "first-places" | "seeded-random";
+  /** Set whenever any group of fully tied options was drawn, so the whole order can be replayed. */
   seedUsed?: string;
 }
+
+/** Sort keys, all "higher wins": points, average grade, first places. */
+type Keys = readonly [number, number, number];
+
+const sameKeys = (a: Keys, b: Keys) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 export const bordaStrategy: StrategyPlugin = {
   check(input: StrategyInput) {
@@ -66,52 +73,60 @@ export const bordaStrategy: StrategyPlugin = {
       }
     }
 
-    // Group options by points to sort and break ties
     // Tie-break chain:
     // 1. Points (higher wins)
     // 2. Average Grade (higher wins)
     // 3. First places (more wins)
     // 4. Seeded random draw (Rng)
-    const tieBreakState: {
-      type: "none" | "average-grade" | "first-places" | "seeded-random";
-      seedUsed?: string;
-    } = {
-      type: "none",
-    };
+    //
+    // Sort by the deterministic keys only. The sort is stable, so fully tied options keep their
+    // input order; each such group is then shuffled with an unbiased Fisher-Yates draw. Randomness
+    // never enters the comparator: that is biased and depends on the engine's sort algorithm.
+    const keyed = options.map((opt) => ({
+      opt,
+      keys: [
+        pointsMap.get(opt.id) ?? 0,
+        gradeMap.get(opt.id) ?? 0,
+        firstPlacesMap.get(opt.id) ?? 0,
+      ] as Keys,
+    }));
+    keyed.sort((a, b) => b.keys[0] - a.keys[0] || b.keys[1] - a.keys[1] || b.keys[2] - a.keys[2]);
 
-    // Helper comparator for deterministic tie break
-    const sorted = [...options].sort((a, b) => {
-      const ptsA = pointsMap.get(a.id) ?? 0;
-      const ptsB = pointsMap.get(b.id) ?? 0;
-      if (ptsA !== ptsB) {
-        return ptsB - ptsA;
+    let usedRandomness = false;
+    let start = 0;
+    while (start < keyed.length) {
+      const startKeys = keyed[start]?.keys;
+      let end = start + 1;
+      for (; end < keyed.length; end++) {
+        const nextKeys = keyed[end]?.keys;
+        if (!startKeys || !nextKeys || !sameKeys(startKeys, nextKeys)) break;
       }
-
-      // Tie in points: check average grade
-      const avgA = gradeMap.get(a.id) ?? 0;
-      const avgB = gradeMap.get(b.id) ?? 0;
-      if (avgA !== avgB) {
-        if (tieBreakState.type === "none") tieBreakState.type = "average-grade";
-        return avgB - avgA;
-      }
-
-      // Tie in average grade: check first places
-      const fpA = firstPlacesMap.get(a.id) ?? 0;
-      const fpB = firstPlacesMap.get(b.id) ?? 0;
-      if (fpA !== fpB) {
-        if (tieBreakState.type === "none" || tieBreakState.type === "average-grade") {
-          tieBreakState.type = "first-places";
+      if (end - start > 1) {
+        usedRandomness = true;
+        for (let i = end - 1; i > start; i--) {
+          const j = start + rng.int(i - start + 1);
+          const a = keyed[i];
+          const b = keyed[j];
+          if (a && b) {
+            keyed[i] = b;
+            keyed[j] = a;
+          }
         }
-        return fpB - fpA;
       }
+      start = end;
+    }
 
-      // Still tied: seeded random draw using rng
-      tieBreakState.type = "seeded-random";
-      tieBreakState.seedUsed = rng.seed;
-      // Draw 0 or 1 uniformly
-      const flip = rng.int(2);
-      return flip === 0 ? -1 : 1;
-    });
+    // Report only how first and second place were separated.
+    let tieBreak: BordaDecideResult["tieBreak"] = "none";
+    const first = keyed[0]?.keys;
+    const second = keyed[1]?.keys;
+    if (first && second && first[0] === second[0]) {
+      if (first[1] !== second[1]) tieBreak = "average-grade";
+      else if (first[2] !== second[2]) tieBreak = "first-places";
+      else tieBreak = "seeded-random";
+    }
+
+    const sorted = keyed.map((k) => k.opt);
 
     const order: BordaOrderItem[] = sorted.map((opt) => ({
       optionId: opt.id,
@@ -122,13 +137,13 @@ export const bordaStrategy: StrategyPlugin = {
     const winner = sorted[0];
     const chosen = winner ? [winner.id] : [];
 
-    const explanation = `**Borda Count Ranking**: Winner is **${winner?.title || "None"}** with ${pointsMap.get(winner?.id || "") ?? 0} points. Tie-break: ${tieBreakState.type}.`;
+    const explanation = `**Borda Count Ranking**: Winner is **${winner?.title || "None"}** with ${pointsMap.get(winner?.id || "") ?? 0} points. Tie-break: ${tieBreak}.`;
 
     return {
       chosen,
       order,
-      tieBreak: tieBreakState.type,
-      seedUsed: tieBreakState.type === "seeded-random" ? tieBreakState.seedUsed : undefined,
+      tieBreak,
+      seedUsed: usedRandomness ? rng.seed : undefined,
       explanation,
     };
   },

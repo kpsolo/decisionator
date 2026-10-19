@@ -42,20 +42,18 @@ export interface RunTallyOptions {
   seed?: string; // Optional CSPRNG 32 hex chars, generated if not provided
 }
 
-function generateRandomSeed(): string {
-  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+/** A fresh 128-bit seed from the platform CSPRNG (browsers and Node.js 19+ expose it globally). */
+export function generateRandomSeed(): string {
+  if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
+    throw new Error(
+      "No CSPRNG available: crypto.getRandomValues is required to generate a strategy seed"
+    );
   }
-  // Fallback for node or tests
-  let hex = "";
-  for (let i = 0; i < 32; i++) {
-    hex += Math.floor(Math.random() * 16).toString(16);
-  }
-  return hex;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /**

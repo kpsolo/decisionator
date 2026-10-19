@@ -36,3 +36,16 @@ describe("Normative SHA-256 counter-mode RNG (contracts/strategy.md)", () => {
     expect(rng.float()).toBeCloseTo(0.060539633583655994, 15);
   });
 });
+
+describe("createRng seed validation", () => {
+  it("rejects seeds that are not 32 hex chars", () => {
+    for (const bad of ["zz".repeat(16), "0".repeat(30), "0".repeat(34), "", " ".repeat(32)]) {
+      expect(() => createRng(bad), JSON.stringify(bad)).toThrow(/32 hex/);
+    }
+  });
+
+  it("accepts upper-case hex with the same stream as lower-case", () => {
+    const upper = createRng("000102030405060708090A0B0C0D0E0F");
+    expect(upper.nextUint32()).toBe(2237479810);
+  });
+});

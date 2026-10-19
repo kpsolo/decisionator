@@ -39,6 +39,26 @@ function truncateString(
   return str;
 }
 
+/** The only format this validator reads (contracts/options-format.schema.json). */
+export const OPTIONS_FORMAT_ID = "decisionator.options/v1";
+
+/**
+ * Returns the link URL when it is an absolute http(s) URL, as OptionSchema requires, with the
+ * scheme lower-cased; otherwise undefined.
+ */
+function normalizeLinkUrl(raw: string): string | undefined {
+  const url = raw.trim();
+  if (!/^https?:\/\/\S/i.test(url)) return undefined;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+    if (!parsed.hostname) return undefined;
+  } catch {
+    return undefined;
+  }
+  return url.replace(/^https?/i, (scheme) => scheme.toLowerCase());
+}
+
 function normalizeStringList(val: unknown, fieldName: string, warnings: string[]): string[] {
   if (!val) return [];
   if (typeof val === "string") {
@@ -89,12 +109,24 @@ export function validateOptionsPayload(
       }
     }
 
+    if (!("format" in obj)) {
+      warnings.push(`Missing field 'format'; ${OPTIONS_FORMAT_ID} assumed`);
+    } else if (obj.format !== OPTIONS_FORMAT_ID) {
+      errors.push(
+        `format: unsupported value ${JSON.stringify(obj.format)} (expected "${OPTIONS_FORMAT_ID}")`
+      );
+    }
+
     if (obj.project && typeof obj.project === "object") {
       const proj = obj.project as Record<string, unknown>;
-      if (typeof proj.title === "string") {
+      const projTitle = typeof proj.title === "string" ? stripCitations(proj.title).cleaned : "";
+      if (projTitle.trim() !== "") {
         projectMeta = {
-          title: truncateString(proj.title.trim(), 200, "project.title", warnings),
-          description: typeof proj.description === "string" ? proj.description.trim() : undefined,
+          title: truncateString(projTitle.trim(), 200, "project.title", warnings),
+          description:
+            typeof proj.description === "string"
+              ? truncateString(proj.description.trim(), 20_000, "project.description", warnings)
+              : undefined,
         };
       }
     }
@@ -165,6 +197,10 @@ export function validateOptionsPayload(
     if (strippedTitle.found) {
       warnings.push("Assistant citation markers were stripped from option content");
     }
+    if (strippedTitle.cleaned.trim() === "") {
+      errors.push(`${pathPrefix}.title: empty after removing citation markers`);
+      continue;
+    }
     const title = truncateString(
       strippedTitle.cleaned.trim(),
       200,
@@ -189,9 +225,11 @@ export function validateOptionsPayload(
 
     // Category
     let category: string | undefined;
-    if (typeof opt.category === "string" && opt.category.trim() !== "") {
+    if (typeof opt.category === "string") {
       const cleanedCat = stripCitations(opt.category).cleaned.trim();
-      category = truncateString(cleanedCat, 60, `${pathPrefix}.category`, warnings);
+      if (cleanedCat !== "") {
+        category = truncateString(cleanedCat, 60, `${pathPrefix}.category`, warnings);
+      }
     }
 
     // Tags
@@ -200,8 +238,12 @@ export function validateOptionsPayload(
       .map((t) => truncateString(t, 40, `${pathPrefix}.tags[]`, warnings));
 
     // Pros & Cons
-    const pros = normalizeStringList(opt.pros, `${pathPrefix}.pros`, warnings).slice(0, 20);
-    const cons = normalizeStringList(opt.cons, `${pathPrefix}.cons`, warnings).slice(0, 20);
+    const pros = normalizeStringList(opt.pros, `${pathPrefix}.pros`, warnings)
+      .slice(0, 20)
+      .map((p) => truncateString(p, 300, `${pathPrefix}.pros[]`, warnings));
+    const cons = normalizeStringList(opt.cons, `${pathPrefix}.cons`, warnings)
+      .slice(0, 20)
+      .map((c) => truncateString(c, 300, `${pathPrefix}.cons[]`, warnings));
 
     // Effort
     let effort: "XS" | "S" | "M" | "L" | "XL" | undefined;
@@ -218,22 +260,28 @@ export function validateOptionsPayload(
     const links: { url: string; title?: string }[] = [];
     if (Array.isArray(opt.links)) {
       for (const linkItem of opt.links.slice(0, 10)) {
-        if (typeof linkItem === "string" && linkItem.startsWith("http")) {
-          links.push({ url: linkItem });
-        } else if (typeof linkItem === "object" && linkItem !== null) {
-          const lObj = linkItem as Record<string, unknown>;
-          if (typeof lObj.url === "string" && lObj.url.startsWith("http")) {
-            links.push({
-              url: lObj.url,
-              title: typeof lObj.title === "string" ? lObj.title : undefined,
-            });
-          }
+        const lObj =
+          typeof linkItem === "object" && linkItem !== null
+            ? (linkItem as Record<string, unknown>)
+            : undefined;
+        const rawUrl = typeof linkItem === "string" ? linkItem : lObj?.url;
+        const url = typeof rawUrl === "string" ? normalizeLinkUrl(rawUrl) : undefined;
+        if (!url) {
+          warnings.push(`${pathPrefix}.links: ignored a link that is not an http(s) URL`);
+          continue;
         }
+        links.push({
+          url,
+          title:
+            typeof lObj?.title === "string"
+              ? truncateString(lObj.title, 200, `${pathPrefix}.links[].title`, warnings)
+              : undefined,
+        });
       }
     }
 
     normalizedOptions.push({
-      id: typeof opt.id === "string" ? opt.id : undefined,
+      id: typeof opt.id === "string" && opt.id.trim() !== "" ? opt.id : undefined,
       title,
       description,
       category,

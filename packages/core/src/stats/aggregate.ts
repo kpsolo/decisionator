@@ -5,6 +5,7 @@ export interface OptionStats {
   title: string;
   category?: string;
   tags: string[];
+  /** Exact mean of the latest grades (unrounded; display code rounds it). */
   average: number;
   count: number;
   distribution: [number, number, number, number, number]; // 1-star to 5-star count
@@ -68,11 +69,11 @@ export function computeOptionStats(
     }
   }
 
-  // Compute average to 1 decimal place
+  // Exact average. Strategies tie-break on it, so it must not be rounded here; round for display.
   for (const [id, stat] of statsMap.entries()) {
     if (stat.count > 0) {
       const sum = sumMap.get(id) || 0;
-      stat.average = Math.round((sum / stat.count) * 10) / 10;
+      stat.average = sum / stat.count;
     }
   }
 

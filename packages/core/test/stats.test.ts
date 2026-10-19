@@ -58,7 +58,7 @@ describe("Stats Aggregation & Sorting (T055)", () => {
     },
   ];
 
-  it("calculates 1-decimal average, count, distribution, and comments count accurately", () => {
+  it("calculates average, count, distribution, and comments count accurately", () => {
     const statsMap = computeOptionStats(options, grades, comments);
     const opt1Stats = statsMap.get("opt_1");
     expect(opt1Stats).toBeDefined();
@@ -138,5 +138,30 @@ describe("Stats Aggregation & Sorting (T055)", () => {
 
     expect(grouped.length).toBe(5);
     expect(elapsed).toBeLessThan(1000); // well under 1 s
+  });
+});
+
+describe("computeOptionStats precision", () => {
+  it("keeps the exact average; rounding is left to display", () => {
+    const opts: Option[] = [
+      {
+        id: "x",
+        title: "X",
+        description: "",
+        status: "active",
+        tags: [],
+        pros: [],
+        cons: [],
+        links: [],
+      },
+    ];
+    const gs: Grade[] = ([4, 4, 5] as const).map((value, i) => ({
+      id: `g${i}`,
+      at: "2026-10-05T01:00:00Z",
+      by: `u${i}`,
+      optionId: "x",
+      value,
+    }));
+    expect(computeOptionStats(opts, gs, []).get("x")?.average).toBeCloseTo(13 / 3, 12);
   });
 });

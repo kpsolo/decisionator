@@ -1,6 +1,6 @@
 import type { Option } from "@decisionator/core";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { compareStrategies, inputSeed } from "./compare.js";
 import { BUILTIN_STRATEGIES, WEIGHTED_ID, cannotRunReason, chosenStrategy } from "./strategies.js";
 
@@ -102,5 +102,37 @@ describe("compareStrategies", () => {
     for (const r of rows) {
       if (r.ok) expect(r.differsFromChosen).toBe(r.winner !== "lis");
     }
+  });
+});
+
+describe("adopting a comparison row", () => {
+  it("re-runs a random strategy with a fresh CSPRNG seed, not the preview's input seed", async () => {
+    const snap = snapshot();
+    const preview = await inputSeed(snap);
+    const rows = await compareStrategies(snap, BUILTIN_STRATEGIES, "owner");
+    const rnd = rows.find((r) => r.strategyId === "org.decisionator.strategy.random");
+    if (!rnd?.ok) throw new Error("random row should run");
+    expect(rnd.preview.seed).toBe(preview);
+
+    const spy = vi.spyOn(globalThis.crypto, "getRandomValues");
+    const first = await rnd.adopt();
+    const second = await rnd.adopt();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+
+    expect(first.seed).toMatch(/^[0-9a-f]{32}$/);
+    expect(first.seed).not.toBe(preview);
+    expect(second.seed).not.toBe(first.seed);
+    expect(first.strategy.id).toBe("org.decisionator.strategy.random");
+    expect(first.triggeredBy).toBe("owner");
+  });
+
+  it("gives the previewed result when no draw is needed, still with a fresh seed", async () => {
+    const rows = await compareStrategies(snapshot(), BUILTIN_STRATEGIES, "owner");
+    const borda = rows.find((r) => r.strategyId === "org.decisionator.strategy.borda");
+    if (!borda?.ok) throw new Error("borda row should run");
+    const adopted = await borda.adopt();
+    expect(adopted.result).toEqual(borda.preview.result);
+    expect(adopted.seed).not.toBe(borda.preview.seed);
   });
 });

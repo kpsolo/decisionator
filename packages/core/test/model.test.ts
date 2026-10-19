@@ -286,6 +286,31 @@ describe("Data Model Zod Schemas (T017)", () => {
         })
       ).not.toThrow();
     });
+
+    it("keeps the weighted strategy's per-option weight in the order", () => {
+      const outcome = {
+        strategy: { id: "org.decisionator.strategy.weighted", version: "0.1.0" },
+        settings: {},
+        inputs: {
+          options: [
+            { id: "opt1", title: "Idea 1" },
+            { id: "opt2", title: "Idea 2" },
+          ],
+        },
+        result: {
+          winner: "opt2",
+          order: [
+            { optionId: "opt2", weight: 4.25 },
+            { optionId: "opt1", weight: 0 },
+          ],
+        },
+        seed: "0123456789abcdef0123456789abcdef",
+        triggeredBy: "owner@example.com",
+        at: "2026-10-05T12:00:00Z",
+      };
+      const parsed = OutcomeRecordSchema.parse(outcome);
+      expect(parsed.result.order).toEqual(outcome.result.order);
+    });
   });
 
   describe("ContributionSchema (US5)", () => {

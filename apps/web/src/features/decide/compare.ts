@@ -15,16 +15,23 @@ export type ComparisonRow =
       ok: true;
       order: string[];
       winner: string;
+      /** The preview's input-derived seed, for strategies that use randomness. */
       seed?: string;
       differsFromChosen: boolean;
-      /** The unrecorded outcome, ready to adopt. */
-      outcome: OutcomeRecord;
+      /** The unrecorded preview outcome. Never record it: its seed is derived from the votes. */
+      preview: OutcomeRecord;
+      /**
+       * Re-runs this strategy on the same votes with a fresh CSPRNG seed and returns the outcome
+       * to record. A random draw can therefore pick a different winner than the preview.
+       */
+      adopt(): Promise<OutcomeRecord>;
     }
   | { strategyId: string; name: string; ok: false; reason: string; differsFromChosen: false };
 
 /**
- * A seed derived from the tally inputs, so reopening the comparison (or adopting a row) gives the
- * same draw for the same votes.
+ * A seed derived from the tally inputs, so reopening the comparison gives the same preview draw
+ * for the same votes. It is predictable, so it is only used for previews, never for a recorded
+ * outcome.
  */
 export async function inputSeed(snapshot: ProjectSnapshot): Promise<string> {
   const { options, ballots, grades } = checkInput(snapshot, {});
@@ -64,8 +71,9 @@ export async function compareStrategies(
       });
       continue;
     }
-    try {
-      const outcome = await runTally({
+    // Without a seed, runTally draws a fresh one from the CSPRNG.
+    const tally = (withSeed?: string) =>
+      runTally({
         snapshot,
         strategy: s.strategy,
         strategyId: s.id,
@@ -74,17 +82,20 @@ export async function compareStrategies(
         settings,
         runInput: typeof settings.pick === "string" ? settings.pick : undefined,
         usesRandomness: s.usesRandomness,
-        seed,
+        seed: withSeed,
       });
+    try {
+      const preview = await tally(seed);
       rows.push({
         strategyId: s.id,
         name: s.name,
         ok: true,
-        order: outcome.result.order.map((o: { optionId: string }) => o.optionId),
-        winner: outcome.result.winner,
+        order: preview.result.order.map((o: { optionId: string }) => o.optionId),
+        winner: preview.result.winner,
         ...(s.usesRandomness ? { seed } : {}),
         differsFromChosen: false,
-        outcome,
+        preview,
+        adopt: () => tally(undefined),
       });
     } catch (err) {
       rows.push({

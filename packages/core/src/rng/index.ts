@@ -7,9 +7,14 @@ export interface Rng {
   float(): number;
 }
 
+/** A strategy seed: 128 bits as 32 hex chars (contracts/strategy.md § Rng). */
+const SEED_REGEX = /^[0-9a-f]{32}$/i;
+
 function hexToBytes(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0) {
-    throw new Error("Invalid hex string length");
+  if (!SEED_REGEX.test(hex)) {
+    throw new Error(
+      `Invalid RNG seed ${JSON.stringify(hex)}: expected 32 hex chars (128 bits), e.g. "000102030405060708090a0b0c0d0e0f"`
+    );
   }
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
