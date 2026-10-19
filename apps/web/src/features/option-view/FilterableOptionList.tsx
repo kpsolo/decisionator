@@ -4,6 +4,7 @@ import type React from "react";
 import { useMemo, useState } from "react";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
+import { NativeSelect } from "../../components/ui/native-select.js";
 import { useOptionList } from "./OptionExtensionsProvider.js";
 import { OptionListBar } from "./OptionPlaces.js";
 
@@ -100,19 +101,19 @@ export function FilterableOptionList({
               >
                 Sort:
               </label>
-              <select
+              <NativeSelect
                 id="option-sort-select"
                 aria-label="Sort options"
                 value={sortMode}
                 onChange={(e) => setSortMode(e.target.value as OptionSortMode)}
-                className="h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                className="text-xs"
               >
                 <option value="default">Original order</option>
                 <option value="rating-desc">Highest rated</option>
                 {myGrades && <option value="unrated-first">My unrated first</option>}
                 <option value="comments-desc">Most discussed</option>
                 <option value="alpha-asc">Title (A–Z)</option>
-              </select>
+              </NativeSelect>
             </div>
 
             <div className="relative w-full sm:w-56">

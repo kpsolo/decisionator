@@ -49,10 +49,7 @@ export function AppShell() {
           to="/"
           className="flex items-center gap-2.5 rounded-md text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <DeciIcon
-            size={28}
-            className="shadow-[0_2px_8px_-2px_rgba(11,132,254,0.35)] rounded-[8px]"
-          />
+          <DeciIcon size={28} className="shadow-sm shadow-primary/35 rounded-lg" />
           <span className="text-base font-bold tracking-tight">Deci</span>
         </Link>
         <div className="flex items-center gap-1.5">
@@ -95,10 +92,7 @@ export function AppShell() {
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2.5 rounded-md text-foreground"
             >
-              <DeciIcon
-                size={32}
-                className="shadow-[0_2px_8px_-2px_rgba(11,132,254,0.35)] rounded-[9px]"
-              />
+              <DeciIcon size={32} className="shadow-sm shadow-primary/35 rounded-lg" />
               <span className="text-base font-bold tracking-tight">Deci</span>
             </Link>
             <Button
@@ -178,10 +172,7 @@ export function AppShell() {
             to="/"
             className="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-accent/50 transition-colors ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <DeciIcon
-              size={34}
-              className="shadow-[0_2px_8px_-2px_rgba(11,132,254,0.35)] rounded-[10px] shrink-0"
-            />
+            <DeciIcon size={34} className="shadow-sm shadow-primary/35 rounded-lg shrink-0" />
             <div className="flex flex-col">
               <span className="text-lg font-bold tracking-tight text-foreground leading-none">
                 Deci

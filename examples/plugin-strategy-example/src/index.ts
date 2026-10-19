@@ -1,10 +1,7 @@
 import type { Rng } from "@decisionator/core";
-import type {
-  StrategyCheckResult,
-  StrategyInput,
-  StrategyPlugin,
-  StrategyResult,
-} from "@decisionator/plugin-sdk";
+import type { StrategyInput, StrategyPlugin, StrategyResult } from "@decisionator/plugin-sdk";
+
+type StrategyCheckResult = ReturnType<StrategyPlugin["check"]>;
 
 export class FirstCandidateStrategy implements StrategyPlugin {
   readonly id = "org.decisionator.examples.strategy.first";
@@ -23,13 +20,10 @@ export class FirstCandidateStrategy implements StrategyPlugin {
       throw new Error("No options available");
     }
 
+    const ballots = input.ballots?.length ?? 0;
     return {
       chosen: [first.id],
-      order: input.options.map((o) => o.id),
-      explanation: `Selected the top candidate "${first.title}".`,
-      audit: {
-        ballotsCounted: input.ballots?.length ?? 0,
-      },
+      explanation: `Selected the top candidate "${first.title}" (${ballots} ballot${ballots === 1 ? "" : "s"} counted).`,
     };
   }
 }

@@ -25,6 +25,8 @@ export interface LiveSessionData {
 
 export interface ModerationProposal {
   id: string;
+  /** The project whose live session the proposal is about. */
+  projectId: string;
   grantId: string;
   agentName: string;
   action: "drop_votes" | "set_read_only" | "allow_contributions" | "revoke_link";
@@ -169,17 +171,16 @@ export class AgentStateStore {
     return this.contributionsByRequest.get(requestId) || [];
   }
 
-  addContribution(requestId: string, contribution: Contribution): Contribution {
-    // Add to request's own list
+  /**
+   * Records a contribution of a request in the grant's project. `targetId` is an option, idea or
+   * project id, so the project always comes from the grant, never from the target.
+   */
+  addContribution(requestId: string, projectId: string, contribution: Contribution): Contribution {
     const own = this.contributionsByRequest.get(requestId) || [];
     own.push(contribution);
     this.contributionsByRequest.set(requestId, own);
 
-    // Also add to project data
-    const p = this.projects.get(contribution.targetId) || Array.from(this.projects.values())[0];
-    if (p) {
-      p.contributions.push(contribution);
-    }
+    this.projects.get(projectId)?.contributions.push(contribution);
 
     return contribution;
   }
@@ -257,22 +258,29 @@ export class AgentStateStore {
     return pseudo;
   }
 
-  resolvePseudonym(grantId: string, pseudoOrReal: string): string {
-    const reverse = this.reversePseudonymMaps.get(grantId);
-    return reverse?.get(pseudoOrReal) ?? pseudoOrReal;
+  /**
+   * The real participant id behind a pseudonym this grant was given, or `undefined` for anything
+   * else (unknown pseudonyms and real ids are never passed through).
+   */
+  resolvePseudonym(grantId: string, pseudonym: string): string | undefined {
+    return this.reversePseudonymMaps.get(grantId)?.get(pseudonym);
   }
 
+  /** Records a pending proposal; `null` when its participant is not a pseudonym of this grant. */
   proposeModeration(
     projectId: string,
     grantId: string,
     agentName: string,
     input: ProposeModerationInput
-  ): ModerationProposal {
-    const realParticipantId = input.participant
-      ? this.resolvePseudonym(grantId, input.participant)
-      : undefined;
+  ): ModerationProposal | null {
+    let realParticipantId: string | undefined;
+    if (input.participant !== undefined) {
+      realParticipantId = this.resolvePseudonym(grantId, input.participant);
+      if (!realParticipantId) return null;
+    }
     const proposal: ModerationProposal = {
       id: `prop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      projectId,
       grantId,
       agentName,
       action: input.action,
@@ -295,18 +303,18 @@ export class AgentStateStore {
     return this.proposals.get(projectId) ?? [];
   }
 
+  /** The owner's decision on a proposal of this project; `null` when the project has no such proposal. */
   decideProposal(
+    projectId: string,
     proposalId: string,
     decision: "accepted" | "dismissed"
   ): ModerationProposal | null {
-    for (const list of this.proposals.values()) {
-      const found = list.find((p) => p.id === proposalId);
-      if (found) {
-        found.status = decision;
-        found.decidedAt = new Date().toISOString();
-        return found;
-      }
-    }
-    return null;
+    const found = (this.proposals.get(projectId) ?? []).find(
+      (p) => p.id === proposalId && p.projectId === projectId
+    );
+    if (!found) return null;
+    found.status = decision;
+    found.decidedAt = new Date().toISOString();
+    return found;
   }
 }

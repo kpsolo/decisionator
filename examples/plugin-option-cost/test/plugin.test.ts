@@ -22,6 +22,7 @@ function ctx(
     viewerId: "gina",
     surface,
     values,
+    valueMeta: {},
     settings: {},
     setValue: async () => {},
   };

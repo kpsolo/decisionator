@@ -6,7 +6,8 @@
   "scripts": {
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "typecheck": "pnpm -r --parallel run typecheck",
+    "typecheck": "pnpm -r --parallel run typecheck && pnpm run typecheck:examples",
+    "typecheck:examples": "tsc -p examples/tsconfig.json",
     "test": "vitest run",
     "test:contract": "vitest run test/contract",
     "test:e2e": "pnpm --filter @decisionator/web test:e2e",

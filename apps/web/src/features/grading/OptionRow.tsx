@@ -33,6 +33,7 @@ import {
   markerTitleClass,
 } from "../option-view/OptionPlaces.js";
 import { GradeInput } from "./GradeInput.js";
+import { isActivationKey, shouldActivateCard } from "./card-activation.js";
 
 export interface OptionRowProps {
   option: Option;
@@ -112,11 +113,10 @@ export const OptionRow: React.FC<OptionRowProps> = ({
   const view = useOptionView(option, "card");
   const exposureRef = useExposureRef(option.id);
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.closest("button, input, a, fieldset, label")) {
-      return;
-    }
+  // Events from controls, text fields and the portalled detail dialog bubble through React
+  // to this card; only activations that start on the card's own content open the dialog.
+  const handleCardClick = (e: React.MouseEvent<HTMLLIElement>) => {
+    if (!shouldActivateCard(e.target, e.currentTarget)) return;
     setLightboxOpen(true);
   };
 
@@ -130,20 +130,14 @@ export const OptionRow: React.FC<OptionRowProps> = ({
       data-option-id={option.id}
       title="Click card to view details, pros/cons, and comments"
       className={cn(
-        "group relative flex flex-col items-start p-5 w-full rounded-[14px] transition-all duration-200 cursor-pointer",
-        // Light mode
-        "bg-card border border-border/80 shadow-sm hover:border-[#0B84FE] hover:shadow-[0px_8px_24px_-4px_rgba(11,132,254,0.18)]",
-        // Dark mode (Deci spec)
-        "dark:bg-[rgba(17,17,19,0.95)] dark:border-[rgba(11,132,254,0.5)] dark:shadow-[0px_8px_24px_-4px_rgba(0,0,0,0.5)] dark:hover:border-[#0B84FE] dark:hover:shadow-[0px_10px_28px_-4px_rgba(11,132,254,0.25)]"
+        "group relative flex flex-col items-start p-5 w-full rounded-xl transition-all duration-200 cursor-pointer",
+        "bg-card border border-border text-card-foreground shadow-card hover:border-primary/50 hover:shadow-raised"
       )}
       onClick={handleCardClick}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          const target = e.target as HTMLElement;
-          if (!target.closest("button, input, a, fieldset, label")) {
-            e.preventDefault();
-            setLightboxOpen(true);
-          }
+        if (isActivationKey(e.key) && shouldActivateCard(e.target, e.currentTarget)) {
+          e.preventDefault();
+          setLightboxOpen(true);
         }
       }}
     >
@@ -152,16 +146,13 @@ export const OptionRow: React.FC<OptionRowProps> = ({
       <div className="flex flex-col sm:flex-row items-start justify-between gap-6 w-full">
         {/* Left container: Badge + Text content */}
         <div className="flex flex-row items-start gap-3.5 flex-1 min-w-0 w-full">
-          {/* Badge: 40x40px, rounded-[14px], blue only if voted */}
+          {/* Badge: 40x40px, rounded-xl, primary solid only if voted */}
           <div
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] select-none text-sm leading-5 tracking-[-0.35px] transition-all duration-200",
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl select-none text-sm leading-5 tracking-tight transition-all duration-200",
               hasVoted
-                ? "bg-[#0B84FE] border border-[#0B84FE] text-white font-bold shadow-[0px_1px_2px_rgba(0,0,0,0.05)]"
-                : cn(
-                    "bg-muted/70 border border-border text-muted-foreground font-semibold group-hover:border-slate-400 group-hover:text-foreground",
-                    "dark:bg-white/[0.04] dark:border-white/12 dark:text-[#A1A1AB] dark:group-hover:border-white/25 dark:group-hover:text-white"
-                  )
+                ? "bg-primary-solid border border-primary-solid text-primary-foreground font-bold shadow-xs"
+                : "bg-muted/70 border border-border text-muted-foreground font-semibold group-hover:border-input group-hover:text-foreground"
             )}
             aria-hidden="true"
           >
@@ -175,7 +166,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
               <OptionMarker view={view} />
               <h4
                 className={cn(
-                  "text-[20px] sm:text-[22px] font-semibold leading-tight tracking-[-0.45px] text-[#0066CC] dark:text-[#0B84FE] [overflow-wrap:anywhere] truncate",
+                  "text-[20px] sm:text-[22px] font-semibold leading-tight tracking-tight text-primary [overflow-wrap:anywhere] truncate",
                   markerTitleClass(view)
                 )}
               >
@@ -191,7 +182,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
             <div className="flex flex-col items-start pt-1.5 gap-4 w-full">
               {/* Description */}
               {option.description ? (
-                <p className="text-[15px] leading-[23px] text-muted-foreground dark:text-[#A1A1AB] font-normal [overflow-wrap:anywhere] line-clamp-3">
+                <p className="text-[15px] leading-[23px] text-muted-foreground font-normal [overflow-wrap:anywhere] line-clamp-3">
                   {option.description}
                 </p>
               ) : null}
@@ -216,7 +207,7 @@ export const OptionRow: React.FC<OptionRowProps> = ({
                   )}
                 </TimeTooltip>
                 <TimeTooltip text={timeTexts?.average} focusable>
-                  <span className="rounded text-xs leading-4 text-muted-foreground dark:text-[#A1A1AB] tabular-nums font-normal pl-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className="rounded text-xs leading-4 text-muted-foreground tabular-nums font-normal pl-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     {averageGrade !== undefined && gradeCount > 0
                       ? `${averageGrade.toFixed(1)} avg · ${gradeCount} ${gradeCount === 1 ? "rating" : "ratings"}`
                       : "No ratings yet"}
@@ -231,41 +222,40 @@ export const OptionRow: React.FC<OptionRowProps> = ({
         {/* Right side actions container */}
         <div className="flex flex-row sm:flex-col items-start pt-1 sm:pt-2 gap-2 shrink-0">
           {/* Details button */}
-          <button
+          <Button
             type="button"
-            className="flex flex-row items-center px-2 gap-1.5 h-7 rounded-lg text-xs leading-4 text-[#0066CC] dark:text-[#0B84FE] hover:bg-[#0B84FE]/10 transition-colors pointer-coarse:h-9"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs leading-4 text-primary hover:bg-primary/10 hover:text-primary gap-1.5 pointer-coarse:h-9"
             onClick={() => setLightboxOpen(true)}
             aria-label={`Details for ${option.title}`}
           >
-            <Info className="h-3.5 w-3.5 text-[#0066CC] dark:text-[#0B84FE]" aria-hidden="true" />
+            <Info className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
             <span>Details</span>
             {option.pros.length > 0 && (
               <span className="text-success tabular-nums font-normal">+{option.pros.length}</span>
             )}
             {option.cons.length > 0 && (
-              <span className="text-rose-700 dark:text-[#FF547B] tabular-nums font-normal">
+              <span className="text-destructive tabular-nums font-normal">
                 −{option.cons.length}
               </span>
             )}
-          </button>
+          </Button>
 
           {/* Comment button */}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={cn(
-              "flex flex-row items-center px-2 gap-1.5 h-7 rounded-lg text-xs leading-4 transition-colors pointer-coarse:h-9",
-              "text-muted-foreground hover:bg-accent hover:text-foreground",
-              "dark:text-[#A1A1AB] dark:hover:bg-white/5 dark:hover:text-white",
-              commentsOpen && "bg-accent text-foreground dark:bg-white/10 dark:text-white"
+              "h-7 px-2 text-xs leading-4 gap-1.5 pointer-coarse:h-9 text-muted-foreground hover:bg-accent hover:text-foreground",
+              commentsOpen && "bg-accent text-foreground"
             )}
             aria-expanded={commentsOpen}
             aria-controls={commentsId}
             onClick={() => setCommentsOpen((o) => !o)}
           >
-            <MessageSquare
-              className="h-3.5 w-3.5 text-muted-foreground dark:text-[#A1A1AB]"
-              aria-hidden="true"
-            />
+            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
             <span>
               {commentCount > 0
                 ? `${commentCount} comment${commentCount === 1 ? "" : "s"}`
@@ -273,12 +263,12 @@ export const OptionRow: React.FC<OptionRowProps> = ({
             </span>
             <ChevronDown
               className={cn(
-                "h-3 w-3 text-muted-foreground dark:text-[#A1A1AB] transition-transform motion-reduce:transition-none",
+                "h-3 w-3 text-muted-foreground transition-transform motion-reduce:transition-none",
                 commentsOpen && "rotate-180"
               )}
               aria-hidden="true"
             />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -288,7 +278,8 @@ export const OptionRow: React.FC<OptionRowProps> = ({
       {commentsOpen && (
         <div
           id={commentsId}
-          className="mt-4 w-full rounded-xl bg-muted/30 dark:bg-black/40 p-3.5 border border-border"
+          data-card-ignore
+          className="mt-4 w-full rounded-xl bg-muted/30 p-3.5 border border-border"
         >
           {comments}
         </div>
@@ -408,13 +399,13 @@ function OptionLightbox({
         {/* Score & Rating Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-4 bg-card border-b border-border">
           <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold text-xl border border-amber-500/20 tabular-nums">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rating/10 text-rating font-bold text-xl border border-rating/20 tabular-nums">
               {averageGrade !== undefined && gradeCount > 0 ? averageGrade.toFixed(1) : "—"}
             </div>
             <div className="space-y-0.5">
               <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                 <span>Average Score</span>
-                <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
+                <Star className="h-4 w-4 fill-rating text-rating" aria-hidden="true" />
               </div>
               <TimeTooltip text={timeTexts?.average} focusable side="bottom">
                 <p className="w-fit rounded text-xs text-muted-foreground tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -469,16 +460,13 @@ function OptionLightbox({
           {(option.pros.length > 0 || option.cons.length > 0) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Pros */}
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+              <div className="rounded-xl border border-success/20 bg-success/5 p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold text-sm">
+                  <div className="flex items-center gap-2 text-success font-semibold text-sm">
                     <ThumbsUp className="h-4 w-4" aria-hidden="true" />
                     <span>Pros</span>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs"
-                  >
+                  <Badge variant="outline" className="border-success/30 text-success text-xs">
                     {option.pros.length}
                   </Badge>
                 </div>
@@ -486,7 +474,7 @@ function OptionLightbox({
                   <ul className="space-y-2">
                     {option.pros.map((pro) => (
                       <li key={pro} className="flex items-start gap-2.5 text-sm text-foreground/90">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 mt-0.5">
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success mt-0.5">
                           <Plus className="h-3 w-3" aria-hidden="true" />
                         </div>
                         <span className="leading-snug">{pro}</span>
@@ -499,15 +487,15 @@ function OptionLightbox({
               </div>
 
               {/* Cons */}
-              <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 space-y-3">
+              <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-semibold text-sm">
+                  <div className="flex items-center gap-2 text-destructive font-semibold text-sm">
                     <ThumbsDown className="h-4 w-4" aria-hidden="true" />
                     <span>Cons</span>
                   </div>
                   <Badge
                     variant="outline"
-                    className="border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs"
+                    className="border-destructive/30 text-destructive text-xs"
                   >
                     {option.cons.length}
                   </Badge>
@@ -516,7 +504,7 @@ function OptionLightbox({
                   <ul className="space-y-2">
                     {option.cons.map((con) => (
                       <li key={con} className="flex items-start gap-2.5 text-sm text-foreground/90">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 mt-0.5">
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-destructive/20 text-destructive mt-0.5">
                           <Minus className="h-3 w-3" aria-hidden="true" />
                         </div>
                         <span className="leading-snug">{con}</span>

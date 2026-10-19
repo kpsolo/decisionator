@@ -27,6 +27,7 @@ function viewCtx(
     viewerId: "gina",
     surface,
     values: seen === undefined ? {} : { seen },
+    valueMeta: {},
     settings: {},
     setValue: async (key, value) => {
       writes.push([key, value]);

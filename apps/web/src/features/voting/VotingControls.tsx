@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Card, CardContent } from "../../components/ui/card.js";
+import { NativeSelect } from "../../components/ui/native-select.js";
+import { toast } from "../../components/ui/use-toast.js";
 
 export interface VotingControlsProps {
   voting?: Project["voting"];
@@ -30,6 +32,14 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
 
   const isOpen = currentVoting.state === "open";
 
+  // The handlers reject when the change was not saved; say so instead of failing silently.
+  const report = (title: string, err: unknown) =>
+    toast({
+      title,
+      description: err instanceof Error ? err.message : String(err),
+      variant: "destructive",
+    });
+
   const handleToggleState = async () => {
     try {
       setLoading(true);
@@ -43,6 +53,8 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
           liveResults,
         });
       }
+    } catch (err) {
+      report(isOpen ? "Could not close voting" : "Could not open the next round", err);
     } finally {
       setLoading(false);
     }
@@ -56,6 +68,8 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
         topN,
         liveResults,
       });
+    } catch (err) {
+      report("Voting settings not saved", err);
     } finally {
       setLoading(false);
     }
@@ -104,18 +118,18 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
               <label htmlFor="top-n-select" className="font-medium text-foreground">
                 Top N:
               </label>
-              <select
+              <NativeSelect
                 id="top-n-select"
                 value={topN}
                 onChange={(e) => setTopN(Number(e.target.value))}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-8 text-xs font-medium"
               >
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer font-medium text-foreground select-none">
@@ -123,7 +137,7 @@ export const VotingControls: React.FC<VotingControlsProps> = ({
                 type="checkbox"
                 checked={liveResults}
                 onChange={(e) => setLiveResults(e.target.checked)}
-                className="rounded border-input text-primary focus:ring-ring h-4 w-4"
+                className="h-4 w-4 rounded border-input accent-primary"
               />
               <span>Show live rankings during voting</span>
             </label>

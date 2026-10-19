@@ -12,6 +12,7 @@ describe("Agent API Live Session & Moderation Contract Tests (User Story 6)", ()
   let grantManager: GrantManager;
   let stateStore: AgentStateStore;
   let app: ReturnType<typeof createNodeApp>["app"];
+  const OWNER_TOKEN = "owner-token-for-tests-0123456789abcdef";
 
   const sampleLiveSession = {
     hosting: true,
@@ -41,7 +42,7 @@ describe("Agent API Live Session & Moderation Contract Tests (User Story 6)", ()
     auditLog = new AuditLog();
     grantManager = new GrantManager(auditLog);
     stateStore = new AgentStateStore();
-    const node = createNodeApp({ grantManager, stateStore });
+    const node = createNodeApp({ grantManager, stateStore, ownerToken: OWNER_TOKEN });
     app = node.app;
 
     stateStore.setProject("proj_1", {
@@ -165,15 +166,20 @@ describe("Agent API Live Session & Moderation Contract Tests (User Story 6)", ()
     expect(proposedEvent).toBeDefined();
     expect(proposedEvent?.details.action).toBe("drop_votes");
 
-    // Decision lifecycle: Owner accepts the proposal
-    const decisionRes = await app.request(`/api/v1/live-session/proposals/${result.id}/decision`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ decision: "accepted" }),
-    });
+    // The agent cannot decide its own proposal (Constitution IV: agents only propose).
+    const decide = (bearer: string, projectId = "proj_1") =>
+      app.request(`/api/v1/live-session/proposals/${result.id}/decision?projectId=${projectId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "accepted" }),
+      });
+    const agentDecision = await decide(token);
+    expect(agentDecision.status).toBe(403);
+    expect((await agentDecision.json()).error).toBe("NOT_PERMITTED_FOR_AGENTS");
+    expect(stateStore.getPendingProposals("proj_1")).toHaveLength(1);
+
+    // Decision lifecycle: the owner accepts the proposal with the owner token.
+    const decisionRes = await decide(OWNER_TOKEN);
     expect(decisionRes.status).toBe(200);
 
     const acceptedEvent = auditLog.getEvents().find((e) => e.type === "agent_moderation_accepted");

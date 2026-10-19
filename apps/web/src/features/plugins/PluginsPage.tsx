@@ -310,7 +310,7 @@ export function PluginsPage() {
                           if (updatedRecord) setReviewingPermsPlugin({ ...updatedRecord });
                           refreshPlugins();
                         }}
-                        className="rounded border-border text-primary focus:ring-ring"
+                        className="h-4 w-4 rounded border-border accent-primary"
                       />
                       <span className="font-mono text-foreground font-medium">{perm}</span>
                     </label>
@@ -475,7 +475,7 @@ export function PluginsPage() {
                               type="checkbox"
                               checked={selectedPermissions.includes(perm)}
                               onChange={() => togglePermission(perm)}
-                              className="rounded border-border text-primary focus:ring-ring"
+                              className="h-4 w-4 rounded border-border accent-primary"
                             />
                             <span className="font-mono text-foreground">{perm}</span>
                           </label>

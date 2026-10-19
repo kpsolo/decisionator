@@ -13,8 +13,28 @@ import {
 } from "@decisionator/core";
 import { z } from "zod";
 
+/** Limits on agent input (agentic API 1.3.0). Body sizes are UTF-8 bytes, not characters. */
+export const CONTRIBUTION_BODY_MAX_BYTES = 65536;
+export const AGENT_NAME_MAX_LENGTH = 100;
+export const CONTRIBUTION_POINT_MAX_LENGTH = 2000;
+export const SUMMARY_MAX_LENGTH = 4000;
+export const LIVE_SESSION_MAX_PARTICIPANTS = 500;
+/** Largest request body the REST and MCP endpoints read. */
+export const REQUEST_BODY_MAX_BYTES = 1024 * 1024;
+
+/** Size of a string as UTF-8, which is what the byte limits count. */
+export function utf8Bytes(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+/** A self-declared agent name (`agent_hello`, `X-Agent-Name`). */
+export const AgentNameSchema = z.string().trim().min(1).max(AGENT_NAME_MAX_LENGTH);
+
+/** One pro or con of a contribution. */
+const ContributionPointSchema = z.string().max(CONTRIBUTION_POINT_MAX_LENGTH);
+
 export const AgentHelloInputSchema = z.object({
-  agentName: z.string().optional(),
+  agentName: AgentNameSchema.optional(),
 });
 export type AgentHelloInput = z.infer<typeof AgentHelloInputSchema>;
 
@@ -73,9 +93,9 @@ export type ListContributionsOutput = z.infer<typeof ListContributionsOutputSche
 export const AddContributionInputSchema = z.object({
   target: TargetRefSchema.optional(),
   type: ContributionTypeSchema,
-  body: z.string().max(65536),
-  pros: z.array(z.string()).max(50).optional(),
-  cons: z.array(z.string()).max(50).optional(),
+  body: z.string().max(CONTRIBUTION_BODY_MAX_BYTES),
+  pros: z.array(ContributionPointSchema).max(50).optional(),
+  cons: z.array(ContributionPointSchema).max(50).optional(),
   sources: z.array(SourceRefSchema).max(20).optional(),
 });
 export type AddContributionInput = z.infer<typeof AddContributionInputSchema>;
@@ -88,9 +108,9 @@ export type AddContributionOutput = z.infer<typeof AddContributionOutputSchema>;
 
 export const UpdateContributionInputSchema = z.object({
   id: z.string(),
-  body: z.string().max(65536).optional(),
-  pros: z.array(z.string()).max(50).optional(),
-  cons: z.array(z.string()).max(50).optional(),
+  body: z.string().max(CONTRIBUTION_BODY_MAX_BYTES).optional(),
+  pros: z.array(ContributionPointSchema).max(50).optional(),
+  cons: z.array(ContributionPointSchema).max(50).optional(),
   sources: z.array(SourceRefSchema).max(20).optional(),
 });
 export type UpdateContributionInput = z.infer<typeof UpdateContributionInputSchema>;
@@ -141,7 +161,7 @@ export const SetOptionPropertyOutputSchema = PropertyValueSchema;
 export type SetOptionPropertyOutput = z.infer<typeof SetOptionPropertyOutputSchema>;
 
 export const CompleteRequestInputSchema = z.object({
-  summary: z.string().optional(),
+  summary: z.string().max(SUMMARY_MAX_LENGTH).optional(),
 });
 export type CompleteRequestInput = z.infer<typeof CompleteRequestInputSchema>;
 
@@ -152,8 +172,8 @@ export const CompleteRequestOutputSchema = z.object({
 export type CompleteRequestOutput = z.infer<typeof CompleteRequestOutputSchema>;
 
 export const LiveParticipantProfileSchema = z.object({
-  participantId: z.string(),
-  name: z.string(),
+  participantId: z.string().min(1).max(200),
+  name: z.string().max(200),
   isHost: z.boolean(),
   online: z.boolean(),
   gradeCount: z.number().int().nonnegative(),
@@ -169,9 +189,24 @@ export const GetLiveSessionOutputSchema = z.object({
 });
 export type GetLiveSessionOutput = z.infer<typeof GetLiveSessionOutputSchema>;
 
+/** Owner bridge: body of `PUT /live-session` (`null` ends the session). */
+export const LiveSessionDataSchema = z
+  .object({
+    hosting: z.boolean(),
+    readOnly: z.boolean(),
+    revoked: z.boolean(),
+    participants: z.array(LiveParticipantProfileSchema).max(LIVE_SESSION_MAX_PARTICIPANTS),
+  })
+  .nullable();
+
+/** Owner bridge: body of `POST /live-session/proposals/{id}/decision`. */
+export const ProposalDecisionBodySchema = z.object({
+  decision: z.enum(["accepted", "dismissed"]),
+});
+
 export const ProposeModerationBodySchema = z.object({
   action: z.enum(["drop_votes", "set_read_only", "allow_contributions", "revoke_link"]),
-  participant: z.string().optional(),
+  participant: z.string().max(200).optional(),
   reason: z.string().min(1).max(500),
 });
 export type ProposeModerationBody = z.infer<typeof ProposeModerationBodySchema>;

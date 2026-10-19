@@ -36,6 +36,18 @@ export function DecidedBy({ snapshot }: { snapshot: Pick<ProjectSnapshot, "proje
 }
 
 /**
+ * Settings with the owner's pick set to `pick`; an empty pick ("Choose when closing") removes a
+ * previous pick instead of keeping it.
+ */
+export function withOwnerPick(
+  settings: Record<string, unknown>,
+  pick: string
+): Record<string, unknown> {
+  const { pick: _previous, ...rest } = settings;
+  return pick ? { ...rest, pick } : rest;
+}
+
+/**
  * Owner's choice of the project's decision method and its settings (FR-035). Changing it while
  * people have voted asks for confirmation first.
  */
@@ -144,9 +156,7 @@ export function DecisionMethodPicker({
               id={pickId}
               value={typeof settings.pick === "string" ? settings.pick : ""}
               wrapperClassName="w-full"
-              onChange={(e) =>
-                setSettings({ ...settings, ...(e.target.value ? { pick: e.target.value } : {}) })
-              }
+              onChange={(e) => setSettings(withOwnerPick(settings, e.target.value))}
             >
               <option value="">Choose when closing</option>
               {activeOptions.map((o) => (

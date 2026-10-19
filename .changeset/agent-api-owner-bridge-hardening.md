@@ -1,0 +1,5 @@
+---
+"@decisionator/node": minor
+---
+
+Agent API 1.3.0 (security hardening). The owner bridge (`PUT /live-session`, `GET /live-session/proposals`, `POST /live-session/proposals/{id}/decision`) now takes a separate owner token (`ownerToken` option or `DECISIONATOR_OWNER_TOKEN`, otherwise generated and returned by `createNodeApp`/`startNodeServer`) plus a `projectId` query parameter; agent grant tokens get 403 `NOT_PERMITTED_FOR_AGENTS`, so agents can no longer accept or dismiss moderation proposals, and a proposal is decided only within its own project. `get_live_session` needs `read` on the whole project, and `propose_moderation` rejects participants that are not the grant's pseudonyms. Contributions are stored in the grant's project instead of being looked up by target id. `X-Agent-Name` is applied only after the grant check and capped at 100 characters; contribution bodies are measured in UTF-8 bytes; pros/cons, completion summaries and request bodies (1 MB) are limited; malformed `complete_request` and live-session bodies return 400.

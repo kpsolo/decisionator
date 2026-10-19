@@ -3,7 +3,7 @@ import type { Option, OutcomeRecord, Project } from "@decisionator/core";
 import type { ProjectRef, ProjectSnapshot, ProjectStore } from "@decisionator/plugin-sdk";
 import { CheckCircle2, Play, Sparkles } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -15,12 +15,27 @@ import {
   CardTitle,
 } from "../../components/ui/card.js";
 import { NativeSelect } from "../../components/ui/native-select.js";
-import { BUILTIN_STRATEGIES, type StrategyDescriptor } from "./strategies.js";
+import { getInstalledPlugins } from "../plugins/plugin-registry.js";
+import { type StrategyDescriptor, enabledStrategies } from "./strategies.js";
 
 export { BUILTIN_STRATEGIES, strategyName } from "./strategies.js";
 export type { StrategyDescriptor } from "./strategies.js";
 
 const DEFAULT_STRATEGY_ID = "org.decisionator.strategy.random";
+
+/**
+ * The strategy selected at first: the one in force (the latest outcome's) when it is available,
+ * else the default, else the first available one. Disabled strategies are never selected.
+ */
+export function initialStrategyId(
+  available: Pick<StrategyDescriptor, "id">[],
+  currentId: string | undefined
+): string {
+  const has = (id: string | undefined) => !!id && available.some((s) => s.id === id);
+  if (has(currentId)) return currentId as string;
+  if (has(DEFAULT_STRATEGY_ID)) return DEFAULT_STRATEGY_ID;
+  return available[0]?.id ?? "";
+}
 
 export interface StrategyChooserProps {
   snapshot: ProjectSnapshot;
@@ -40,13 +55,15 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
   isOwner,
   onOutcomeCreated,
 }) => {
-  // Start from the ranking system currently in force (the latest outcome's), if built in.
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string>(() => {
-    const current = latestOutcome(snapshot.outcomes, snapshot.project.voting?.round)?.strategy.id;
-    return BUILTIN_STRATEGIES.some((s) => s.id === current) && current
-      ? current
-      : DEFAULT_STRATEGY_ID;
-  });
+  // Only strategies whose plugin is enabled can be chosen or run.
+  const available = useMemo(() => enabledStrategies(getInstalledPlugins()), []);
+  // Start from the ranking system currently in force (the latest outcome's), if available.
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string>(() =>
+    initialStrategyId(
+      available,
+      latestOutcome(snapshot.outcomes, snapshot.project.voting?.round)?.strategy.id
+    )
+  );
   const [selectedOptionId, setSelectedOptionId] = useState<string>(snapshot.options[0]?.id || "");
   const [includeUngraded, setIncludeUngraded] = useState<boolean>(false);
   const [running, setRunning] = useState(false);
@@ -54,7 +71,7 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const activeOptions = snapshot.options.filter((o) => o.status === "active");
-  const selectedDescriptor = BUILTIN_STRATEGIES.find((s) => s.id === selectedStrategyId);
+  const selectedDescriptor = available.find((s) => s.id === selectedStrategyId);
 
   // Check preconditions in real-time
   const checkPreconditions = (desc: StrategyDescriptor): { ok: boolean; reason?: string } => {
@@ -161,7 +178,12 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
           <legend className="mb-2 text-sm font-semibold text-foreground">
             Available Strategies
           </legend>
-          {BUILTIN_STRATEGIES.map((desc) => {
+          {available.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No decision strategy is enabled. Enable one on the Plugins page.
+            </p>
+          )}
+          {available.map((desc) => {
             const preCheck = checkPreconditions(desc);
             const isSelected = selectedStrategyId === desc.id;
 

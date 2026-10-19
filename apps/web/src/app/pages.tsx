@@ -30,6 +30,8 @@ import { ShareDialog } from "../features/sharing/ShareDialog.js";
 import { RankBallot } from "../features/voting/RankBallot.js";
 import { ResultsView } from "../features/voting/ResultsView.js";
 import { VotingControls } from "../features/voting/VotingControls.js";
+import { closeVotingWithOutcome, errorMessage } from "./project-actions.js";
+import { useProjectSnapshot } from "./useProjectSnapshot.js";
 
 /** Shared page heading: title, subtitle and right-aligned actions that wrap on narrow screens. */
 function PageHeader({
@@ -142,28 +144,11 @@ export function ProjectStatsPage() {
 
 export function ProjectVotePage() {
   const { projectId: fileId, projectRef, store, baseUrl } = useProjectStore();
-  const [snapshot, setSnapshot] = React.useState<ProjectSnapshot | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [currentUser, setCurrentUser] = React.useState("");
-
-  React.useEffect(() => {
-    if (!fileId) return;
-    async function load() {
-      try {
-        setLoading(true);
-        const identity = await store.signIn({ interactive: false });
-        setCurrentUser(identity.participantId);
-        const snap = await store.openProject(projectRef);
-        setSnapshot(snap);
-      } catch (err: unknown) {
-        setLoadError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [fileId, store, projectRef]);
+  const { snapshot, setSnapshot, loading, loadError, currentUser } = useProjectSnapshot(
+    fileId,
+    store,
+    projectRef
+  );
 
   const myGradesMap = React.useMemo(() => {
     const map = new Map<string, number>();
@@ -193,10 +178,24 @@ export function ProjectVotePage() {
     (r) => r.by === currentUser && (r.round ?? 1) === currentRound
   );
 
+  // RankBallot leaves reporting to its caller: say why the ballot was not saved, then rethrow so
+  // it does not claim success.
   const handleSubmitBallot = async (ranking: string[]) => {
-    await store.append(projectRef, [{ kind: "ranking", ranking, round: currentRound }]);
-    const updated = await store.openProject(projectRef);
-    setSnapshot(updated);
+    try {
+      await store.append(projectRef, [{ kind: "ranking", ranking, round: currentRound }]);
+    } catch (err) {
+      toast({
+        title: "Ballot not saved",
+        description: errorMessage(err),
+        variant: "destructive",
+      });
+      throw err;
+    }
+    try {
+      setSnapshot(await store.openProject(projectRef));
+    } catch {
+      // The ballot is saved; the page refreshes on the next load.
+    }
     toast({
       title: "Ballot recorded",
       description: `Your ranked preferences for Round ${currentRound} have been saved.`,
@@ -241,22 +240,14 @@ export function ProjectVotePage() {
       usesRandomness: chosen.descriptor.usesRandomness,
     });
 
-    // Close voting state
-    const nextVoting = {
-      ...(snapshot.project.voting ?? {
-        state: "open" as const,
-        round: 1,
-        topN: 3,
-        liveResults: true,
-      }),
-      state: "closed" as const,
-    };
-
-    await store.updateMeta(projectRef, { voting: nextVoting });
-    await store.append(projectRef, [{ kind: "outcome", outcome }]);
-
-    const updated = await store.openProject(projectRef);
-    setSnapshot(updated);
+    // Closes voting and records the outcome; reopens voting if the outcome cannot be saved.
+    // Errors reach VotingControls, which reports them.
+    await closeVotingWithOutcome(store, projectRef, snapshot.project.voting, outcome);
+    try {
+      setSnapshot(await store.openProject(projectRef));
+    } catch {
+      // Voting is closed and the outcome saved; the page refreshes on the next load.
+    }
   };
 
   return (
@@ -327,28 +318,11 @@ export function ProjectVotePage() {
 
 export function ProjectResultsPage() {
   const { projectId: fileId, projectRef, store, baseUrl } = useProjectStore();
-  const [snapshot, setSnapshot] = React.useState<ProjectSnapshot | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [currentUser, setCurrentUser] = React.useState("");
-
-  React.useEffect(() => {
-    if (!fileId) return;
-    async function load() {
-      try {
-        setLoading(true);
-        const identity = await store.signIn({ interactive: false });
-        setCurrentUser(identity.participantId);
-        const snap = await store.openProject(projectRef);
-        setSnapshot(snap);
-      } catch (err: unknown) {
-        setLoadError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [fileId, store, projectRef]);
+  const { snapshot, setSnapshot, loading, loadError, currentUser } = useProjectSnapshot(
+    fileId,
+    store,
+    projectRef
+  );
 
   if (loadError) {
     return <ProjectUnavailable reason="not_found" details={loadError} />;
@@ -427,10 +401,9 @@ export function ProjectResultsPage() {
             currentUser={currentUser}
             isOwner={true}
             onOutcomeCreated={(newOutcome) => {
-              setSnapshot({
-                ...snapshot,
-                outcomes: [...snapshot.outcomes, newOutcome],
-              });
+              setSnapshot((current) =>
+                current ? { ...current, outcomes: [...current.outcomes, newOutcome] } : current
+              );
             }}
           />
         )}

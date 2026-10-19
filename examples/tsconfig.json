@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "types": ["vitest/globals"],
+    "paths": {
+      "@decisionator/core": ["../packages/core/src/index.ts"],
+      "@decisionator/plugin-sdk": ["../packages/plugin-sdk/src/index.ts"],
+      "@decisionator/plugin-sdk/testing": ["../packages/plugin-sdk/testing/index.ts"]
+    }
+  },
+  "include": ["*/src/**/*", "*/test/**/*", "*/decisionator-plugin.json"]
+}

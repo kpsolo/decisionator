@@ -1,4 +1,4 @@
-# Contract: Agentic API — v1.1.0
+# Contract: Agentic API — v1.3.0
 
 > **Scope: post-MVP (US5).** The MVP supports agents only through the copy-paste [format instruction](./format-instruction.md).
 
@@ -21,7 +21,11 @@ same Zod schemas, so they stay in parity (Principle IV, FR-040).
   `message`. Refused writes outside the scope are appended to the project's `auditLog` (FR-044,
   US5 #4).
 - The agent sets its self-declared name once, through `agent_hello`, or per call with the
-  `X-Agent-Name` header. That name is stored in `ActorRef.agentName`.
+  `X-Agent-Name` header. That name is stored in `ActorRef.agentName`. It is 1–100 characters
+  (otherwise 400 `INVALID_PARAMS`) and is applied only after the call's grant check passed, so a
+  refused, revoked or expired grant is never renamed (1.3.0).
+- Agent grant tokens never act as the owner: the [owner bridge](#owner-bridge-130) takes a
+  separate owner token (1.3.0).
 
 ## Operations
 
@@ -37,9 +41,34 @@ same Zod schemas, so they stay in parity (Principle IV, FR-040).
 | `complete_request` | `POST /complete` | any | `{summary?}`. Marks the request `completed`, and the grant stops accepting writes. |
 | `get_option_properties` | `GET /properties` | `read` | `{optionProperties, properties}`: the property declarations of enabled plugins and the effective shared values of the options in scope. |
 | `set_option_property` | `PUT /options/{optionId}/properties/{plugin}/{key}` | `contribute` | Body `{value}` (MCP: `{optionId, plugin, key, value}`). Sets a **shared** property value; `null` clears it. Result: the stored `PropertyValue`. |
+| `get_live_session` | `GET /live-session` | `read`, project target | `{hosting, readOnly, revoked, participants}` with per-grant pseudonymous `participantId`s; 404 `NOT_HOSTING` when no tab hosts. Grants without `read` or scoped to an option or idea get 403 (1.3.0; the roster names people). |
+| `propose_moderation` | `POST /live-session/proposals` | `moderate_session` | `{action, participant?, reason}`. `participant` must be a pseudonym this grant got from `get_live_session`; anything else is 400 `INVALID_PARAMS` (1.3.0). Creates a pending proposal only; the owner decides. |
 
-**No operation** exists to record outcomes, cast ballots, delete content, change sharing or read
-outside the scope (FR-044). Asking for any of these returns `403 NOT_PERMITTED_FOR_AGENTS`.
+Contributions are stored in the grant's project; the target only says what they are about
+(1.3.0).
+
+**No operation** exists to record outcomes, cast ballots, delete content, change sharing, decide
+moderation proposals or read outside the scope (FR-044). Asking for any of these returns
+`403 NOT_PERMITTED_FOR_AGENTS`.
+
+## Owner bridge (1.3.0)
+
+The owner's hosting tab pushes the live-session summary and decides moderation proposals over
+REST. These routes are not agent operations (they are not MCP tools and not in the OpenAPI
+document) and take the **owner token**, never a grant token:
+
+| REST | Description |
+|------|-------------|
+| `PUT /live-session?projectId=<id>` | Body: the session summary (`{hosting, readOnly, revoked, participants[≤500]}`, validated) or `null` to end it. 400 on a malformed body. |
+| `GET /live-session/proposals?projectId=<id>` | `{proposals}` of that project. |
+| `POST /live-session/proposals/{id}/decision?projectId=<id>` | `{decision: "accepted" \| "dismissed"}`. Only a proposal of that project; otherwise 404. Audited as `agent_moderation_accepted` / `agent_moderation_dismissed`. |
+
+- `Authorization: Bearer <owner-token>`. The token is configured when the node starts
+  (`ownerToken` option or `DECISIONATOR_OWNER_TOKEN`, at least 32 characters); without one the
+  node generates a random token and returns it to the process that started it, which hands it
+  to the owner's app only.
+- An agent grant token gets 403 `NOT_PERMITTED_FOR_AGENTS` (audited as
+  `agent_refused_permission`, reason `owner_only`); any other token gets 401 `UNAUTHORIZED`.
 
 ### `add_contribution` input schema (excerpt)
 
@@ -96,7 +125,11 @@ exposed to agents.
 
 | Limit | Value | Error |
 |-------|-------|-------|
-| Contribution body | 64 KB | 413 `TOO_LARGE` |
+| Contribution body | 64 KB (65 536 bytes as UTF-8) | 413 `TOO_LARGE` |
+| Each pro or con of a contribution | 2 000 characters | 400 `INVALID_PARAMS` |
+| Agent name (`agent_hello`, `X-Agent-Name`) | 100 characters | 400 `INVALID_PARAMS` |
+| `complete_request` summary | 4 000 characters; body must be an object | 400 `INVALID_PARAMS` |
+| Request body (REST and MCP) | 1 MB | 413 `TOO_LARGE` |
 | Sources per contribution | 20 | 400 `INVALID_PARAMS` |
 | Contributions per request | 50 | 409 `LIMIT_REACHED` |
 | Calls per minute per grant | 60 | 429 `RATE_LIMITED` |
@@ -130,5 +163,7 @@ is the only secret in the brief. It is scoped, expires and can be revoked (FR-04
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.3.0 (unreleased) | 2026-10-19 | Owner bridge takes a separate owner token (agents get 403) and a `projectId`; proposals are decided only within their project. `get_live_session` needs `read` on the whole project. `propose_moderation` rejects participants that are not this grant's pseudonyms. Contributions are stored in the grant's project. `X-Agent-Name` is applied only after authorization and capped at 100 characters; contribution bodies are measured in UTF-8 bytes; pros/cons, summaries and request bodies have limits; malformed `complete_request` and live-session bodies get 400 |
+| 1.2.0 (unreleased) | — | `get_live_session`, `propose_moderation` and the `moderate_session` permission ([session-restore § 8](../../006-restore-shared-sessions/contracts/session-restore.md)) |
 | 1.1.0 (unreleased) | 2026-10-07 | `get_context` also returns `optionProperties` and shared `properties`. New `get_option_properties` (`GET /properties`) and `set_option_property` (`PUT /options/{optionId}/properties/{plugin}/{key}`, `contribute`): shared values only, checked with `checkPropertyValue`, attributed to the agent, audited as `agent_property_set` (005 FR-017) |
 | 1.0.0 | — | Initial contract |

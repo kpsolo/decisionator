@@ -1,7 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GrantManager } from "./grants.js";
-import { agentOptionProperties, agentSetOptionProperty } from "./rest.js";
+import {
+  CONTRIBUTION_TOO_LARGE_MESSAGE,
+  agentOptionProperties,
+  agentSetOptionProperty,
+  authorizeLiveSessionRead,
+  contributionBodyTooLarge,
+} from "./rest.js";
 import {
   AGENT_RULES_TEXT,
   AddContributionInputSchema,
@@ -25,7 +31,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   const { grantManager, stateStore } = options;
   const server = new McpServer({
     name: "decisionator-agent-mcp",
-    version: "1.2.0",
+    version: "1.3.0",
   });
 
   const getToken = (extra: unknown): string => {
@@ -195,13 +201,11 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         };
       }
 
-      // Check limits
-      if (args.body.length > 65536) {
+      // Check limits (bytes as UTF-8, as the contract counts them)
+      if (contributionBodyTooLarge(args.body)) {
         return {
           isError: true,
-          content: [
-            { type: "text", text: "[413] TOO_LARGE: Contribution body exceeds 64 KB limit" },
-          ],
+          content: [{ type: "text", text: `[413] TOO_LARGE: ${CONTRIBUTION_TOO_LARGE_MESSAGE}` }],
         };
       }
       if (args.sources && args.sources.length > 20) {
@@ -235,7 +239,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
             ? effectiveTarget.ideaId
             : auth.grant.projectId;
 
-      const newContrib = stateStore.addContribution(auth.grant.id, {
+      const newContrib = stateStore.addContribution(auth.grant.id, auth.grant.projectId, {
         id: `contrib_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         at: new Date().toISOString(),
         by: `agent:${auth.grant.agentName || "unnamed"}`,
@@ -282,12 +286,10 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         };
       }
 
-      if (args.body && args.body.length > 65536) {
+      if (contributionBodyTooLarge(args.body)) {
         return {
           isError: true,
-          content: [
-            { type: "text", text: "[413] TOO_LARGE: Contribution body exceeds 64 KB limit" },
-          ],
+          content: [{ type: "text", text: `[413] TOO_LARGE: ${CONTRIBUTION_TOO_LARGE_MESSAGE}` }],
         };
       }
       if (args.sources && args.sources.length > 20) {
@@ -465,11 +467,11 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   // 9. get_live_session
   server.tool(
     "get_live_session",
-    "Inspects active shared session for participant roster, connection health, and deliberation status.",
+    "Inspects active shared session for participant roster, connection health, and deliberation status. Needs read on the whole project.",
     {},
     async (_args, extra) => {
       const token = getToken(extra);
-      const auth = grantManager.verifyAccess(token, null);
+      const auth = authorizeLiveSessionRead(grantManager, token);
       if (!auth.valid || !auth.grant) {
         return {
           isError: true,
@@ -546,6 +548,17 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         auth.grant.agentName || "Agent",
         parsed.data
       );
+      if (!proposal) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "[400] INVALID_PARAMS: Unknown participant: use a participantId from get_live_session",
+            },
+          ],
+        };
+      }
       grantManager.recordAudit("agent_moderation_proposed", {
         grantId: auth.grant.id,
         proposalId: proposal.id,

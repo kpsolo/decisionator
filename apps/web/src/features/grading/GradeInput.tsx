@@ -76,9 +76,7 @@ export const GradeInput: React.FC<GradeInputProps> = ({
                 className={cn(
                   "transition-colors",
                   size === "sm" ? "h-4 w-4" : size === "lg" ? "h-6 w-6" : "h-5 w-5",
-                  isLit
-                    ? "fill-rating text-rating"
-                    : "text-muted-foreground/50 dark:text-[#A1A1AB]/70",
+                  isLit ? "fill-rating text-rating" : "text-muted-foreground/50",
                   // Hover preview reads lighter than a committed rating.
                   isLit && hovered !== null && !disabled && "opacity-80"
                 )}

@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog.js";
 import { Input } from "../../components/ui/input.js";
+import { NativeSelect } from "../../components/ui/native-select.js";
 import { cn } from "../../lib/utils.js";
 import { TimeTooltip } from "../history/TimeTooltip.js";
 import {
@@ -60,20 +61,20 @@ const ICONS: Record<IconName, LucideIcon> = {
 
 const TONE_TEXT: Record<Tone, string> = {
   neutral: "border-border text-foreground",
-  info: "border-sky-600/40 text-sky-800 dark:text-sky-300",
-  success: "border-emerald-600/40 text-emerald-800 dark:text-emerald-300",
-  warning: "border-amber-600/40 text-amber-900 dark:text-amber-300",
-  danger: "border-rose-600/40 text-rose-800 dark:text-rose-300",
-  primary: "border-primary/40 text-[#0066CC] dark:text-[#0B84FE]",
+  info: "border-primary/40 text-primary",
+  success: "border-success/40 text-success",
+  warning: "border-warning/40 text-warning",
+  danger: "border-destructive/40 text-destructive",
+  primary: "border-primary/40 text-primary",
 };
 
 const TONE_FILL: Record<Tone, string> = {
   neutral: "bg-muted-foreground",
-  info: "bg-sky-600 dark:bg-sky-400",
-  success: "bg-emerald-600 dark:bg-emerald-400",
-  warning: "bg-amber-500",
-  danger: "bg-rose-600 dark:bg-rose-400",
-  primary: "bg-[#0B84FE]",
+  info: "bg-primary-solid",
+  success: "bg-success-solid",
+  warning: "bg-warning-solid",
+  danger: "bg-destructive-solid",
+  primary: "bg-primary-solid",
 };
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
@@ -122,7 +123,7 @@ export function OptionMarkerFrame({ view }: { view: ResolvedOptionView }) {
     <span
       className={cn(
         "pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-inset",
-        tone === "primary" ? "ring-[#0B84FE]" : "ring-current",
+        tone === "primary" ? "ring-primary" : "ring-current",
         TONE_TEXT[tone]
       )}
       aria-hidden="true"
@@ -385,7 +386,7 @@ function PropertyEditor({
       <input
         id={id}
         type="checkbox"
-        className="h-4 w-4 accent-[#0B84FE]"
+        className="h-4 w-4 accent-primary"
         checked={current === true}
         aria-describedby={describedBy}
         onChange={(e) => onSave(e.target.checked)}
@@ -394,9 +395,9 @@ function PropertyEditor({
   }
   if (row.def.type === "choice") {
     return (
-      <select
+      <NativeSelect
         id={id}
-        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+        wrapperClassName="w-full"
         value={typeof current === "string" ? current : ""}
         aria-describedby={describedBy}
         onChange={(e) => onSave(e.target.value === "" ? null : e.target.value)}
@@ -407,7 +408,7 @@ function PropertyEditor({
             {c.label}
           </option>
         ))}
-      </select>
+      </NativeSelect>
     );
   }
   const commit = () => {

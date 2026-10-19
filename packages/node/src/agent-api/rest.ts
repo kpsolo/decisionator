@@ -1,27 +1,77 @@
-import type { PropertyValue } from "@decisionator/core";
-import { Hono } from "hono";
+import type { AgentPermission, PropertyValue, TargetRef } from "@decisionator/core";
+import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { GrantManager, HttpStatus } from "./grants.js";
+import type { GrantManager, GrantVerificationResult, HttpStatus } from "./grants.js";
+import type { OwnerAuth } from "./owner.js";
 import {
+  AGENT_NAME_MAX_LENGTH,
   AGENT_RULES_TEXT,
   AddContributionInputSchema,
   AgentHelloInputSchema,
+  AgentNameSchema,
+  CONTRIBUTION_BODY_MAX_BYTES,
   CompleteRequestInputSchema,
+  LiveSessionDataSchema,
+  ProposalDecisionBodySchema,
   ProposeModerationInputSchema,
   ProposeOptionInputSchema,
+  REQUEST_BODY_MAX_BYTES,
   SetOptionPropertyBodySchema,
   UpdateContributionInputSchema,
+  utf8Bytes,
 } from "./schemas.js";
-import type {
-  AgentStateStore,
-  DeclaredOptionProperty,
-  LiveSessionData,
-  SetSharedPropertyInput,
-} from "./state.js";
+import type { AgentStateStore, DeclaredOptionProperty, SetSharedPropertyInput } from "./state.js";
 
 export type AgentPropertyWriteResult =
   | { ok: true; value: PropertyValue }
   | { ok: false; status: HttpStatus; code: string; message: string };
+
+/**
+ * Checks a grant and, only once it is accepted, applies the agent name the caller declared for
+ * this call (REST `X-Agent-Name`). A refused, revoked or expired grant is never renamed.
+ */
+export function authorizeAgent(
+  grantManager: GrantManager,
+  token: string,
+  permission: AgentPermission | null,
+  target?: TargetRef,
+  agentName?: string
+): GrantVerificationResult {
+  const auth = grantManager.verifyAccess(token, permission, target);
+  if (!auth.valid || !auth.grant || agentName === undefined) return auth;
+  const name = AgentNameSchema.safeParse(agentName);
+  if (!name.success) {
+    return {
+      valid: false,
+      status: 400,
+      code: "INVALID_PARAMS",
+      message: `The agent name must be 1 to ${AGENT_NAME_MAX_LENGTH} characters`,
+      grant: auth.grant,
+    };
+  }
+  grantManager.setAgentName(auth.grant.id, name.data);
+  return auth;
+}
+
+/**
+ * Who may read the live session: grants with `read` on the whole project. The roster names the
+ * people in the session, so option- or idea-scoped grants and grants without `read` get nothing.
+ */
+export function authorizeLiveSessionRead(
+  grantManager: GrantManager,
+  token: string,
+  agentName?: string
+): GrantVerificationResult {
+  return authorizeAgent(grantManager, token, "read", { kind: "project" }, agentName);
+}
+
+/** A contribution body over the byte limit (UTF-8, as the contract counts it). */
+export function contributionBodyTooLarge(body: unknown): boolean {
+  return typeof body === "string" && utf8Bytes(body) > CONTRIBUTION_BODY_MAX_BYTES;
+}
+
+export const CONTRIBUTION_TOO_LARGE_MESSAGE = `Contribution body exceeds ${CONTRIBUTION_BODY_MAX_BYTES} bytes (64 KB)`;
 
 /**
  * Shared by REST and MCP: an agent sets a shared option property. Needs `contribute` and the
@@ -31,12 +81,16 @@ export function agentSetOptionProperty(
   grantManager: GrantManager,
   stateStore: AgentStateStore,
   token: string,
-  input: SetSharedPropertyInput
+  input: SetSharedPropertyInput,
+  agentName?: string
 ): AgentPropertyWriteResult {
-  const auth = grantManager.verifyAccess(token, "contribute", {
-    kind: "option",
-    optionId: input.optionId,
-  });
+  const auth = authorizeAgent(
+    grantManager,
+    token,
+    "contribute",
+    { kind: "option", optionId: input.optionId },
+    agentName
+  );
   if (!auth.valid || !auth.grant) {
     return { ok: false, status: auth.status, code: auth.code, message: auth.message };
   }
@@ -85,11 +139,35 @@ export function agentOptionProperties(
 export interface RestApiOptions {
   grantManager: GrantManager;
   stateStore: AgentStateStore;
+  /**
+   * The owner's credential for the host bridge (`PUT /live-session`, `GET
+   * /live-session/proposals`, `POST /live-session/proposals/{id}/decision`). Without it those
+   * routes refuse every caller.
+   */
+  ownerAuth?: OwnerAuth;
 }
 
-export function createRestRouter(options: RestApiOptions): Hono {
-  const { grantManager, stateStore } = options;
-  const router = new Hono();
+type RestEnv = { Variables: { token: string; agentName?: string } };
+
+type JsonBody = { ok: true; value: unknown } | { ok: false };
+
+/** Reads a JSON body; an empty body is `{}` when `optional`. */
+async function readJsonBody(c: Context<RestEnv>, optional: boolean): Promise<JsonBody> {
+  const text = await c.req.text();
+  if (!text.trim()) return optional ? { ok: true, value: {} } : { ok: false };
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+export function createRestRouter(options: RestApiOptions): Hono<RestEnv> {
+  const { grantManager, stateStore, ownerAuth } = options;
+  const router = new Hono<RestEnv>();
 
   const extractToken = (authHeader?: string): string => {
     if (!authHeader) return "";
@@ -97,37 +175,86 @@ export function createRestRouter(options: RestApiOptions): Hono {
     return match?.[1] ? match[1].trim() : "";
   };
 
-  // Middleware to extract token & handle X-Agent-Name
+  const invalid = (c: Context<RestEnv>, message: string) =>
+    c.json({ error: "INVALID_PARAMS", message }, 400);
+
+  const refused = (c: Context<RestEnv>, auth: GrantVerificationResult) =>
+    c.json({ error: auth.code, message: auth.message }, auth.status);
+
+  /** Grant check for agent routes; applies `X-Agent-Name` only after the grant is accepted. */
+  const authorize = (
+    c: Context<RestEnv>,
+    permission: AgentPermission | null,
+    target?: TargetRef
+  ): GrantVerificationResult =>
+    authorizeAgent(grantManager, c.get("token"), permission, target, c.get("agentName"));
+
+  /**
+   * Owner bridge check: the owner token passes; an agent grant token is refused with 403 (agents
+   * never act as the owner); anything else is 401. Returns the response to send, or null.
+   */
+  const ownerOnly = (c: Context<RestEnv>) => {
+    const token = c.get("token");
+    if (ownerAuth?.verify(token)) return null;
+    const grant = token ? grantManager.resolveGrantByToken(token) : undefined;
+    if (grant) {
+      grantManager.recordAudit("agent_refused_permission", {
+        grantId: grant.id,
+        reason: "owner_only",
+        path: c.req.path,
+      });
+      return c.json(
+        {
+          error: "NOT_PERMITTED_FOR_AGENTS",
+          message: "Only the project owner can do this; agents may only propose",
+        },
+        403
+      );
+    }
+    return c.json({ error: "UNAUTHORIZED", message: "Invalid or missing owner token" }, 401);
+  };
+
+  /** The project an owner-bridge call is about (`?projectId=`). */
+  const ownerProjectId = (c: Context<RestEnv>): string | null => {
+    const projectId = c.req.query("projectId")?.trim();
+    return projectId ? projectId : null;
+  };
+
+  router.use(
+    "*",
+    bodyLimit({
+      maxSize: REQUEST_BODY_MAX_BYTES,
+      onError: (c) =>
+        c.json(
+          { error: "TOO_LARGE", message: `Request body exceeds ${REQUEST_BODY_MAX_BYTES} bytes` },
+          413
+        ),
+    })
+  );
+
+  // Token and the optional per-call agent name; the name is applied only after authorization.
   router.use("*", async (c, next) => {
-    // Skip auth check for openapi.json
-    if (c.req.path.endsWith("/openapi.json")) {
-      return next();
-    }
-    const token = extractToken(c.req.header("authorization"));
-    c.set("token" as never, token as never);
-
+    c.set("token", extractToken(c.req.header("authorization")));
     const agentName = c.req.header("x-agent-name");
-    if (agentName && token) {
-      const grant = grantManager.resolveGrantByToken(token);
-      if (grant) {
-        grantManager.setAgentName(grant.id, agentName);
-      }
-    }
-
+    if (agentName !== undefined) c.set("agentName", agentName);
     return next();
   });
 
   // 1. POST /session (agent_hello)
   router.post("/session", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, null);
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
-    const body = (await c.req.json().catch(() => ({}))) as { agentName?: string };
-    if (body.agentName) {
-      grantManager.setAgentName(auth.grant.id, body.agentName);
+    const body = await readJsonBody(c, true);
+    const parsed = body.ok ? AgentHelloInputSchema.safeParse(body.value) : null;
+    if (!parsed?.success) {
+      return invalid(
+        c,
+        parsed?.error.issues[0]?.message ?? "Request body must be a JSON object, if present"
+      );
+    }
+    if (parsed.data.agentName) {
+      grantManager.setAgentName(auth.grant.id, parsed.data.agentName);
     }
 
     return c.json({
@@ -136,7 +263,7 @@ export function createRestRouter(options: RestApiOptions): Hono {
       permissions: auth.grant.permissions,
       expiresAt: auth.grant.expiresAt,
       limits: {
-        contributionBodyMaxBytes: 65536,
+        contributionBodyMaxBytes: CONTRIBUTION_BODY_MAX_BYTES,
         maxSourcesPerContribution: 20,
         maxContributionsPerRequest: 50,
         callsPerMinute: 60,
@@ -149,11 +276,8 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 2. GET /request (get_request)
   router.get("/request", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, null);
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
     return c.json({
       id: auth.grant.id,
@@ -170,11 +294,8 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 3. GET /context (get_context)
   router.get("/context", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, "read");
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, "read");
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
     const project = stateStore.getProject(auth.grant.projectId);
     const allOptions = stateStore.getOptions(auth.grant.projectId);
@@ -205,11 +326,8 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 4. GET /contributions (list_contributions)
   router.get("/contributions", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, "read");
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, "read");
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
     const own = stateStore.getOwnContributions(auth.grant.id);
     return c.json({ contributions: own });
@@ -217,42 +335,24 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 5. POST /contributions (add_contribution)
   router.post("/contributions", async (c) => {
-    const token = c.get("token" as never) as string;
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return c.json({ error: "INVALID_PARAMS", message: "Request body must be an object" }, 400);
+    const body = await readJsonBody(c, false);
+    if (!body.ok || !isObject(body.value)) {
+      return invalid(c, "Request body must be an object");
     }
 
-    if (
-      typeof (body as { body?: unknown }).body === "string" &&
-      (body as { body: string }).body.length > 65536
-    ) {
-      return c.json({ error: "TOO_LARGE", message: "Contribution body exceeds 64 KB limit" }, 413);
+    if (contributionBodyTooLarge(body.value.body)) {
+      return c.json({ error: "TOO_LARGE", message: CONTRIBUTION_TOO_LARGE_MESSAGE }, 413);
     }
 
-    const parseResult = AddContributionInputSchema.safeParse(body);
+    const parseResult = AddContributionInputSchema.safeParse(body.value);
     if (!parseResult.success) {
-      return c.json(
-        {
-          error: "INVALID_PARAMS",
-          message: parseResult.error.issues[0]?.message || "Invalid input",
-        },
-        400
-      );
+      return invalid(c, parseResult.error.issues[0]?.message || "Invalid input");
     }
 
     const data = parseResult.data;
-    const auth = grantManager.verifyAccess(token, "contribute", data.target);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, "contribute", data.target);
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
-    if (data.body.length > 65536) {
-      return c.json({ error: "TOO_LARGE", message: "Contribution body exceeds 64 KB" }, 413);
-    }
-    if (data.sources && data.sources.length > 20) {
-      return c.json({ error: "INVALID_PARAMS", message: "Maximum 20 sources allowed" }, 400);
-    }
     if (auth.grant.contributionsCount >= 50) {
       return c.json(
         { error: "LIMIT_REACHED", message: "Maximum 50 contributions reached for this request" },
@@ -268,7 +368,7 @@ export function createRestRouter(options: RestApiOptions): Hono {
           ? effectiveTarget.ideaId
           : auth.grant.projectId;
 
-    const newContrib = stateStore.addContribution(auth.grant.id, {
+    const newContrib = stateStore.addContribution(auth.grant.id, auth.grant.projectId, {
       id: `contrib_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       at: new Date().toISOString(),
       by: `agent:${auth.grant.agentName || "unnamed"}`,
@@ -294,44 +394,25 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 6. PATCH /contributions/:id (update_contribution)
   router.patch("/contributions/:id", async (c) => {
-    const token = c.get("token" as never) as string;
     const id = c.req.param("id");
-    const auth = grantManager.verifyAccess(token, "contribute");
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    const auth = authorize(c, "contribute");
+    if (!auth.valid || !auth.grant) return refused(c, auth);
+
+    const body = await readJsonBody(c, false);
+    if (!body.ok || !isObject(body.value)) {
+      return invalid(c, "Request body must be an object");
     }
 
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return c.json({ error: "INVALID_PARAMS", message: "Request body must be an object" }, 400);
+    if (contributionBodyTooLarge(body.value.body)) {
+      return c.json({ error: "TOO_LARGE", message: CONTRIBUTION_TOO_LARGE_MESSAGE }, 413);
     }
 
-    if (
-      typeof (body as { body?: unknown }).body === "string" &&
-      (body as { body: string }).body.length > 65536
-    ) {
-      return c.json({ error: "TOO_LARGE", message: "Contribution body exceeds 64 KB" }, 413);
-    }
-
-    const parseResult = UpdateContributionInputSchema.omit({ id: true }).safeParse(body);
+    const parseResult = UpdateContributionInputSchema.omit({ id: true }).safeParse(body.value);
     if (!parseResult.success) {
-      return c.json(
-        {
-          error: "INVALID_PARAMS",
-          message: parseResult.error.issues[0]?.message || "Invalid input",
-        },
-        400
-      );
+      return invalid(c, parseResult.error.issues[0]?.message || "Invalid input");
     }
 
     const data = parseResult.data;
-    if (data.body && data.body.length > 65536) {
-      return c.json({ error: "TOO_LARGE", message: "Contribution body exceeds 64 KB" }, 413);
-    }
-    if (data.sources && data.sources.length > 20) {
-      return c.json({ error: "INVALID_PARAMS", message: "Maximum 20 sources allowed" }, 400);
-    }
-
     const own = stateStore.getOwnContributions(auth.grant.id);
     const existing = own.find((con) => con.id === id);
     if (!existing) {
@@ -354,11 +435,8 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 7. POST /options (propose_option)
   router.post("/options", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, "propose_options");
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, "propose_options");
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
     if (auth.grant.target.kind !== "project") {
       return c.json(
@@ -370,16 +448,10 @@ export function createRestRouter(options: RestApiOptions): Hono {
       );
     }
 
-    const body = await c.req.json().catch(() => null);
-    const parseResult = ProposeOptionInputSchema.safeParse(body);
+    const body = await readJsonBody(c, false);
+    const parseResult = ProposeOptionInputSchema.safeParse(body.ok ? body.value : undefined);
     if (!parseResult.success) {
-      return c.json(
-        {
-          error: "INVALID_PARAMS",
-          message: parseResult.error.issues[0]?.message || "Invalid input",
-        },
-        400
-      );
+      return invalid(c, parseResult.error.issues[0]?.message || "Invalid input");
     }
 
     const newOption = stateStore.proposeOption(auth.grant.projectId, parseResult.data);
@@ -388,30 +460,29 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 7a. GET /properties (get_option_properties)
   router.get("/properties", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, "read");
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, "read");
+    if (!auth.valid || !auth.grant) return refused(c, auth);
     return c.json(agentOptionProperties(stateStore, auth.grant.projectId, auth.grant.target));
   });
 
   // 7b. PUT /options/:optionId/properties/:plugin/:key (set_option_property)
   router.put("/options/:optionId/properties/:plugin/:key", async (c) => {
-    const token = c.get("token" as never) as string;
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body !== "object" || !("value" in body)) {
-      return c.json(
-        { error: "INVALID_PARAMS", message: "Request body must be an object with a value" },
-        400
-      );
+    const body = await readJsonBody(c, false);
+    if (!body.ok || !isObject(body.value) || !("value" in body.value)) {
+      return invalid(c, "Request body must be an object with a value");
     }
-    const result = agentSetOptionProperty(grantManager, stateStore, token, {
-      optionId: c.req.param("optionId"),
-      plugin: c.req.param("plugin"),
-      key: c.req.param("key"),
-      value: (body as { value: unknown }).value,
-    });
+    const result = agentSetOptionProperty(
+      grantManager,
+      stateStore,
+      c.get("token"),
+      {
+        optionId: c.req.param("optionId"),
+        plugin: c.req.param("plugin"),
+        key: c.req.param("key"),
+        value: body.value.value,
+      },
+      c.get("agentName")
+    );
     if (!result.ok) {
       return c.json({ error: result.code, message: result.message }, result.status);
     }
@@ -420,64 +491,56 @@ export function createRestRouter(options: RestApiOptions): Hono {
 
   // 8. POST /complete (complete_request)
   router.post("/complete", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, null);
+    if (!auth.valid || !auth.grant) return refused(c, auth);
 
-    const body = (await c.req.json().catch(() => ({}))) as { summary?: string };
-    grantManager.completeRequest(auth.grant.id, body.summary);
-    return c.json({ status: "completed", summary: body.summary });
+    const body = await readJsonBody(c, true);
+    const parsed = body.ok ? CompleteRequestInputSchema.safeParse(body.value) : null;
+    if (!parsed?.success) {
+      return invalid(
+        c,
+        parsed?.error.issues[0]?.message ?? "Request body must be a JSON object, if present"
+      );
+    }
+    grantManager.completeRequest(auth.grant.id, parsed.data.summary);
+    return c.json({ status: "completed", summary: parsed.data.summary });
   });
 
-  // 9. GET /live-session (get_live_session)
+  // 9. GET /live-session (get_live_session): `read` on the whole project
   router.get("/live-session", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorizeLiveSessionRead(grantManager, c.get("token"), c.get("agentName"));
+    if (!auth.valid || !auth.grant) return refused(c, auth);
+    const grantId = auth.grant.id;
     const session = stateStore.getLiveSession(auth.grant.projectId);
     if (!session || !session.hosting) {
       return c.json({ error: "NOT_HOSTING", message: "No live session is currently hosted" }, 404);
     }
-    const pseudonymized = session.participants.map((p) => ({
-      ...p,
-      participantId: stateStore.getPseudonym(auth.grant?.id ?? "", p.participantId),
-    }));
     return c.json({
       hosting: session.hosting,
       readOnly: session.readOnly,
       revoked: session.revoked,
-      participants: pseudonymized,
+      participants: session.participants.map((p) => ({
+        ...p,
+        participantId: stateStore.getPseudonym(grantId, p.participantId),
+      })),
     });
   });
 
   // 10. POST /live-session/proposals (propose_moderation)
   router.post("/live-session/proposals", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, "moderate_session");
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
+    const auth = authorize(c, "moderate_session");
+    if (!auth.valid || !auth.grant) return refused(c, auth);
     const session = stateStore.getLiveSession(auth.grant.projectId);
     if (!session || !session.hosting) {
       return c.json({ error: "NOT_HOSTING", message: "No live session is currently hosted" }, 404);
     }
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return c.json({ error: "INVALID_PARAMS", message: "Request body must be an object" }, 400);
+    const body = await readJsonBody(c, false);
+    if (!body.ok || !isObject(body.value)) {
+      return invalid(c, "Request body must be an object");
     }
-    const parsed = ProposeModerationInputSchema.safeParse(body);
+    const parsed = ProposeModerationInputSchema.safeParse(body.value);
     if (!parsed.success) {
-      return c.json(
-        {
-          error: "INVALID_PARAMS",
-          message: parsed.error.issues[0]?.message || "Invalid moderation proposal",
-        },
-        400
-      );
+      return invalid(c, parsed.error.issues[0]?.message || "Invalid moderation proposal");
     }
     const proposal = stateStore.proposeModeration(
       auth.grant.projectId,
@@ -485,6 +548,9 @@ export function createRestRouter(options: RestApiOptions): Hono {
       auth.grant.agentName || "Agent",
       parsed.data
     );
+    if (!proposal) {
+      return invalid(c, "Unknown participant: use a participantId from get_live_session");
+    }
     grantManager.recordAudit("agent_moderation_proposed", {
       grantId: auth.grant.id,
       proposalId: proposal.id,
@@ -494,48 +560,53 @@ export function createRestRouter(options: RestApiOptions): Hono {
     return c.json({ id: proposal.id, status: "pending" }, 201);
   });
 
-  // Host bridge endpoints:
+  // Owner bridge (the owner's hosting tab, owner token only; never agents):
   router.put("/live-session", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    const denied = ownerOnly(c);
+    if (denied) return denied;
+    const projectId = ownerProjectId(c);
+    if (!projectId) return invalid(c, "projectId query parameter is required");
+    const body = await readJsonBody(c, false);
+    const parsed = body.ok ? LiveSessionDataSchema.safeParse(body.value) : null;
+    if (!parsed?.success) {
+      return invalid(
+        c,
+        parsed?.error.issues[0]?.message ?? "Request body must be a live session summary or null"
+      );
     }
-    const body = (await c.req.json().catch(() => null)) as LiveSessionData | null;
-    stateStore.setLiveSession(auth.grant.projectId, body);
+    stateStore.setLiveSession(projectId, parsed.data);
     return c.json({ ok: true });
   });
 
   router.get("/live-session/proposals", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
-    }
-    return c.json({ proposals: stateStore.getAllProposals(auth.grant.projectId) });
+    const denied = ownerOnly(c);
+    if (denied) return denied;
+    const projectId = ownerProjectId(c);
+    if (!projectId) return invalid(c, "projectId query parameter is required");
+    return c.json({ proposals: stateStore.getAllProposals(projectId) });
   });
 
   router.post("/live-session/proposals/:id/decision", async (c) => {
-    const token = c.get("token" as never) as string;
-    const auth = grantManager.verifyAccess(token, null);
-    if (!auth.valid || !auth.grant) {
-      return c.json({ error: auth.code, message: auth.message }, auth.status);
+    const denied = ownerOnly(c);
+    if (denied) return denied;
+    const projectId = ownerProjectId(c);
+    if (!projectId) return invalid(c, "projectId query parameter is required");
+    const body = await readJsonBody(c, false);
+    const parsed = body.ok ? ProposalDecisionBodySchema.safeParse(body.value) : null;
+    if (!parsed?.success) {
+      return invalid(c, "Decision must be accepted or dismissed");
     }
-    const body = (await c.req.json().catch(() => null)) as { decision?: "accepted" | "dismissed" };
-    if (body?.decision !== "accepted" && body?.decision !== "dismissed") {
-      return c.json(
-        { error: "INVALID_PARAMS", message: "Decision must be accepted or dismissed" },
-        400
-      );
-    }
-    const updated = stateStore.decideProposal(c.req.param("id"), body.decision);
+    const updated = stateStore.decideProposal(projectId, c.req.param("id"), parsed.data.decision);
     if (!updated) {
-      return c.json({ error: "NOT_FOUND", message: "Proposal not found" }, 404);
+      return c.json({ error: "NOT_FOUND", message: "Proposal not found in this project" }, 404);
     }
     grantManager.recordAudit(
-      body.decision === "accepted" ? "agent_moderation_accepted" : "agent_moderation_dismissed",
+      parsed.data.decision === "accepted"
+        ? "agent_moderation_accepted"
+        : "agent_moderation_dismissed",
       {
         grantId: updated.grantId,
+        projectId,
         proposalId: updated.id,
         action: updated.action,
         decidedBy: "owner",
@@ -558,7 +629,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
     openapi: "3.1.0",
     info: {
       title: "Decisionator Agent API",
-      version: "1.1.0",
+      version: "1.3.0",
       description: "Local & remote agent API for Decisionator with full MCP parity.",
     },
     paths: {

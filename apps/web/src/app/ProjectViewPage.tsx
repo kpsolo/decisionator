@@ -29,6 +29,7 @@ import {
 } from "../components/ui/dropdown-menu.js";
 import { Skeleton } from "../components/ui/skeleton.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs.js";
+import { toast } from "../components/ui/use-toast.js";
 import { AgentBrief } from "../features/agents/AgentBrief.js";
 import { ContributionReview } from "../features/agents/ContributionReview.js";
 import { CommentThread } from "../features/comments/CommentThread.js";
@@ -46,8 +47,23 @@ import { useProjectStore } from "../features/project/useProjectStore.js";
 import { useRole } from "../features/project/useRole.js";
 import { PasswordPrompt } from "../features/sharing/PasswordPrompt.js";
 import { StatsView } from "../features/stats/StatsView.js";
+import { errorMessage, rollbackGrade, withGrade } from "./project-actions.js";
 
+/**
+ * The router reuses this page across projects; keying the view by project gives each project a
+ * fresh state (no error, password prompt or cached password carried over from the last one).
+ */
 export function ProjectViewPage() {
+  const { projectRef } = useProjectStore();
+  return <ProjectView key={`${projectRef.store}:${projectRef.id}`} />;
+}
+
+/** Reports a change that was not saved. */
+function reportSaveError(title: string, err: unknown) {
+  toast({ title, description: errorMessage(err), variant: "destructive" });
+}
+
+function ProjectView() {
   const navigate = useNavigate();
   const {
     projectId: effectiveId,
@@ -182,59 +198,89 @@ export function ProjectViewPage() {
   const roleCapabilities = useRole(snapshot.role);
   const statsMap = computeOptionStats(snapshot.options, snapshot.grades, snapshot.comments);
 
+  // Snapshot updates below are functional: a store refresh (watch) or another edit may land
+  // while a save is in flight, and must not be overwritten by the snapshot of this render.
   const handleGradeChange = async (optionId: string, val: number) => {
     if (!effectiveId) return;
     const gradeVal = val as 1 | 2 | 3 | 4 | 5;
+    const previous = snapshot.grades.find((g) => g.by === currentUser && g.optionId === optionId);
+    const optimistic = {
+      id: `g_opt_${Date.now()}`,
+      at: new Date().toISOString(),
+      by: currentUser,
+      optionId,
+      value: gradeVal,
+    };
+    setSnapshot((s) => (s ? withGrade(s, currentUser, optionId, optimistic) : s));
 
-    const newGrades = [
-      ...snapshot.grades.filter((g) => !(g.by === currentUser && g.optionId === optionId)),
-      {
-        id: `g_opt_${Date.now()}`,
-        at: new Date().toISOString(),
-        by: currentUser,
-        optionId,
-        value: gradeVal,
-      },
-    ];
-    setSnapshot({ ...snapshot, grades: newGrades });
-
-    await store.append(projectRef, [{ kind: "grade", optionId, value: gradeVal }]);
+    try {
+      await store.append(projectRef, [{ kind: "grade", optionId, value: gradeVal }]);
+    } catch (err) {
+      setSnapshot((s) => (s ? rollbackGrade(s, optimistic, previous) : s));
+      reportSaveError("Rating not saved", err);
+    }
   };
 
   const handleAddComment = async (body: string, optionId: string) => {
-    const newComments = [
-      ...snapshot.comments,
-      {
-        id: `c_opt_${Date.now()}`,
-        at: new Date().toISOString(),
-        by: currentUser,
-        optionId,
-        body,
-      },
-    ];
-    setSnapshot({ ...snapshot, comments: newComments });
+    const optimisticId = `c_opt_${Date.now()}`;
+    setSnapshot((s) =>
+      s
+        ? {
+            ...s,
+            comments: [
+              ...s.comments,
+              { id: optimisticId, at: new Date().toISOString(), by: currentUser, optionId, body },
+            ],
+          }
+        : s
+    );
 
-    await store.append(projectRef, [{ kind: "comment", optionId, body }]);
+    try {
+      await store.append(projectRef, [{ kind: "comment", optionId, body }]);
+    } catch (err) {
+      setSnapshot((s) =>
+        s ? { ...s, comments: s.comments.filter((c) => c.id !== optimisticId) } : s
+      );
+      reportSaveError("Comment not saved", err);
+      // CommentThread gives the text back to the author.
+      throw err;
+    }
   };
 
   const handleEditComment = async (commentId: string, newBody: string, optionId: string) => {
-    await store.append(projectRef, [
-      { kind: "comment", optionId, body: newBody, replaces: commentId },
-    ]);
-
-    const updated = snapshot.comments.map((c) =>
-      c.id === commentId ? { ...c, body: newBody, replaces: commentId } : c
+    try {
+      await store.append(projectRef, [
+        { kind: "comment", optionId, body: newBody, replaces: commentId },
+      ]);
+    } catch (err) {
+      reportSaveError("Comment not saved", err);
+      // CommentThread reopens the editor with the text.
+      throw err;
+    }
+    setSnapshot((s) =>
+      s
+        ? {
+            ...s,
+            comments: s.comments.map((c) =>
+              c.id === commentId ? { ...c, body: newBody, replaces: commentId } : c
+            ),
+          }
+        : s
     );
-    setSnapshot({ ...snapshot, comments: updated });
   };
 
   const handleToggleHide = async (commentId: string, hidden: boolean, optionId: string) => {
-    await store.append(projectRef, [
-      { kind: "comment", optionId, body: "", replaces: commentId, hidden },
-    ]);
-
-    const updated = snapshot.comments.map((c) => (c.id === commentId ? { ...c, hidden } : c));
-    setSnapshot({ ...snapshot, comments: updated });
+    try {
+      await store.append(projectRef, [
+        { kind: "comment", optionId, body: "", replaces: commentId, hidden },
+      ]);
+    } catch (err) {
+      reportSaveError(hidden ? "Comment not hidden" : "Comment not shown", err);
+      return;
+    }
+    setSnapshot((s) =>
+      s ? { ...s, comments: s.comments.map((c) => (c.id === commentId ? { ...c, hidden } : c)) } : s
+    );
   };
 
   const handleReviewAction = async (
@@ -251,12 +297,21 @@ export function ProjectViewPage() {
       body: editedBody !== undefined ? editedBody : existing.body,
     };
 
-    await store.append(projectRef, [{ kind: "contribution", contribution: updated }]);
+    try {
+      await store.append(projectRef, [{ kind: "contribution", contribution: updated }]);
+    } catch (err) {
+      reportSaveError("Review not saved", err);
+      return;
+    }
 
-    const newContribs = (snapshot.contributions || []).map((c) =>
-      c.id === actionId ? updated : c
+    setSnapshot((s) =>
+      s
+        ? {
+            ...s,
+            contributions: (s.contributions || []).map((c) => (c.id === actionId ? updated : c)),
+          }
+        : s
     );
-    setSnapshot({ ...snapshot, contributions: newContribs });
   };
 
   const storeLabel =
@@ -498,7 +553,8 @@ export function ProjectViewPage() {
             <ContributionReview
               contributions={snapshot.contributions || []}
               onReviewAction={handleReviewAction}
-              isOwnerOrEditor={roleCapabilities.canComment}
+              // Accepting agent work changes the project: owner only (contribute can comment).
+              isOwnerOrEditor={roleCapabilities.canEditProject}
             />
           </TabsContent>
         </Tabs>
