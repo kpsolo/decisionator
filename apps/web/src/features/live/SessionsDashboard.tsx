@@ -1,3 +1,4 @@
+import { publishTombstone } from "@decisionator/share-inpage";
 import {
   Clock,
   ExternalLink,
@@ -34,6 +35,7 @@ import {
   isSessionRevoked,
   joinUrl,
   listHostedProjectKeys,
+  loadNetworkConfig,
   markSessionRevoked,
   removeHostSessionIndex,
   rotateHostCredentials,
@@ -139,19 +141,29 @@ export function SessionsDashboard() {
     }
   };
 
-  const handleRevokeConfirm = () => {
+  const handleRevokeConfirm = async (purgeRelays: boolean) => {
     if (!revokeTarget) return;
+    const target = revokeTarget;
     try {
-      if (live.session?.key === revokeTarget.projectKey) {
-        live.revoke("This session link has been revoked by the owner.");
+      let relaysConfirmed = true;
+      if (live.session?.key === target.projectKey) {
+        await live.revoke("This session link has been revoked by the owner.", { purgeRelays });
       } else {
-        markSessionRevoked(revokeTarget.sessionId, "Revoked from sessions dashboard");
-        removeHostSessionIndex(revokeTarget.sessionId);
-        rotateHostCredentials(revokeTarget.projectKey);
+        // Not hosted here: still retract the relay snapshot, signed with the old host key.
+        const credentials = hostCredentialsFor(target.projectKey);
+        markSessionRevoked(credentials.sessionId, "Revoked from sessions dashboard");
+        removeHostSessionIndex(credentials.sessionId);
+        rotateHostCredentials(target.projectKey);
+        const { relays } = loadNetworkConfig();
+        if (purgeRelays && relays.length > 0) {
+          relaysConfirmed = await publishTombstone({ credentials, relays });
+        }
       }
       toast({
         title: "Session link revoked",
-        description: `Revoked link for "${revokeTarget.title}".`,
+        description: relaysConfirmed
+          ? `Revoked link for "${target.title}".`
+          : `Revoked link for "${target.title}", but no relay confirmed the removal of its offline snapshot.`,
       });
       void loadData();
     } finally {

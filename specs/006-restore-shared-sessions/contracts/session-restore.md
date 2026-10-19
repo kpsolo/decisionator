@@ -93,7 +93,7 @@ No new fatal (`t:"error"`) codes are added. `FatalErrorCodeSchema` is unchanged.
 ### 6.1 Procedure (`revokeSession(projectKey, { purgeRelays })`)
 
 1. **Connected guests**: `host.revoke()` sends `{ "t":"closing", "code":"session_revoked", "reason":"This session link has been revoked by the owner." }` to every link, then closes the transport.
-2. **Relay retraction** (if `purgeRelays`): publish a `kind: 30078` event signed by the **old** `hostKeyPair` with the same `d` tag and payload `{ v:1, type:"tombstone", publishedAt, reason:"revoked" }`. Because the event has the same `(pubkey, kind, d)`, it replaces the snapshot. Additionally send a NIP-09 `kind: 5` deletion for the last snapshot event id (best effort).
+2. **Relay retraction** (if `purgeRelays`): publish a `kind: 30078` event signed by the **old** `hostKeyPair` with the same `d` tag and payload `{ v:1, type:"tombstone", publishedAt, reason:"revoked" }`. Because the event has the same `(pubkey, kind, d)`, it replaces the snapshot. Its `created_at` is strictly greater than that of the last snapshot this tab published, so relays cannot keep the snapshot on a same-second tie. Additionally send a NIP-09 `kind: 5` deletion for the last snapshot event id when it is known (best effort). The same procedure is used for a session that is not live in this tab (`publishTombstone`). `revoke` is asynchronous: it waits up to 5 s for relay `OK` acknowledgements before closing the room, so sockets still connecting do not lose the tombstone.
 3. **Local**: set `deci.live.revoked.<oldSessionId>`, remove `deci.live.bySession.<oldSessionId>`, clear `deci.live.activeHosting`, and write a fresh `HostSessionRecord` (new `sessionId`, `secret`, and `relaySecret`).
 4. **Guests**: a guest receiving `closing.code === "session_revoked"` or a verified tombstone enters `revoked`, shows the notice, and deletes its `live_sessions` record.
 
@@ -141,7 +141,7 @@ Live-session data is only available while the owner's tab is hosting. The tab pu
 
 | MCP tool | REST | Permission | Description |
 |---|---|---|---|
-| `get_live_session` | `GET /live-session` | any | `{ hosting, readOnly, revoked, participants: LiveParticipantProfile[] }`. `participantId` values are replaced by per-grant pseudonyms. Returns 404 `NOT_HOSTING` when no tab is hosting. |
+| `get_live_session` | `GET /live-session` | `read` on the whole project (agentic API 1.3.0) | `{ hosting, readOnly, revoked, participants: LiveParticipantProfile[] }`. `participantId` values are replaced by per-grant pseudonyms. Returns 404 `NOT_HOSTING` when no tab is hosting. |
 | `propose_moderation` | `POST /live-session/proposals` | `moderate_session` (new, opt-in when granting) | `{ action, participant?, reason }`. Creates a pending `ModerationProposal` (data-model §10). Result: `{ id, status:"pending" }`. Never applies anything by itself. |
 
 - The owner sees proposals in the live panel and chooses **Accept** or **Dismiss**. An accepted action runs exactly as if the owner had clicked it, and the resulting entries are authored by the owner with `proposedBy: <agent>` in the audit log.

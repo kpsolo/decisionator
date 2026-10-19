@@ -432,3 +432,94 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
     }
   });
 });
+
+describe("Relay hardening", () => {
+  type Keys = ReturnType<typeof generateSigningKeyPair>;
+
+  async function call(
+    relay: ReturnType<typeof createRelayApp>,
+    method: string,
+    path: string,
+    body: unknown,
+    signer: Keys
+  ) {
+    const raw = new TextEncoder().encode(JSON.stringify(body));
+    return relay.app.request(path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...signRequest(method, path, Date.now(), raw, signer),
+      },
+      body: raw,
+    });
+  }
+
+  async function docWithOwner(relay: ReturnType<typeof createRelayApp>, docId: string) {
+    const owner = generateSigningKeyPair();
+    const ownerEnc = generateEncryptionKeyPair();
+    const members = [
+      { key: owner.publicKeyBase64, encKey: ownerEnc.publicKeyBase64, role: "owner" as const },
+    ];
+    const acl: SignedAcl = {
+      docId,
+      version: 1,
+      keyEpoch: 1,
+      members,
+      ownerSignature: signEd25519(
+        new TextEncoder().encode(JSON.stringify({ docId, version: 1, keyEpoch: 1, members })),
+        owner.privateKey
+      ),
+    };
+    const res = await call(relay, "PUT", `/v1/docs/${docId}`, { acl }, owner);
+    expect(res.status).toBe(200);
+    return owner;
+  }
+
+  it("lets an invite be accepted only once", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_accept_once");
+    const invRes = await call(
+      relay,
+      "POST",
+      "/v1/docs/doc_accept_once/invites",
+      { role: "contribute", expiresAt: new Date(Date.now() + 86_400_000).toISOString() },
+      owner
+    );
+    const { inviteId } = await invRes.json();
+
+    const invitee = generateSigningKeyPair();
+    const first = await call(
+      relay,
+      "POST",
+      `/v1/invites/${inviteId}/accept`,
+      { key: invitee.publicKeyBase64, encKey: generateEncryptionKeyPair().publicKeyBase64 },
+      invitee
+    );
+    expect(first.status).toBe(200);
+
+    const attacker = generateSigningKeyPair();
+    const second = await call(
+      relay,
+      "POST",
+      `/v1/invites/${inviteId}/accept`,
+      { key: attacker.publicKeyBase64, encKey: generateEncryptionKeyPair().publicKeyBase64 },
+      attacker
+    );
+    expect(second.status).toBe(409);
+    expect(relay.db.getInvite(inviteId)?.inviteeKey).toBe(invitee.publicKeyBase64);
+  });
+
+  it("applies the batch size and storage limits to snapshots", async () => {
+    const relay = createRelayApp({ limits: { maxBatchSizeBytes: 1024, maxDocStorageBytes: 2048 } });
+    const owner = await docWithOwner(relay, "doc_snap_limits");
+    const snapshot = (size: number) => ({
+      seq: 1,
+      keyEpoch: 1,
+      nonce: "n",
+      ciphertext: "x".repeat(size),
+    });
+    const path = "/v1/docs/doc_snap_limits/snapshots";
+    expect((await call(relay, "POST", path, snapshot(100), owner)).status).toBe(200);
+    expect((await call(relay, "POST", path, snapshot(5000), owner)).status).toBe(413);
+  });
+});

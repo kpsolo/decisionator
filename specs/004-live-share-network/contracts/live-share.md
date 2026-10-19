@@ -50,8 +50,12 @@ Two messages per connection, both sealed as `base64url(nonce12 ‖ AES-GCM(signa
 - Non-trickle ICE: each SDP carries the candidates gathered within 3 s.
 - Receivers drop envelopes that fail to authenticate, duplicates (by `nonce`) and anything older
   than 60 s.
-- The guest re-sends its offer every 3 s until answered; the host answers a repeated offer with
-  the same answer.
+- The guest re-sends its offer every 3 s until answered, and stops re-sending as soon as the dial
+  is answered, aborted or times out; the host answers a repeated offer with the same answer, at
+  most once a second per guest attempt.
+- The host keeps at most 16 connection attempts that have no open data channel yet; offers beyond
+  that are dropped. An attempt whose channel does not open within 30 s is closed. When a guest's
+  data channel closes, the host closes its `RTCPeerConnection`.
 - Transports (any combination, messages fan out and are de-duplicated):
   - **BroadcastChannel** `deci-live:<topic>`: tabs of the same browser profile, no network.
   - **Nostr** (NIP-01): ephemeral events of kind `25050`, tag `["t", topic]`, signed with a
@@ -194,6 +198,7 @@ another asks to end the first. A protected project must be unlocked in the tab b
 
 | Version | Date | Change |
 |---------|------|--------|
+| 3.1.0 | 2026-10-19 | Host limits: at most 16 pending (not yet open) connection attempts, 30 s open timeout, repeated offers re-answered at most once a second; the host closes a guest's peer connection when its channel closes; the guest stops re-sending offers once a dial is settled. Relay payloads are schema-validated by guests. Wire `proto` stays 3 |
 | 3.0.0 | 2026-10-07 | Wire `proto` 3: new `property` guest entry for person-scoped option properties (active options only, `scope: "person"`, value ≤ 2 KiB, else `invalid`); snapshots carry `properties` redacted to shared values plus the guest's own person values. New `reset` guest entry that clears the guest's own values of one property (`scope: "participant"`, `targets: ["properties"]`, `plugin` + `key`; the host sets `participantId`; anything else `invalid`); snapshots carry `history` redacted to the guest's own entries plus resets that are `all`-scoped or target the guest. Proto 2 peers get `protocol_mismatch` |
 | 2.1.0 | 2026-10-07 | Host assigns unique display names (`"Gina 2"`) and returns them in `welcome.name`; the guest shows that name. Wire `proto` stays 2: no message shape changes |
 | 2.0.0 | 2026-10-06 | Network transport (WebRTC star + encrypted Nostr/BroadcastChannel signaling), per-guest attribution through delegated append, acks, heartbeat and reconnect, host-side validation and redaction, app-level session lifecycle, stable join links with QR code |

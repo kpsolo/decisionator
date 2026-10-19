@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { RelayPayload } from "./nostr.js";
 
 /** Session protocol version spoken over the data channel (contract live-share v3). */
 export const PROTOCOL_VERSION = 3;
@@ -142,6 +143,55 @@ export const HostMessageSchema = z.discriminatedUnion("t", [
   Fatal,
 ]);
 export type HostMessage = z.infer<typeof HostMessageSchema>;
+
+// ── Relay records (NIP-78, contract session-restore §1) ─────────────────────────────────────
+// Sealed with the session key and signed by the host, but still checked for shape: whoever holds
+// the relay secret, or a buggy host, must not be able to hand guests something that is not a
+// project snapshot.
+
+const RecordList = z.array(z.record(z.unknown()));
+
+/** The structural minimum of a redacted ProjectSnapshot that a guest renders. */
+export const RelaySnapshotSchema = z
+  .object({
+    project: z.object({ title: z.string().max(1_000) }).passthrough(),
+    options: z.array(z.object({ id: z.string().min(1), title: z.string() }).passthrough()),
+    grades: RecordList,
+    comments: RecordList,
+    rankings: RecordList,
+    outcomes: RecordList,
+    contributions: RecordList,
+    properties: RecordList.optional(),
+  })
+  .passthrough();
+
+export const RelayPayloadSchema = z.discriminatedUnion("type", [
+  z.object({
+    v: z.literal(1),
+    type: z.literal("snapshot"),
+    rev: z.number().int().nonnegative(),
+    publishedAt: z.number(),
+    snapshot: RelaySnapshotSchema,
+  }),
+  z.object({
+    v: z.literal(1),
+    type: z.literal("tombstone"),
+    publishedAt: z.number(),
+    reason: z.enum(["revoked", "ended"]),
+  }),
+]);
+
+/** Validates an unsealed relay record; null when it is not a well-formed {@link RelayPayload}. */
+export function parseRelayPayload(raw: unknown): RelayPayload | null {
+  let value: unknown;
+  try {
+    value = parseJson(raw);
+  } catch {
+    return null;
+  }
+  const parsed = RelayPayloadSchema.safeParse(value);
+  return parsed.success ? (parsed.data as RelayPayload) : null;
+}
 
 function parseJson(raw: unknown): unknown {
   return typeof raw === "string" ? JSON.parse(raw) : raw;

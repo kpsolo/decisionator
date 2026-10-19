@@ -194,14 +194,22 @@ export class LiveShareHost {
     this.listeners.clear();
   }
 
-  revoke(reason = "This session link has been revoked by the owner."): void {
+  /**
+   * Ends the session with `session_revoked`. Unless `tombstone` is false, a tombstone goes out
+   * through `onPublishRelay` (fire and forget); callers that must know relays stored it publish
+   * it themselves (see `HostingSession.revoke`).
+   */
+  revoke(
+    reason = "This session link has been revoked by the owner.",
+    opts: { tombstone?: boolean } = {}
+  ): void {
     if (this.status === "closed") return;
     this.status = "closed";
     this.unwatch?.();
     this.unwatch = null;
     if (this.broadcastTimer) clearTimeout(this.broadcastTimer);
     if (this.relayPublishTimer) clearTimeout(this.relayPublishTimer);
-    if (this.opts.onPublishRelay) {
+    if (this.opts.onPublishRelay && opts.tombstone !== false) {
       const tombstone: RelayPayload = {
         v: 1,
         type: "tombstone",

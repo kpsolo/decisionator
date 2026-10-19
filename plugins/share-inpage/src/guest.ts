@@ -9,6 +9,7 @@ import {
   HostMessageSchema,
   type LiveRole,
   PROTOCOL_VERSION,
+  parseRelayPayload,
 } from "./protocol.js";
 
 export type LiveGuestStatus =
@@ -37,6 +38,11 @@ export interface LiveGuestState {
   message?: string;
   /** Notice message for the guest, e.g. "The host reset your votes." */
   notice?: string;
+  /**
+   * The pinned host key (64 hex): from the link, or learned on first use from a `welcome`
+   * snapshot or relay record. Persist it so later visits can verify relay records.
+   */
+  hostKey?: string;
 }
 
 export class SubmitError extends Error {
@@ -107,12 +113,19 @@ export class LiveShareGuest {
     };
     if (opts.hostKey) {
       this.pinnedHostKey = opts.hostKey;
+      this.state = { ...this.state, hostKey: opts.hostKey };
     }
   }
 
-  applyRelayPayload(payload: RelayPayload, hostKey: string): void {
+  /** Applies a verified, unsealed relay record; malformed records are ignored. */
+  applyRelayPayload(raw: RelayPayload, hostKey: string): void {
     if (this.pinnedHostKey && hostKey !== this.pinnedHostKey) return;
-    if (!this.pinnedHostKey) this.pinnedHostKey = hostKey;
+    const payload = parseRelayPayload(raw);
+    if (!payload) return;
+    if (!this.pinnedHostKey) {
+      this.pinnedHostKey = hostKey;
+      this.set({ hostKey });
+    }
 
     if (payload.type === "tombstone") {
       this.stopped = true;
@@ -263,6 +276,7 @@ export class LiveShareGuest {
         }
         this.checkVoteResets(this.state.snapshot, welcomeSnapshot, msg.participantId);
         this.set({
+          ...(this.pinnedHostKey ? { hostKey: this.pinnedHostKey } : {}),
           status: "live",
           participantId: msg.participantId,
           name: msg.name,

@@ -153,7 +153,7 @@ export function JoinLivePage() {
       <GuestSession
         sessionId={sessionId}
         secret={secret}
-        hostKey={hostKey}
+        hostKey={hostKey ?? cachedSession.hostKey ?? undefined}
         displayName={cachedSession.displayName || cachedSession.name}
         initialCached={cachedSession}
       />
@@ -358,7 +358,8 @@ function GuestSession({
         const record: CachedLiveSessionRecord = {
           sessionId,
           secret,
-          hostKey: hostKey ?? cached?.hostKey ?? null,
+          // Keep the key learned on first use (TOFU) so later visits can verify relay records.
+          hostKey: hostKey ?? s.hostKey ?? cached?.hostKey ?? null,
           participantId: s.participantId ?? cached?.participantId ?? "",
           displayName,
           name: s.name ?? cached?.name ?? displayName,
@@ -813,10 +814,7 @@ function StatusBadge({
       ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
       : "";
     return (
-      <Badge
-        variant="outline"
-        className="gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-      >
+      <Badge variant="outline" className="gap-1.5 border-warning/40 bg-warning/10 text-warning">
         <WifiOff className="h-3 w-3" aria-hidden />
         {timeStr ? `Host offline • Last synced ${timeStr}` : "Host offline"}
       </Badge>

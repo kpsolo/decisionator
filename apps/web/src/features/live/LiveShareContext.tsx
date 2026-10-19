@@ -17,6 +17,7 @@ import {
   useState,
 } from "react";
 import { getStorageManager } from "../../storage/storage-manager.js";
+import { HostingStartGate } from "./hosting-gate.js";
 import {
   hostCredentialsFor,
   loadNetworkConfig,
@@ -72,7 +73,12 @@ interface LiveShareContextValue {
   start(target: LiveTarget): Promise<void>;
   stop(reason?: string): void;
   setRole(role: LiveRole): void;
-  revoke(reason?: string): void;
+  /**
+   * Revokes the hosted link (contract session-restore §6.1): guests are disconnected, the
+   * credentials rotate, and unless `purgeRelays` is false a tombstone replaces the relay
+   * snapshot. Resolves once relays confirmed it or the wait timed out.
+   */
+  revoke(reason?: string, opts?: { purgeRelays?: boolean }): Promise<void>;
 }
 
 const LiveShareContext = createContext<LiveShareContextValue | null>(null);
@@ -93,32 +99,58 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
   const sessionRef = useRef<ActiveLiveSession | null>(null);
   sessionRef.current = session;
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** One hosting start in flight at a time; stop/revoke cancel it (see HostingStartGate). */
+  const gateRef = useRef(new HostingStartGate<HostingSession>());
+  const mountedRef = useRef(false);
 
-  const stop = useCallback((reason?: string) => {
+  const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
     }
-    clearActiveHosting();
-    sessionRef.current?.hosting.close(reason);
-    sessionRef.current = null;
-    setSession(null);
   }, []);
+
+  const stop = useCallback(
+    (reason?: string) => {
+      stopHeartbeat();
+      clearActiveHosting();
+      gateRef.current.cancel((hosting) => hosting.close(reason));
+      sessionRef.current?.hosting.close(reason);
+      sessionRef.current = null;
+      setSession(null);
+    },
+    [stopHeartbeat]
+  );
 
   const start = useCallback(async (target: LiveTarget) => {
     const key = projectKey(target.projectRef);
     if (sessionRef.current?.key === key) return;
-    sessionRef.current?.hosting.close("The host moved the session to another project.");
-    setSession(null);
+    const gate = gateRef.current;
+    const moved = "The host moved the session to another project.";
+    if (sessionRef.current) {
+      sessionRef.current.hosting.close(moved);
+      sessionRef.current = null;
+      setSession(null);
+    }
     setStarting(true);
     setStartError(null);
     try {
       const creds = hostCredentialsFor(key);
-      const hosting = await startHosting({
-        project: hostedProjectFromStore(target.store, target.projectRef),
-        credentials: creds,
-        config: loadNetworkConfig(),
-      });
+      const hosting = await gate.start(
+        key,
+        () =>
+          startHosting({
+            project: hostedProjectFromStore(target.store, target.projectRef),
+            credentials: creds,
+            config: loadNetworkConfig(),
+          }),
+        (superseded) => superseded.close(moved)
+      );
+      // Cancelled by stop/revoke/another project meanwhile, or joined a start whose first
+      // caller has already set the session up.
+      // (Read through a widened type: the await may have changed the ref since it was cleared.)
+      const active = sessionRef.current as ActiveLiveSession | null;
+      if (!hosting || active?.hosting === hosting) return;
       const next: ActiveLiveSession = {
         key,
         target,
@@ -167,31 +199,46 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
           : message
       );
     } finally {
-      setStarting(false);
+      setStarting(gate.pendingKey !== null);
     }
   }, []);
 
   // Auto-resume hosting on mount if active hosting descriptor is present and < 1 hour old (FR-002, US1)
   useEffect(() => {
+    mountedRef.current = true;
+    const teardown = () => {
+      // StrictMode unmounts and remounts at once (the re-run joins the start in flight), so only
+      // tear down when the provider stays unmounted.
+      setTimeout(() => {
+        if (mountedRef.current) return;
+        gateRef.current.cancel((hosting) => hosting.close());
+        sessionRef.current?.hosting.close();
+      }, 0);
+    };
     try {
       const raw = sessionStorage.getItem(ACTIVE_HOSTING_KEY);
-      if (!raw) return;
-      const desc = JSON.parse(raw) as ActiveHostingDescriptor;
-      const ageMs = Date.now() - new Date(desc.lastHeartbeat).getTime();
-      if (ageMs > 3600 * 1000) {
-        clearActiveHosting();
-        return;
+      if (raw) {
+        const desc = JSON.parse(raw) as ActiveHostingDescriptor;
+        const ageMs = Date.now() - new Date(desc.lastHeartbeat).getTime();
+        if (ageMs > 3600 * 1000) {
+          clearActiveHosting();
+        } else {
+          const sm = getStorageManager();
+          const store = sm.resolveStore(desc.projectRef);
+          void start({
+            store,
+            projectRef: desc.projectRef,
+            projectTitle: desc.projectTitle,
+          });
+        }
       }
-      const sm = getStorageManager();
-      const store = sm.resolveStore(desc.projectRef);
-      void start({
-        store,
-        projectRef: desc.projectRef,
-        projectTitle: desc.projectTitle,
-      });
     } catch {
       // ignore
     }
+    return () => {
+      mountedRef.current = false;
+      teardown();
+    };
   }, [start]);
 
   const openFor = useCallback(
@@ -240,17 +287,32 @@ export function LiveShareProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const revoke = useCallback((reason = "This session link has been revoked by the owner.") => {
-    if (sessionRef.current) {
-      const sessionId = sessionRef.current.hosting.credentials.sessionId;
-      markSessionRevoked(sessionId, reason);
-      removeHostSessionIndex(sessionId);
-      rotateHostCredentials(sessionRef.current.key);
-      sessionRef.current.hosting.revoke(reason);
-    }
-    clearActiveHosting();
-    setSession(null);
-  }, []);
+  const revoke = useCallback(
+    async (
+      reason = "This session link has been revoked by the owner.",
+      opts: { purgeRelays?: boolean } = {}
+    ) => {
+      const current = sessionRef.current;
+      // A start still in flight must not come back to life: its host is revoked on arrival.
+      const pendingKey = gateRef.current.cancel((hosting) => {
+        void hosting.revoke(reason, opts);
+      });
+      const key = current?.key ?? pendingKey;
+      if (key) {
+        const credentials = current?.hosting.credentials ?? hostCredentialsFor(key);
+        markSessionRevoked(credentials.sessionId, reason);
+        removeHostSessionIndex(credentials.sessionId);
+        rotateHostCredentials(key);
+      }
+      stopHeartbeat();
+      sessionRef.current = null;
+      clearActiveHosting();
+      setSession(null);
+      // Disconnects guests at once; resolves when relays confirmed the tombstone (or timed out).
+      if (current) await current.hosting.revoke(reason, opts);
+    },
+    [stopHeartbeat]
+  );
 
   const value = useMemo<LiveShareContextValue>(
     () => ({

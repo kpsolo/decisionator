@@ -324,6 +324,21 @@ export function createRelayApp(options: RelayServerOptions = {}) {
       return c.json({ error: "Invalid snapshot payload" }, 400);
     }
 
+    // Same limits as change batches: one request, and the doc's total footprint.
+    const snapshotSize = auth.rawBody.length;
+    if (snapshotSize > limits.maxBatchSizeBytes) {
+      return c.json(
+        { error: `Snapshot size exceeds limit (${limits.maxBatchSizeBytes} bytes)` },
+        413
+      );
+    }
+    if (db.getDocTotalBytes(docId) + body.ciphertext.length > limits.maxDocStorageBytes) {
+      return c.json(
+        { error: `Document storage limit exceeded (${limits.maxDocStorageBytes} bytes)` },
+        507
+      );
+    }
+
     db.saveSnapshot(docId, body.seq, body.keyEpoch, body.nonce, body.ciphertext, auth.signerKey);
     return c.json({ ok: true, docId, seq: body.seq });
   });
@@ -395,7 +410,14 @@ export function createRelayApp(options: RelayServerOptions = {}) {
       return c.json({ error: "Invalid accept payload", details: parsed.error.issues }, 400);
     }
 
-    db.acceptInvite(inviteId, parsed.data.key, parsed.data.encKey);
+    // Only pending → accepted, once: otherwise anyone holding the inviteId could replace the
+    // invitee's keys and receive the sealed project key instead.
+    if (invite.status !== "pending") {
+      return c.json({ error: "Invite already accepted", status: invite.status }, 409);
+    }
+    if (!db.acceptInvite(inviteId, parsed.data.key, parsed.data.encKey)) {
+      return c.json({ error: "Invite already accepted" }, 409);
+    }
     return c.json({ ok: true, inviteId, status: "accepted" });
   });
 

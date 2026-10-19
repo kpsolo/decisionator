@@ -62,7 +62,7 @@ export function RevokeSessionDialog({
               type="checkbox"
               checked={purgeRelays}
               onChange={(e) => setPurgeRelays(e.target.checked)}
-              className="mt-0.5 rounded border-muted-foreground text-destructive focus:ring-destructive"
+              className="mt-0.5 h-4 w-4 rounded border-border accent-destructive focus:ring-destructive"
             />
             <div className="space-y-0.5">
               <span className="font-medium text-foreground">Purge public relay snapshot</span>

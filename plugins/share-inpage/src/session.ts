@@ -9,8 +9,16 @@ import {
 import { LiveShareGuest } from "./guest.js";
 import { LiveShareHost } from "./host.js";
 import type { HostedProject } from "./hosted-project.js";
-import { NostrSignaling, type RelayPayload } from "./nostr.js";
-import type { LiveRole } from "./protocol.js";
+import {
+  NIP09_DELETION_KIND,
+  NIP78_SNAPSHOT_KIND,
+  NostrSignaling,
+  type RelayPayload,
+  type SocketFactory,
+  lastPublishedRecord,
+  signEvent,
+} from "./nostr.js";
+import { type LiveRole, parseRelayPayload } from "./protocol.js";
 import { dialHost, isWebRtcAvailable, listenForGuests } from "./rtc.js";
 import { BroadcastChannelSignaling, SignalingRoom, type SignalingTransport } from "./signaling.js";
 
@@ -63,11 +71,85 @@ function openRoom(credentials: SessionCredentials, config: LiveNetworkConfig): S
   return new SignalingRoom(transports, deriveSessionKeys(credentials));
 }
 
+export interface RevokeOptions {
+  /**
+   * Replace the relay snapshot with a tombstone (and ask relays to delete the last snapshot).
+   * Default true (contract session-restore §6.1).
+   */
+  purgeRelays?: boolean;
+  /** Longest wait for relays to confirm the tombstone. Default {@link TOMBSTONE_TIMEOUT_MS}. */
+  timeoutMs?: number;
+}
+
 export interface HostingSession {
   readonly credentials: SessionCredentials;
   readonly host: LiveShareHost;
   close(reason?: string): void;
-  revoke(reason?: string): void;
+  /**
+   * Disconnects every guest with `session_revoked`, then (unless `purgeRelays` is false)
+   * publishes the relay tombstone and waits for relays to confirm it, or for the timeout,
+   * before closing the relay connections.
+   */
+  revoke(reason?: string, opts?: RevokeOptions): Promise<void>;
+}
+
+/** Default wait for relays to confirm a tombstone. */
+export const TOMBSTONE_TIMEOUT_MS = 5_000;
+
+/**
+ * Publishes the revocation tombstone over `nostr`, signed by the session's host key, plus a
+ * best-effort NIP-09 deletion of the last snapshot this tab published. Resolves `true` once at
+ * least one relay stored the tombstone; `false` when none did within `timeoutMs`.
+ */
+async function sendTombstone(
+  nostr: NostrSignaling,
+  credentials: SessionCredentials,
+  timeoutMs: number,
+  reason: "revoked" | "ended" = "revoked"
+): Promise<boolean> {
+  if (!credentials.relaySecret) return false;
+  const keys = deriveSessionKeys(credentials);
+  const hostKeyPair = deriveHostKeyPair(credentials.relaySecret, credentials.sessionId);
+  const previous = lastPublishedRecord(hostKeyPair.hostKey, keys.topic);
+  if (previous) {
+    nostr.publishEvent(
+      signEvent(hostKeyPair.secretKey, {
+        kind: NIP09_DELETION_KIND,
+        created_at: Math.max(Math.floor(Date.now() / 1000), previous.created_at),
+        tags: [
+          ["e", previous.id],
+          ["k", String(NIP78_SNAPSHOT_KIND)],
+        ],
+        content: "Session link revoked",
+      })
+    );
+  }
+  const payload: RelayPayload = { v: 1, type: "tombstone", publishedAt: Date.now(), reason };
+  const sealed = seal(keys.signalKey, keys.topic, JSON.stringify(payload));
+  // publishSnapshot dates it strictly after the previous record for this key and topic.
+  const tombstone = nostr.publishSnapshot(keys.topic, hostKeyPair.secretKey, sealed);
+  return nostr.publishConfirmed(tombstone, timeoutMs);
+}
+
+/**
+ * Publishes the relay tombstone for a session that is not hosted right now (for example a
+ * revoke from the Sessions dashboard): opens its own relay connections, waits for a relay to
+ * confirm (or the timeout), then closes them. Needs the host-only `relaySecret`.
+ */
+export async function publishTombstone(opts: {
+  credentials: SessionCredentials;
+  relays: string[];
+  timeoutMs?: number;
+  /** Injected in tests; defaults to the browser's WebSocket. */
+  createSocket?: SocketFactory;
+}): Promise<boolean> {
+  if (!opts.credentials.relaySecret || opts.relays.length === 0) return false;
+  const nostr = new NostrSignaling(opts.relays, opts.createSocket);
+  try {
+    return await sendTombstone(nostr, opts.credentials, opts.timeoutMs ?? TOMBSTONE_TIMEOUT_MS);
+  } finally {
+    nostr.close();
+  }
 }
 
 /** Starts serving `project`; resolves once the project is loaded and offers are being answered. */
@@ -115,12 +197,26 @@ export async function startHosting(opts: {
       stopListening();
       room.close();
     },
-    revoke(reason) {
+    async revoke(reason, revokeOpts = {}) {
       if (closed) return;
       closed = true;
-      host.revoke(reason);
+      // The tombstone goes out below, where we can wait for the relays to store it.
+      host.revoke(reason, { tombstone: false });
       stopListening();
-      room.close();
+      try {
+        if (revokeOpts.purgeRelays !== false) {
+          const nostr = room.getTransports().find((t) => t instanceof NostrSignaling);
+          if (nostr instanceof NostrSignaling) {
+            await sendTombstone(
+              nostr,
+              opts.credentials,
+              revokeOpts.timeoutMs ?? TOMBSTONE_TIMEOUT_MS
+            );
+          }
+        }
+      } finally {
+        room.close();
+      }
     },
   };
 }
@@ -167,12 +263,8 @@ export function joinSession(opts: {
           t.subscribeSnapshot(sessionKeys.topic, normHostKey, (event) => {
             const unsealed = unseal(sessionKeys.signalKey, sessionKeys.topic, event.content);
             if (!unsealed) return;
-            try {
-              const payload = JSON.parse(unsealed) as RelayPayload;
-              guest.applyRelayPayload(payload, normHostKey);
-            } catch {
-              // ignore
-            }
+            const payload = parseRelayPayload(unsealed);
+            if (payload) guest.applyRelayPayload(payload, normHostKey);
           })
         );
       }

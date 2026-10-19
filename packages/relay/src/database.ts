@@ -207,11 +207,15 @@ export class RelayDatabase {
     return stmt.get(inviteId) as StoredInvite | undefined;
   }
 
-  acceptInvite(inviteId: string, inviteeKey: string, inviteeEncKey: string): void {
+  /**
+   * Moves a pending invite to `accepted`, binding the invitee's keys. Returns false (and changes
+   * nothing) when the invite is not pending, so an accepted invite cannot be taken over.
+   */
+  acceptInvite(inviteId: string, inviteeKey: string, inviteeEncKey: string): boolean {
     const stmt = this.db.prepare(
-      "UPDATE invites SET inviteeKey = ?, inviteeEncKey = ?, status = 'accepted' WHERE inviteId = ?"
+      "UPDATE invites SET inviteeKey = ?, inviteeEncKey = ?, status = 'accepted' WHERE inviteId = ? AND status = 'pending'"
     );
-    stmt.run(inviteeKey, inviteeEncKey, inviteId);
+    return Number(stmt.run(inviteeKey, inviteeEncKey, inviteId).changes) === 1;
   }
 
   setInviteKey(inviteId: string, sealedKey: string): void {

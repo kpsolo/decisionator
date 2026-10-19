@@ -183,8 +183,8 @@ function LivePanel() {
 
   const [proposals, setProposals] = useState<LiveModerationProposal[]>([]);
 
-  const handleRevokeConfirm = () => {
-    live.revoke("This session link has been revoked by the owner.");
+  const handleRevokeConfirm = async (purgeRelays: boolean) => {
+    await live.revoke("This session link has been revoked by the owner.", { purgeRelays });
     live.closeDialog();
     toast({
       title: "Session link revoked",
@@ -251,7 +251,7 @@ function LivePanel() {
       } else if (prop.action === "allow_contributions") {
         live.setRole("contribute");
       } else if (prop.action === "revoke_link") {
-        live.revoke("This session link has been revoked by the owner.");
+        await live.revoke("This session link has been revoked by the owner.");
       }
 
       try {

@@ -1,4 +1,4 @@
-# Contract: Sync/Relay Protocol — v1.0.0
+# Contract: Sync/Relay Protocol — v1.1.0
 
 > **Scope: post-MVP (US7, local-first mode).** The MVP shares projects through Google Drive ([sheet-store.md](./sheet-store.md)).
 
@@ -54,7 +54,8 @@ relay accepted it. This protects against a compromised relay.
    `inviteId`. The owner then shares the link
    `decisionator://join?relay=<url>&invite=<inviteId>` (or its https equivalent on the relay).
 2. The invitee's node calls `POST /v1/invites/{inviteId}/accept` with its public keys.
-   The relay queues the request for the owner.
+   The relay queues the request for the owner. An invite can be accepted once: accepting an
+   invite that is not `pending` returns HTTP `409` and leaves the stored keys unchanged.
 3. The owner's node, while online, confirms the invite. It adds the member to the ACL and posts
    `sealedKey = sealedBox(X25519(invitee), projectKey[epoch])` to
    `/v1/invites/{inviteId}/key`.
@@ -83,6 +84,9 @@ node performs all grant checks. When the node is offline, the tunnel endpoints r
 | Shared doc storage | 50 MB |
 | Members per doc | 50 |
 | Tunnel request body | 1 MB |
+
+`POST /v1/docs/{docId}/snapshots` is subject to the change batch size (HTTP `413`) and the
+shared doc storage limit (HTTP `507`), like change batches.
 
 ## Storage
 

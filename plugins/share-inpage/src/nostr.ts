@@ -64,7 +64,31 @@ export function verifyEvent(event: NostrEvent): boolean {
   }
 }
 
-type SocketFactory = (url: string) => WebSocket;
+export type SocketFactory = (url: string) => WebSocket;
+
+/** NIP-09 deletion request. */
+export const NIP09_DELETION_KIND = 5;
+
+/**
+ * The latest replaceable record this tab published, by `pubkey:topic`. Kept per tab (not per
+ * connection) so a revoke after the live session has ended still dates its tombstone after the
+ * last snapshot and knows which event to ask relays to delete.
+ */
+const lastRecords = new Map<string, { id: string; created_at: number }>();
+
+/** The latest snapshot or tombstone this tab published for `hostKey` (hex) and `topic`. */
+export function lastPublishedRecord(
+  hostKey: string,
+  topic: string
+): { id: string; created_at: number } | undefined {
+  return lastRecords.get(`${hostKey}:${topic}`);
+}
+
+interface AckWaiter {
+  remaining: number;
+  accepted: boolean;
+  done: (ok: boolean) => void;
+}
 
 interface RelayConnection {
   url: string;
@@ -84,6 +108,7 @@ export class NostrSignaling implements SignalingTransport {
     { subId: string; hostKey: string; handlers: Set<(event: NostrEvent) => void> }
   >();
   private closed = false;
+  private ackWaiters = new Map<string, AckWaiter>();
 
   constructor(
     relayUrls: string[],
@@ -133,18 +158,57 @@ export class NostrSignaling implements SignalingTransport {
     };
   }
 
-  publishSnapshot(topic: string, secretKey: Uint8Array, content: string): void {
+  /**
+   * Publishes a host-signed replaceable record (snapshot or tombstone) under `topic`. Its
+   * `created_at` is strictly later than the previous record this tab published for the same key
+   * and topic: relays keep the newest version, and on a tie the one with the lower id, so a
+   * tombstone in the same second as the last snapshot could otherwise lose.
+   */
+  publishSnapshot(topic: string, secretKey: Uint8Array, content: string): NostrEvent {
+    const pubkey = bytesToHex(schnorr.getPublicKey(secretKey));
+    const recordKey = `${pubkey}:${topic}`;
+    const previous = lastRecords.get(recordKey);
+    const now = Math.floor(Date.now() / 1000);
     const event = signEvent(secretKey, {
       kind: NIP78_SNAPSHOT_KIND,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: previous ? Math.max(now, previous.created_at + 1) : now,
       tags: [
         ["d", topic],
         ["t", topic],
       ],
       content,
     });
+    lastRecords.set(recordKey, { id: event.id, created_at: event.created_at });
+    this.publishEvent(event);
+    return event;
+  }
+
+  /** Sends a signed event to every relay (queued until each socket opens). */
+  publishEvent(event: NostrEvent): void {
     const frame = JSON.stringify(["EVENT", event]);
     for (const r of this.relays) this.sendOrQueue(r, frame);
+  }
+
+  /**
+   * Sends `event` and waits for the relays' NIP-01 `OK` replies. Resolves once every relay has
+   * answered or `timeoutMs` has passed: `true` when at least one relay stored it.
+   */
+  publishConfirmed(event: NostrEvent, timeoutMs: number): Promise<boolean> {
+    if (this.relays.length === 0 || this.closed) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const waiter: AckWaiter = {
+        remaining: this.relays.length,
+        accepted: false,
+        done: (ok) => {
+          clearTimeout(timer);
+          this.ackWaiters.delete(event.id);
+          resolve(ok);
+        },
+      };
+      const timer = setTimeout(() => waiter.done(waiter.accepted), timeoutMs);
+      this.ackWaiters.set(event.id, waiter);
+      this.publishEvent(event);
+    });
   }
 
   subscribeSnapshot(
@@ -178,6 +242,7 @@ export class NostrSignaling implements SignalingTransport {
 
   close(): void {
     this.closed = true;
+    for (const w of [...this.ackWaiters.values()]) w.done(w.accepted);
     for (const r of this.relays) {
       if (r.timer) clearTimeout(r.timer);
       r.socket?.close();
@@ -251,6 +316,14 @@ export class NostrSignaling implements SignalingTransport {
     try {
       msg = JSON.parse(data);
     } catch {
+      return;
+    }
+    if (Array.isArray(msg) && msg[0] === "OK" && typeof msg[1] === "string") {
+      const waiter = this.ackWaiters.get(msg[1]);
+      if (!waiter) return;
+      if (msg[2] === true) waiter.accepted = true;
+      waiter.remaining--;
+      if (waiter.remaining <= 0) waiter.done(waiter.accepted);
       return;
     }
     if (!Array.isArray(msg) || msg[0] !== "EVENT") return;

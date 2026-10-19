@@ -14,9 +14,19 @@ export interface RtcOptions {
   /** Longest wait for ICE gathering before sending what has been found. */
   gatherTimeoutMs?: number;
   linkOptions?: LinkOptions;
+  /**
+   * Host only: most connection attempts that have not opened a channel yet. Offers from new
+   * guests beyond it are dropped until a slot frees up (guests re-send their offer).
+   */
+  maxPendingConnections?: number;
+  /** Host only: how long an attempt may stay unopened before it is dropped. */
+  pendingTimeoutMs?: number;
   /** Injected in tests; defaults to the browser's RTCPeerConnection. */
   createPeerConnection?: (config: RTCConfiguration) => RTCPeerConnection;
 }
+
+/** Default cap on unopened connection attempts per host (see {@link RtcOptions}). */
+export const MAX_PENDING_CONNECTIONS = 16;
 
 export function isWebRtcAvailable(): boolean {
   return typeof RTCPeerConnection !== "undefined";
@@ -45,23 +55,52 @@ function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<
   });
 }
 
+/**
+ * Wraps an open channel. The peer connection lives exactly as long as the channel: however the
+ * channel ends (our close, the remote side leaving, the connection failing), the connection is
+ * closed too, so departing guests do not leave RTCPeerConnections behind on the host.
+ */
 function pipeFromChannel(channel: RTCDataChannel, pc: RTCPeerConnection): MessagePipe {
+  let ended = false;
+  const release = () => {
+    try {
+      channel.close();
+    } catch {
+      // already gone
+    }
+    try {
+      pc.close();
+    } catch {
+      // already gone
+    }
+  };
   const pipe: MessagePipe = {
     send: (data) => channel.send(data),
     close: () => {
-      channel.close();
-      pc.close();
+      ended = true;
+      release();
     },
     onmessage: null,
     onclose: null,
   };
   channel.onmessage = (e) => pipe.onmessage?.(typeof e.data === "string" ? e.data : "");
-  const closed = () => pipe.onclose?.();
+  const closed = () => {
+    const notify = !ended;
+    ended = true;
+    release();
+    if (notify) pipe.onclose?.();
+  };
   channel.onclose = closed;
   pc.addEventListener("connectionstatechange", () => {
     if (pc.connectionState === "failed" || pc.connectionState === "closed") closed();
   });
   return pipe;
+}
+
+interface PendingAttempt {
+  pc: RTCPeerConnection;
+  answer?: string;
+  answeredAt: number;
 }
 
 /** Answers guests' offers and hands each opened channel to `onLink`. */
@@ -71,10 +110,12 @@ export function listenForGuests(
   onLink: (link: Link) => void
 ): Unsubscribe {
   /** Connection attempts in progress, by guest attempt id, with the answer once made. */
-  const pending = new Map<string, { pc: RTCPeerConnection; answer?: string }>();
+  const pending = new Map<string, PendingAttempt>();
   const connected = new Set<string>();
   const hostId = randomId(8);
   const gatherTimeoutMs = opts.gatherTimeoutMs ?? 3000;
+  const maxPending = opts.maxPendingConnections ?? MAX_PENDING_CONNECTIONS;
+  const pendingTimeoutMs = opts.pendingTimeoutMs ?? 30_000;
 
   const sendAnswer = (to: string, sdp: string) =>
     room.send({ v: 1, kind: "answer", from: hostId, to, nonce: randomId(12), ts: Date.now(), sdp });
@@ -84,18 +125,25 @@ export function listenForGuests(
     // A guest re-sends its offer until it hears back; the answer may have been lost on the way.
     const existing = pending.get(env.from);
     if (existing) {
-      if (existing.answer) sendAnswer(env.from, existing.answer);
+      // Re-answer at most once a second, however fast the offers come.
+      const now = Date.now();
+      if (existing.answer && now - existing.answeredAt >= 1000) {
+        existing.answeredAt = now;
+        sendAnswer(env.from, existing.answer);
+      }
       return;
     }
+    // Anyone holding the link can send offers: a flood of new ids must not exhaust the host.
+    if (pending.size >= maxPending) return;
     const pc = makePc(opts);
-    const attempt: { pc: RTCPeerConnection; answer?: string } = { pc };
+    const attempt: PendingAttempt = { pc, answeredAt: 0 };
     pending.set(env.from, attempt);
     const forget = setTimeout(() => {
       if (pending.get(env.from) === attempt) {
         pending.delete(env.from);
         pc.close();
       }
-    }, 60_000);
+    }, pendingTimeoutMs);
 
     pc.ondatachannel = (e) => {
       const channel = e.channel;
@@ -114,11 +162,13 @@ export function listenForGuests(
       await waitForIceGathering(pc, gatherTimeoutMs);
       const sdp = pc.localDescription?.sdp;
       if (!sdp) throw new Error("no local description");
+      if (pending.get(env.from) !== attempt) return; // timed out, opened or stopped meanwhile
       attempt.answer = sdp;
+      attempt.answeredAt = Date.now();
       sendAnswer(env.from, sdp);
     } catch {
       clearTimeout(forget);
-      pending.delete(env.from);
+      if (pending.get(env.from) === attempt) pending.delete(env.from);
       pc.close();
     }
   });
@@ -145,8 +195,11 @@ export async function dialHost(
   let offAnswer: Unsubscribe = () => {};
   let resend: ReturnType<typeof setInterval> | undefined;
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  /** Set once the dial succeeded or failed; offer setup still in flight must then stop. */
+  let settled = false;
 
   const cleanup = () => {
+    settled = true;
     offAnswer();
     clearInterval(resend);
     clearTimeout(timeout);
@@ -155,14 +208,20 @@ export async function dialHost(
   try {
     return await new Promise<Link>((resolve, reject) => {
       const fail = (reason: string) => {
+        if (settled) return;
         cleanup();
         pc.close();
         reject(new Error(reason));
       };
       timeout = setTimeout(() => fail("host not reachable"), opts.timeoutMs ?? 20_000);
+      if (signal?.aborted) {
+        fail("aborted");
+        return;
+      }
       signal?.addEventListener("abort", () => fail("aborted"), { once: true });
 
       channel.onopen = () => {
+        if (settled) return;
         cleanup();
         resolve(createLink(pipeFromChannel(channel, pc), opts.linkOptions));
       };
@@ -184,13 +243,20 @@ export async function dialHost(
 
       (async () => {
         await pc.setLocalDescription(await pc.createOffer());
+        if (settled) return;
         await waitForIceGathering(pc, opts.gatherTimeoutMs ?? 3000);
+        // Aborted or timed out while gathering: cleanup already ran, so start nothing.
+        if (settled) return;
         const sdp = pc.localDescription?.sdp;
         if (!sdp) throw new Error("no local description");
         const sendOffer = () =>
           room.send({ v: 1, kind: "offer", from: id, nonce: randomId(12), ts: Date.now(), sdp });
         sendOffer();
         resend = setInterval(() => {
+          if (settled) {
+            clearInterval(resend);
+            return;
+          }
           if (!answered) sendOffer();
         }, opts.resendMs ?? 3000);
       })().catch(() => fail("could not create offer"));
