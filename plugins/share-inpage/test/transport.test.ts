@@ -12,7 +12,12 @@ import { FRAME_BYTES, createLink, createPipePair } from "../src/link.js";
 import { LIVE_SIGNAL_KIND, NostrSignaling, signEvent } from "../src/nostr.js";
 import { parseGuestMessage, parseHostMessage } from "../src/protocol.js";
 import { joinPath } from "../src/session.js";
-import { SignalingRoom, createMemorySignalingHub } from "../src/signaling.js";
+import {
+  MAX_ENVELOPE_AGE_MS,
+  MAX_SEEN_NONCES,
+  SignalingRoom,
+  createMemorySignalingHub,
+} from "../src/signaling.js";
 import { until } from "./fixtures.js";
 
 afterEach(() => {
@@ -37,7 +42,9 @@ describe("session crypto", () => {
     const { topic } = deriveSessionKeys(creds);
     expect(topic).toMatch(/^[0-9a-f]{64}$/);
     expect(topic).not.toContain(creds.sessionId);
-    expect(joinPath(creds)).toBe(`/join/${creds.sessionId}/${creds.secret}`);
+    expect(joinPath({ ...creds, hostKey: "hk" })).toBe(
+      `/join/${creds.sessionId}/${creds.secret}/hk`
+    );
   });
 });
 
@@ -88,6 +95,38 @@ describe("link framing", () => {
     const got: unknown[] = [];
     right.onMessage((m) => got.push(m));
     expect(got).toEqual([{ t: "error", code: "session_full" }]);
+  });
+
+  it("ignores chunks with a negative index, zero count or an index past the count (F15)", async () => {
+    const pipe = { send() {}, close() {}, onmessage: null, onclose: null } as {
+      send(d: string): void;
+      close(): void;
+      onmessage: ((d: string) => void) | null;
+      onclose: (() => void) | null;
+    };
+    const link = createLink(pipe);
+    const got: unknown[] = [];
+    link.onMessage((m) => got.push(m));
+    const feed = (frame: string) => pipe.onmessage?.(frame);
+    feed('c1,-1,1|{"bad":1}');
+    feed('c2,0,0|{"bad":2}');
+    feed('c3,1,1|{"bad":3}');
+    feed('c4,0.5,2|{"bad":4}');
+    feed("c5,0,1"); // no separator
+    feed(`c6,0,${10 ** 9}|x`); // count far beyond the size cap closes the link
+    expect(got).toEqual([]);
+    expect(link.closed).toBe(true);
+
+    // A chunk that disagrees about its message's count is dropped, the message still completes.
+    const pipe2 = { ...pipe, onmessage: null } as typeof pipe;
+    const link2 = createLink(pipe2);
+    const got2: unknown[] = [];
+    link2.onMessage((m) => got2.push(m));
+    pipe2.onmessage?.('c7,0,2|{"ok"');
+    pipe2.onmessage?.('c7,1,3|:"no"}');
+    pipe2.onmessage?.("c7,1,2|:1}");
+    expect(got2).toEqual([{ ok: 1 }]);
+    link2.close();
   });
 
   it("times out a link that stops answering pings", () => {
@@ -145,6 +184,76 @@ describe("signaling room", () => {
     expect(got).toEqual(["n1"]);
     expect(strangerGot).toEqual([]);
     for (const r of [host, guest, stranger]) r.close();
+  });
+
+  it("keeps rejecting a replayed nonce after many more envelopes (no wholesale reset, F15)", async () => {
+    const creds = createSessionCredentials();
+    const keys = deriveSessionKeys(creds);
+    const published: string[] = [];
+    let deliver: (p: string) => void = () => {};
+    const transport = {
+      name: "capture",
+      publish: (_t: string, p: string) => published.push(p),
+      subscribe: (_t: string, cb: (p: string) => void) => {
+        deliver = cb;
+        return () => {};
+      },
+      close() {},
+    };
+    const sender = new SignalingRoom([transport], keys);
+    const receiver = new SignalingRoom([transport], keys);
+    const got: string[] = [];
+    receiver.onEnvelope((e) => got.push(e.nonce));
+
+    sender.send(env("victim"));
+    const victim = published[0] as string;
+    deliver(victim);
+    // The old implementation cleared the whole set after 2000 nonces, reopening "victim" to replay.
+    for (let i = 0; i < 2500; i++) {
+      sender.send(env(`n${i}`));
+      deliver(published[published.length - 1] as string);
+    }
+    deliver(victim);
+    expect(got.filter((n) => n === "victim")).toHaveLength(1);
+    expect(got).toHaveLength(2501);
+    expect(receiver.seenCount).toBeLessThanOrEqual(MAX_SEEN_NONCES);
+    sender.close();
+    receiver.close();
+  });
+
+  it("evicts only the oldest nonces past the cap, and expires stale ones", () => {
+    vi.useFakeTimers();
+    const keys = deriveSessionKeys(createSessionCredentials());
+    const published: string[] = [];
+    let deliver: (p: string) => void = () => {};
+    const transport = {
+      name: "capture",
+      publish: (_t: string, p: string) => published.push(p),
+      subscribe: (_t: string, cb: (p: string) => void) => {
+        deliver = cb;
+        return () => {};
+      },
+      close() {},
+    };
+    const sender = new SignalingRoom([transport], keys);
+    const receiver = new SignalingRoom([transport], keys);
+    const got: string[] = [];
+    receiver.onEnvelope((e) => got.push(e.nonce));
+    for (let i = 0; i < MAX_SEEN_NONCES + 5; i++) {
+      sender.send(env(`n${i}`));
+      deliver(published[published.length - 1] as string);
+    }
+    expect(receiver.seenCount).toBe(MAX_SEEN_NONCES);
+    // The most recent nonce is still remembered.
+    deliver(published[published.length - 1] as string);
+    expect(got).toHaveLength(MAX_SEEN_NONCES + 5);
+    // After the freshness window everything has expired (and would be rejected as stale anyway).
+    vi.advanceTimersByTime(MAX_ENVELOPE_AGE_MS + 2_000);
+    sender.send(env("fresh"));
+    deliver(published[published.length - 1] as string);
+    expect(receiver.seenCount).toBe(1);
+    sender.close();
+    receiver.close();
   });
 });
 

@@ -1,4 +1,4 @@
-# Contract: Live Share (in-page session) — v3.0.0
+# Contract: Live Share (in-page session) — v3.2.0
 
 Plugin ID: `org.decisionator.share.inpage` · package `@decisionator/share-inpage`
 
@@ -17,11 +17,22 @@ v1 join links (`#/join/<sessionId>`) show an "incomplete link" page.
 ## Join link
 
 ```
-<app base>#/join/<sessionId>/<secret>
+<app base>#/join/<sessionId>/<secret>/<hostKey>
 ```
 
 - `sessionId`: 72-bit random, base64url. `secret`: 128-bit random, base64url.
-- Both live in the URL fragment, so they never reach a web server.
+- `hostKey` (**required** since v3.2.0): the host's x-only secp256k1 Schnorr public key, 32 bytes
+  as base64url (43 chars; 64 hex is also accepted). It is derived on the host only:
+  `HKDF-SHA256(ikm = relaySecret, salt = "deci-live/relay", info = sessionId, 32)` is the secret
+  key; `relaySecret` (256-bit random) never leaves the host's device. Every link the app generates
+  carries it (`joinPath` derives it from `relaySecret` when needed and throws without either).
+- **Legacy links** without `hostKey` (made before v3.2.0) are refused: the guest shows "This link
+  is out of date" and asks for the link to be shared again, and never dials (`joinSession` throws
+  `LiveShareLegacyLinkError`). Such a link cannot authenticate the host, and falling back to
+  trust-on-first-use would let any link holder capture the guest's identity. A malformed
+  `hostKey` (not a point on the curve) is refused the same way. The host's own browser can still
+  resume hosting from such a link; the re-shared link then carries the key.
+- All parts live in the URL fragment, so they never reach a web server.
 - A project keeps the same credentials on the host's device (`localStorage`), so a printed QR
   code keeps working and returning guests keep their identity.
 - On a loopback origin (`localhost`, `127.0.0.1`, `*.localhost`) the host is asked for an
@@ -44,12 +55,33 @@ Two messages per connection, both sealed as `base64url(nonce12 ‖ AES-GCM(signa
 
 ```ts
 { v: 1, kind: "offer",  from: guestAttemptId,             nonce, ts, sdp }
-{ v: 1, kind: "answer", from: hostId, to: guestAttemptId,  nonce, ts, sdp }
+{ v: 1, kind: "answer", from: hostId, to: guestAttemptId,  nonce, ts, sdp, sig }
 ```
 
 - Non-trickle ICE: each SDP carries the candidates gathered within 3 s.
+- **Signed answers (v3.2.0).** The signal key is shared by every link holder, so it does not
+  prove who answers. The host signs every answer (including re-answers) with its host key:
+
+  ```
+  digest = SHA-256("deci-live/answer/v1" ‖ 0 ‖ topic ‖ 0 ‖ from ‖ 0 ‖ to ‖ 0 ‖
+                   hex(SHA-256(offerSdp)) ‖ 0 ‖ hex(SHA-256(answerSdp)) ‖ 0 ‖ ts ‖ 0 ‖ nonce)
+  sig    = hex(BIP-340 Schnorr(digest, hostSecretKey))        # 128 hex
+  ```
+
+  The guest verifies `sig` against the `hostKey` of its join link, for its own attempt id and the
+  exact offer SDP it sent, **before** applying the answer. Unsigned answers, answers signed by
+  another key, and host signatures over another attempt or offer are ignored (the guest keeps
+  waiting for the real answer until its dial times out). Because the signed answer SDP carries
+  the host's DTLS fingerprint, the data channel can then only open to the host, and the guest's
+  `hello` (with its participant `key`) is sent on that channel only. `welcome` and later
+  messages need no signature of their own; the guest never takes a host key from a `welcome` or a
+  relay record (no trust on first use).
+- The host tracks connection attempts by guest attempt id **and** offer, so another link holder
+  re-using a guest's attempt id with its own offer cannot take over that guest's attempt.
 - Receivers drop envelopes that fail to authenticate, duplicates (by `nonce`) and anything older
-  than 60 s.
+  than 60 s. Seen nonces are remembered until their envelope would be stale anyway (`ts` + 61 s),
+  at most 10 000 of them; beyond that the oldest are evicted one at a time (the set is never
+  cleared wholesale, which would reopen recent nonces to replay).
 - The guest re-sends its offer every 3 s until answered, and stops re-sending as soon as the dial
   is answered, aborted or times out; the host answers a repeated offer with the same answer, at
   most once a second per guest attempt.
@@ -76,7 +108,10 @@ Frames are strings:
 | `p` / `q` | ping / pong |
 
 Either side pings every 5 s and closes the link after 15 s without hearing anything. Guests
-accept messages up to 16 MiB; the host accepts guest messages up to 16 MiB reassembled.
+accept messages up to 16 MiB; the host accepts guest messages up to 16 MiB reassembled. A chunk
+is accepted only with integers `0 ≤ index < count` and `1 ≤ count ≤ ⌈maxMessageBytes / 16 000⌉ + 1`
+(a larger `count` closes the link), and only if its `count` matches the earlier chunks of the
+same message; anything else is dropped.
 
 ## Session protocol (version 3)
 
@@ -125,7 +160,11 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
 
 ### Host rules
 
-1. A link must say `hello` within 10 s. At most 64 links per session.
+1. A link must say `hello` within 10 s. At most 64 links per session, of which at most 16 may not
+   have said `hello` yet (`session_full` beyond either). At most 3 links per participant
+   (`maxLinksPerParticipant`): a participant's newest link makes room by closing its oldest ones,
+   which get `error session_full` ("too many tabs") so they stop retrying. One guest therefore
+   cannot fill the session's slots.
 2. Submissions are validated **inside the host's write queue**, one at a time, against the state
    left by every earlier write:
    - view-only session → `read_only`;
@@ -145,7 +184,8 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
 3. Accepted entries are written with `append(ref, entries, { onBehalfOf: { participantId, displayName } })`.
    The guest gets `ack ok` only after the store call resolved; a failure is reported as
    `store_failed` with the store's message.
-4. Rate limit: token bucket per link, 20 burst, 5/s.
+4. Rate limit: token bucket **per participant** (shared by all of the participant's links and kept
+   across reconnects), 20 burst, 5/s. Extra tabs or rejoining do not add throughput.
 5. After any change (a guest write or the store's `watch`), the host sends every guest a fresh
    snapshot (coalesced within 30 ms), redacted per guest:
    - `role` is the session role, never `owner`;
@@ -164,6 +204,14 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
    `participantId` for the rest of the session, so a reconnect keeps `"Gina 2"`.
 7. Ending the session sends `closing` to every guest. Closing or reloading the host tab ends the
    session (best effort `closing` on `pagehide`; guests detect the dropped link otherwise).
+8. **Relay retraction on close (v3.2.0).** `HostingSession.close()` (end, tab close, move) also
+   replaces the session's NIP-78 relay record with a host-signed `{ type: "tombstone", reason:
+   "ended" }` and sends a best-effort NIP-09 deletion of the last snapshot this tab published, so
+   the last redacted snapshot does not stay on public relays. It does not wait: `close()` returns
+   at once and the relay sockets close when a relay confirms the tombstone or after 2 s
+   (`endTombstoneTimeoutMs`). Revocation keeps its `reason: "revoked"` tombstone (awaited). A host
+   that resumes with the same link later publishes a newer snapshot, which replaces the tombstone.
+   Hosting requires the host-only `relaySecret` (`startHosting` throws without it).
 
 ### Guest rules
 
@@ -173,6 +221,10 @@ yields the same `participantId`, so a guest has one vote; other guests cannot pr
   retry available).
 - Submissions are refused while not `live`; each waits up to 10 s for its `ack`.
 - After `ended`, the last snapshot stays visible and can be exported.
+- A relay tombstone with `reason: "revoked"` moves the guest to `revoked` and stops it. One with
+  `reason: "ended"` is ignored while `live` (the open link is authoritative); otherwise the guest
+  shows `ended` but keeps retrying, since the host may resume with the same link.
+- Relay records are applied only when signed by the join link's `hostKey`.
 - The guest shows itself under `welcome.name`, which may differ from the name it sent.
 
 ## Hosting lifecycle (web app)
@@ -192,12 +244,18 @@ another asks to end the first. A protected project must be unlocked in the tab b
 - `plugins/share-inpage/test/transport.test.ts`: sealing, topic derivation, framing and chunking,
   heartbeat timeout, signaling room authentication/dedupe/staleness, Nostr event signing,
   subscribe/publish/queue/reconnect.
+- `plugins/share-inpage/test/host-auth.test.ts`: signed answers (a guest ignores unsigned,
+  foreign-key and re-addressed or other-offer answers and sends no `hello`, then connects to the
+  real host); join links always carry `hostKey`; legacy links are refused.
+- `plugins/share-inpage/test/tombstone.test.ts`: revoke and close tombstones (`ended` on close,
+  NIP-09 deletion, sockets released after confirmation or timeout).
 - `apps/web/e2e/live-session.spec.ts`: two pages over real WebRTC data channels.
 
 ## Changelog
 
 | Version | Date | Change |
 |---------|------|--------|
+| 3.2.0 | 2026-10-27 | Security (audit F1, F8, F15): `hostKey` is required in join links and legacy links are refused; the host Schnorr-signs every signaling `answer` (`sig`, bound to topic, attempt ids, offer and answer SDP, ts, nonce) and guests verify it before applying the answer or sending `hello`; no host key trust-on-first-use from `welcome` or relay records. Host attempts keyed by attempt id and offer. Rate limit per participant across links and reconnects; at most 3 links per participant (oldest closed) and 16 links without `hello`. `close()` publishes an `ended` relay tombstone plus NIP-09 deletion without blocking. Nonce de-duplication evicts oldest or expired entries instead of clearing; chunk frames require `0 ≤ index < count`, `count ≥ 1` and a bounded `count`. Wire `proto` stays 3 (the envelope gains the optional `sig`; 3.2.0 guests refuse a pre-3.2.0 host's unsigned answers) |
 | 3.1.0 | 2026-10-19 | Host limits: at most 16 pending (not yet open) connection attempts, 30 s open timeout, repeated offers re-answered at most once a second; the host closes a guest's peer connection when its channel closes; the guest stops re-sending offers once a dial is settled. Relay payloads are schema-validated by guests. Wire `proto` stays 3 |
 | 3.0.0 | 2026-10-07 | Wire `proto` 3: new `property` guest entry for person-scoped option properties (active options only, `scope: "person"`, value ≤ 2 KiB, else `invalid`); snapshots carry `properties` redacted to shared values plus the guest's own person values. New `reset` guest entry that clears the guest's own values of one property (`scope: "participant"`, `targets: ["properties"]`, `plugin` + `key`; the host sets `participantId`; anything else `invalid`); snapshots carry `history` redacted to the guest's own entries plus resets that are `all`-scoped or target the guest. Proto 2 peers get `protocol_mismatch` |
 | 2.1.0 | 2026-10-07 | Host assigns unique display names (`"Gina 2"`) and returns them in `welcome.name`; the guest shows that name. Wire `proto` stays 2: no message shape changes |

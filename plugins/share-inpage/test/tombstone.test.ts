@@ -188,6 +188,62 @@ describe("live revoke", () => {
     expect(hosting.host.getState().status).toBe("closed");
   });
 
+  it("close() publishes an 'ended' tombstone and deletes the last snapshot (F8)", async () => {
+    const creds = hostCredentials();
+    const keys = deriveSessionKeys(creds);
+    const { hosting, socket } = await hostLive(creds);
+    // A snapshot the live session published earlier from this tab.
+    const { secretKey } = deriveHostKeyPair(creds.relaySecret as string, creds.sessionId);
+    const earlier = new NostrSignaling(["wss://x"], createSocket);
+    const snapshot = earlier.publishSnapshot(
+      keys.topic,
+      secretKey,
+      seal(keys.signalKey, keys.topic, "{}")
+    );
+    earlier.close();
+
+    hosting.close(); // synchronous: never waits for relays
+    expect(hosting.host.getState().status).toBe("closed");
+    const tombstone = socket
+      .events(NIP78_SNAPSHOT_KIND)
+      .find((e) => payloadOf(creds, e).type === "tombstone");
+    if (!tombstone) throw new Error("no tombstone sent");
+    expect(payloadOf(creds, tombstone)).toMatchObject({ type: "tombstone", reason: "ended" });
+    expect(tombstone.created_at).toBeGreaterThan(snapshot.created_at);
+    expect(socket.events(5)[0]?.tags).toContainEqual(["e", snapshot.id]);
+    // The relay sockets stay open until a relay confirms (or the short timeout passes).
+    expect(socket.readyState).toBe(1);
+    socket.ok(tombstone.id);
+    await until(() => socket.readyState === 3);
+  });
+
+  it("close() releases the relay sockets after the timeout even without confirmation", async () => {
+    const creds = hostCredentials();
+    vi.stubGlobal("RTCPeerConnection", class {});
+    vi.stubGlobal("WebSocket", FakeSocket);
+    const hosting = await startHosting({
+      project: new FakeProject(),
+      credentials: creds,
+      config: { relays: ["wss://a"], iceServers: [], sameBrowser: false },
+      endTombstoneTimeoutMs: 30,
+    });
+    const socket = FakeSocket.instances[0] as FakeSocket;
+    socket.open();
+    hosting.close("The host closed their tab.");
+    await until(() => socket.readyState === 3);
+  });
+
+  it("refuses to host without the relay secret that signs answers", async () => {
+    vi.stubGlobal("RTCPeerConnection", class {});
+    await expect(
+      startHosting({
+        project: new FakeProject(),
+        credentials: createSessionCredentials(),
+        config: { relays: [], iceServers: [], sameBrowser: false },
+      })
+    ).rejects.toThrow(/relay secret/);
+  });
+
   it("leaves the relays alone when asked not to purge them", async () => {
     const creds = hostCredentials();
     const { hosting, socket } = await hostLive(creds);

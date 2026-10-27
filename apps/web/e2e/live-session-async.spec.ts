@@ -24,11 +24,20 @@ test("User Story 3: Displays damaged link notice for malformed join URLs", async
   });
 });
 
+test("Join links without a host key are refused as out of date", async ({ page }) => {
+  await page.goto("./#/join/nonexist12/nonexistsecret123456");
+
+  await expect(page.getByText("This link is out of date.")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
+});
+
 test("User Story 3: Clean browser profile shows unreachable notice when host is offline and no record exists", async ({
   page,
 }) => {
-  // Non-existent session
-  await page.goto("./#/join/nonexist12/nonexistsecret123456");
+  // Non-existent session; the host key is a valid curve point (secp256k1 G) that nobody hosts.
+  await page.goto(
+    "./#/join/nonexist12/nonexistsecret123456/79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+  );
 
   // In join form, enter name
   await page.getByRole("textbox", { name: "Your name" }).fill("Alice");

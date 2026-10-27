@@ -14,14 +14,22 @@ export interface SignalingTransport {
 }
 
 /** Envelopes older than this are ignored (replays, relay backlog). */
-const MAX_AGE_MS = 60_000;
+export const MAX_ENVELOPE_AGE_MS = 60_000;
+const MAX_AGE_MS = MAX_ENVELOPE_AGE_MS;
+
+/**
+ * Most nonces remembered for de-duplication. Beyond it the oldest go first; nonces also expire
+ * once their envelope is too old to be accepted anyway, so normal traffic never reaches the cap.
+ */
+export const MAX_SEEN_NONCES = 10_000;
 
 /**
  * An encrypted signaling room over one or more transports. Messages go out on every transport
  * and are de-duplicated on the way in, so one unreachable relay does not break the session.
  */
 export class SignalingRoom {
-  private seen = new Set<string>();
+  /** Nonce → time after which a replay would be rejected as stale anyway; insertion order. */
+  private seen = new Map<string, number>();
   private unsubs: Unsubscribe[] = [];
   private handlers = new Set<(env: SignalEnvelope) => void>();
 
@@ -34,8 +42,13 @@ export class SignalingRoom {
     }
   }
 
+  /** The rendezvous topic (answer signatures bind to it). */
+  get topic(): string {
+    return this.keys.topic;
+  }
+
   send(env: SignalEnvelope): void {
-    this.seen.add(env.nonce);
+    this.remember(env.nonce, env.ts);
     const payload = seal(this.keys.signalKey, this.keys.topic, JSON.stringify(env));
     for (const t of this.transports) {
       try {
@@ -73,10 +86,29 @@ export class SignalingRoom {
     } catch {
       return;
     }
-    if (this.seen.has(env.nonce) || Math.abs(Date.now() - env.ts) > MAX_AGE_MS) return;
-    this.seen.add(env.nonce);
-    if (this.seen.size > 2000) this.seen.clear();
+    const now = Date.now();
+    if (this.seen.has(env.nonce) || Math.abs(now - env.ts) > MAX_AGE_MS) return;
+    this.remember(env.nonce, env.ts, now);
     for (const cb of this.handlers) cb(env);
+  }
+
+  /**
+   * Remembers a nonce until its envelope would be rejected as stale. Expired nonces are dropped
+   * from the oldest end; past {@link MAX_SEEN_NONCES} the oldest are evicted one by one (never the
+   * whole set, which would reopen every recent nonce to replay).
+   */
+  private remember(nonce: string, ts: number, now = Date.now()): void {
+    this.seen.delete(nonce);
+    this.seen.set(nonce, ts + MAX_AGE_MS + 1_000);
+    for (const [oldest, expiresAt] of this.seen) {
+      if (this.seen.size > MAX_SEEN_NONCES || expiresAt < now) this.seen.delete(oldest);
+      else break;
+    }
+  }
+
+  /** Test hook: how many nonces are remembered. */
+  get seenCount(): number {
+    return this.seen.size;
   }
 }
 

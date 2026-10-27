@@ -13,11 +13,12 @@ afterEach(() => {
   for (const c of cleanups.splice(0)) c();
 });
 
-function guestFor(dial: LiveShareGuestOptions["dial"]) {
+function guestFor(dial: LiveShareGuestOptions["dial"], hostKey: string | null = HOST.hostKey) {
   const guest = new LiveShareGuest({
     sessionId: SESSION,
     deviceSecret: "device-secret-0123456789abcdef",
     displayName: "Ann",
+    ...(hostKey ? { hostKey } : {}),
     dial,
     giveUpAfterMs: 200,
   });
@@ -68,15 +69,23 @@ describe("relay payload validation", () => {
   });
 });
 
-describe("host key pinning (TOFU)", () => {
-  it("exposes the host key learned from a relay record", () => {
-    const guest = guestFor(offlineDial);
+describe("host key pinning (link only, no trust on first use)", () => {
+  it("does not learn a host key from a relay record", () => {
+    const guest = guestFor(offlineDial, null);
     expect(guest.getState().hostKey).toBeUndefined();
     guest.applyRelayPayload(valid(), HOST.hostKey);
-    expect(guest.getState().hostKey).toBe(HOST.hostKey);
+    expect(guest.getState().hostKey).toBeUndefined();
+    expect(guest.getState().snapshot).toBeNull();
   });
 
-  it("exposes the host key learned from the welcome snapshot", async () => {
+  it("ignores relay records signed by a key other than the link's", () => {
+    const guest = guestFor(offlineDial);
+    const other = deriveHostKeyPair("another-relay-secret-0123456789", SESSION);
+    guest.applyRelayPayload(valid(), other.hostKey);
+    expect(guest.getState().snapshot).toBeNull();
+  });
+
+  it("does not learn a host key from the welcome snapshot", async () => {
     const host = new LiveShareHost({
       project: new FakeProject(),
       relaySecret: "relay-secret-for-tests-0123456789",
@@ -84,10 +93,31 @@ describe("host key pinning (TOFU)", () => {
     });
     await host.start();
     cleanups.push(() => host.close());
-    const guest = guestFor(async () => connectPair((l) => host.accept(l)));
+    const guest = guestFor(async () => connectPair((l) => host.accept(l)), null);
     guest.start();
     await until(() => guest.getState().status === "live");
-    expect(guest.getState().hostKey).toBe(HOST.hostKey);
+    expect(guest.getState().hostKey).toBeUndefined();
+  });
+
+  it("treats an 'ended' tombstone as ended (not revoked) and ignores it while live", async () => {
+    const guest = guestFor(offlineDial);
+    guest.applyRelayPayload(
+      { v: 1, type: "tombstone", publishedAt: Date.now(), reason: "ended" },
+      HOST.hostKey
+    );
+    expect(guest.getState().status).toBe("ended");
+
+    const host = new LiveShareHost({ project: new FakeProject() });
+    await host.start();
+    cleanups.push(() => host.close());
+    const live = guestFor(async () => connectPair((l) => host.accept(l)));
+    live.start();
+    await until(() => live.getState().status === "live");
+    live.applyRelayPayload(
+      { v: 1, type: "tombstone", publishedAt: Date.now(), reason: "ended" },
+      HOST.hostKey
+    );
+    expect(live.getState().status).toBe("live");
   });
 
   it("keeps the key from the link and reports it", () => {

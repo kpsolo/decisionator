@@ -39,8 +39,8 @@ export interface LiveGuestState {
   /** Notice message for the guest, e.g. "The host reset your votes." */
   notice?: string;
   /**
-   * The pinned host key (64 hex): from the link, or learned on first use from a `welcome`
-   * snapshot or relay record. Persist it so later visits can verify relay records.
+   * The pinned host key (64 hex), from the join link only (never learned on first use). Answers
+   * and relay records are verified against it.
    */
   hostKey?: string;
 }
@@ -117,17 +117,24 @@ export class LiveShareGuest {
     }
   }
 
-  /** Applies a verified, unsealed relay record; malformed records are ignored. */
+  /**
+   * Applies a verified, unsealed relay record signed by `hostKey`; malformed records, and any
+   * record when no host key is pinned from the join link or signed by another key, are ignored.
+   * Host keys are never learned on first use (contract live-share v3.2.0).
+   */
   applyRelayPayload(raw: RelayPayload, hostKey: string): void {
-    if (this.pinnedHostKey && hostKey !== this.pinnedHostKey) return;
+    if (!this.pinnedHostKey || hostKey !== this.pinnedHostKey) return;
     const payload = parseRelayPayload(raw);
     if (!payload) return;
-    if (!this.pinnedHostKey) {
-      this.pinnedHostKey = hostKey;
-      this.set({ hostKey });
-    }
 
     if (payload.type === "tombstone") {
+      if (payload.reason === "ended") {
+        // The host closed the session (or its tab). It may resume with the same link, so keep
+        // retrying; an open link is authoritative and says `closing` itself.
+        if (this.state.status === "live") return;
+        this.set({ status: "ended", message: "The host ended the session." });
+        return;
+      }
       this.stopped = true;
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.set({ status: "revoked", message: "This session link has been revoked by the owner." });
@@ -263,17 +270,8 @@ export class LiveShareGuest {
         this.attempt = 0;
         this.rev = msg.rev;
         const welcomeSnapshot = msg.snapshot as unknown as ProjectSnapshot;
-        const liveHostKey = (welcomeSnapshot as unknown as Record<string, unknown>).live
-          ? (
-              (welcomeSnapshot as unknown as Record<string, unknown>).live as Record<
-                string,
-                unknown
-              >
-            ).hostKey
-          : undefined;
-        if (typeof liveHostKey === "string" && !this.pinnedHostKey) {
-          this.pinnedHostKey = liveHostKey;
-        }
+        // The host key is never taken from a `welcome`: it comes from the join link only, and the
+        // link's answer signature already proved this channel ends at that key's holder.
         this.checkVoteResets(this.state.snapshot, welcomeSnapshot, msg.participantId);
         this.set({
           ...(this.pinnedHostKey ? { hostKey: this.pinnedHostKey } : {}),

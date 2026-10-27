@@ -32,8 +32,15 @@ export interface LiveShareHostOptions {
   maxLinks?: number;
   /** Time a new link has to say hello. */
   helloTimeoutMs?: number;
-  /** Per-guest submission limit: a burst of `burst`, refilled at `perSecond` (default 20, 5/s). */
+  /**
+   * Per-participant submission limit, shared by all of a participant's links: a burst of
+   * `burst`, refilled at `perSecond` (default 20, 5/s).
+   */
   rateLimit?: { burst: number; perSecond: number };
+  /** Most simultaneous links one participant may hold (default {@link MAX_LINKS_PER_PARTICIPANT}). */
+  maxLinksPerParticipant?: number;
+  /** Most links that have not said `hello` yet (default {@link MAX_UNIDENTIFIED_LINKS}). */
+  maxUnidentifiedLinks?: number;
   relaySecret?: string;
   sessionId?: string;
   onPublishRelay?: (type: "snapshot" | "tombstone", payload: RelayPayload) => void;
@@ -43,12 +50,19 @@ interface LinkState {
   link: Link;
   participantId?: string;
   name?: string;
-  tokens: number;
-  refilledAt: number;
   helloTimer?: ReturnType<typeof setTimeout>;
 }
 
+interface Bucket {
+  tokens: number;
+  refilledAt: number;
+}
+
 const DEFAULT_RATE_LIMIT = { burst: 20, perSecond: 5 };
+/** Default cap on simultaneous links (tabs) per participant. */
+export const MAX_LINKS_PER_PARTICIPANT = 3;
+/** Default cap on links that have not identified themselves with `hello` yet. */
+export const MAX_UNIDENTIFIED_LINKS = 16;
 
 /**
  * The host side of a live session. It owns no transport: anything that produces a {@link Link}
@@ -61,7 +75,11 @@ export class LiveShareHost {
   private readonly maxLinks: number;
   private readonly helloTimeoutMs: number;
   private readonly rateLimit: { burst: number; perSecond: number };
+  private readonly maxLinksPerParticipant: number;
+  private readonly maxUnidentifiedLinks: number;
   private readonly hostKey: string | null = null;
+  /** Token buckets by participant: every link of one guest draws from the same one. */
+  private buckets = new Map<string, Bucket>();
 
   private links = new Set<LinkState>();
   private current: ProjectSnapshot | null = null;
@@ -84,6 +102,8 @@ export class LiveShareHost {
     this.maxLinks = opts.maxLinks ?? 64;
     this.helloTimeoutMs = opts.helloTimeoutMs ?? 10_000;
     this.rateLimit = opts.rateLimit ?? DEFAULT_RATE_LIMIT;
+    this.maxLinksPerParticipant = opts.maxLinksPerParticipant ?? MAX_LINKS_PER_PARTICIPANT;
+    this.maxUnidentifiedLinks = opts.maxUnidentifiedLinks ?? MAX_UNIDENTIFIED_LINKS;
     if (opts.relaySecret && opts.sessionId) {
       const { hostKey } = deriveHostKeyPair(opts.relaySecret, opts.sessionId);
       this.hostKey = hostKey;
@@ -133,12 +153,14 @@ export class LiveShareHost {
       link.close("session not live");
       return;
     }
-    if (this.links.size >= this.maxLinks) {
+    let unidentified = 0;
+    for (const s of this.links) if (!s.participantId) unidentified++;
+    if (this.links.size >= this.maxLinks || unidentified >= this.maxUnidentifiedLinks) {
       send(link, { t: "error", code: "session_full", message: "This session is full." });
       link.close("session full");
       return;
     }
-    const state: LinkState = { link, tokens: this.rateLimit.burst, refilledAt: Date.now() };
+    const state: LinkState = { link };
     this.links.add(state);
     state.helloTimer = setTimeout(() => {
       if (!state.participantId) link.close("no hello");
@@ -253,6 +275,18 @@ export class LiveShareHost {
       }
       clearTimeout(state.helloTimer);
       const participantId = participantIdFromKey(msg.key);
+      // At most `maxLinksPerParticipant` links per participant: the oldest ones make room (a
+      // reload's stale link must not lock the guest out), and are told why so they stop retrying.
+      const own = [...this.links].filter((s) => s.participantId === participantId);
+      for (const old of own.slice(0, Math.max(0, own.length - this.maxLinksPerParticipant + 1))) {
+        send(old.link, {
+          t: "error",
+          code: "session_full",
+          message: "You opened this session in too many tabs. This one was disconnected.",
+        });
+        old.link.close("too many links");
+        this.links.delete(old);
+      }
       state.participantId = participantId;
       state.name = this.uniqueName(participantId, msg.name.trim());
       if (!this.joinedAt.has(participantId)) {
@@ -279,7 +313,7 @@ export class LiveShareHost {
     // submit
     const { participantId, name } = state;
     if (!participantId || !name) return;
-    if (!this.takeToken(state)) {
+    if (!this.takeToken(participantId)) {
       this.ack(state, msg.id, "rate_limited", "Too many changes at once. Try again shortly.");
       return;
     }
@@ -334,15 +368,24 @@ export class LiveShareHost {
     );
   }
 
-  private takeToken(state: LinkState): boolean {
+  /**
+   * Takes one write token from the participant's bucket. The bucket is per participant (not per
+   * link) and outlives reconnects, so extra tabs or rejoining do not buy more throughput.
+   */
+  private takeToken(participantId: string): boolean {
     const now = Date.now();
-    state.tokens = Math.min(
+    let bucket = this.buckets.get(participantId);
+    if (!bucket) {
+      bucket = { tokens: this.rateLimit.burst, refilledAt: now };
+      this.buckets.set(participantId, bucket);
+    }
+    bucket.tokens = Math.min(
       this.rateLimit.burst,
-      state.tokens + ((now - state.refilledAt) / 1000) * this.rateLimit.perSecond
+      bucket.tokens + ((now - bucket.refilledAt) / 1000) * this.rateLimit.perSecond
     );
-    state.refilledAt = now;
-    if (state.tokens < 1) return false;
-    state.tokens -= 1;
+    bucket.refilledAt = now;
+    if (bucket.tokens < 1) return false;
+    bucket.tokens -= 1;
     return true;
   }
 

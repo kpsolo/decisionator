@@ -1,0 +1,10 @@
+---
+"@decisionator/share-inpage": minor
+"@decisionator/web": patch
+---
+
+Authenticate the live-session host and tighten guest limits (contract live-share v3.2.0, security audit F1, F8, F15):
+- `@decisionator/share-inpage`: the host Schnorr-signs every signaling answer with its host key (`SignalEnvelope.sig`, bound to topic, attempt ids, offer and answer SDP, ts and nonce; `signAnswer` / `verifyAnswer`), and `dialHost` (now requiring `hostKey`) applies only answers that verify against the join link's key, so a guest never sends `hello` or its participant key to another link holder. `listenForGuests` requires `signingKey` and tracks attempts by attempt id and offer. Join links always carry the host key (`joinPath` throws without one); `joinSession` refuses links without it (`LiveShareLegacyLinkError`) or with an invalid one, and `startHosting` requires the `relaySecret`. Guests no longer learn a host key on first use from `welcome` or relay records. The write rate limit is per participant across all its links and reconnects, a participant holds at most 3 links (`maxLinksPerParticipant`, oldest closed) and at most 16 links may be waiting for `hello` (`maxUnidentifiedLinks`). `HostingSession.close()` publishes an `ended` relay tombstone plus a best-effort NIP-09 deletion of the last snapshot without blocking (`endTombstoneTimeoutMs`, default 2 s); guests treat an `ended` tombstone as ended, not revoked. Signaling nonce de-duplication evicts the oldest or expired nonces instead of clearing the whole set, and link chunk frames require `0 <= index < count`, `count >= 1` and a bounded `count`.
+- `@decisionator/web`: join links made before this version (no host key) show "This link is out of date" and ask for the link to be shared again; guests cache only the host key from the link.
+
+Cached guest sessions keep a host key only when it came from the join link; records cached before this change lose their key, so "Reopen" asks for a fresh link instead of trusting a key pinned from an unauthenticated welcome.

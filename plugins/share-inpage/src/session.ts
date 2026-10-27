@@ -2,6 +2,7 @@ import {
   type SessionCredentials,
   deriveHostKeyPair,
   deriveSessionKeys,
+  isValidHostKey,
   parseHostKeyFromLink,
   seal,
   unseal,
@@ -120,7 +121,7 @@ async function sendTombstone(
           ["e", previous.id],
           ["k", String(NIP78_SNAPSHOT_KIND)],
         ],
-        content: "Session link revoked",
+        content: reason === "ended" ? "Session ended" : "Session link revoked",
       })
     );
   }
@@ -152,19 +153,43 @@ export async function publishTombstone(opts: {
   }
 }
 
-/** Starts serving `project`; resolves once the project is loaded and offers are being answered. */
+/** Default wait for relays to confirm the "ended" tombstone published by `close()`. */
+export const END_TOMBSTONE_TIMEOUT_MS = 2_000;
+
+/**
+ * Thrown by {@link joinSession} for a join link without a host key (made before contract
+ * live-share v3.2.0). Such a link cannot authenticate the host, so it is refused rather than
+ * trusting whoever answers; the owner has to share the link again.
+ */
+export class LiveShareLegacyLinkError extends Error {
+  constructor() {
+    super(
+      "This join link is from an older version of Deci and cannot prove it leads to the host. Ask the owner to share the session link again."
+    );
+    this.name = "LiveShareLegacyLinkError";
+  }
+}
+
+/**
+ * Starts serving `project`; resolves once the project is loaded and offers are being answered.
+ * The credentials must carry the host-only `relaySecret`: the host key derived from it signs
+ * every signaling answer, and guests refuse unsigned ones.
+ */
 export async function startHosting(opts: {
   project: HostedProject;
   credentials: SessionCredentials;
   config: LiveNetworkConfig;
   role?: LiveRole;
+  /** Wait for relays to confirm the "ended" tombstone on `close()` before closing them. */
+  endTombstoneTimeoutMs?: number;
 }): Promise<HostingSession> {
   if (!isWebRtcAvailable()) throw new LiveShareUnsupportedError();
+  if (!opts.credentials.relaySecret) {
+    throw new Error("Hosting needs the session's relay secret (host key).");
+  }
   const room = openRoom(opts.credentials, opts.config);
   const sessionKeys = deriveSessionKeys(opts.credentials);
-  const hostKeyPair = opts.credentials.relaySecret
-    ? deriveHostKeyPair(opts.credentials.relaySecret, opts.credentials.sessionId)
-    : null;
+  const hostKeyPair = deriveHostKeyPair(opts.credentials.relaySecret, opts.credentials.sessionId);
 
   const host = new LiveShareHost({
     project: opts.project,
@@ -172,8 +197,7 @@ export async function startHosting(opts: {
     relaySecret: opts.credentials.relaySecret,
     sessionId: opts.credentials.sessionId,
     ...(opts.config.rateLimit ? { rateLimit: opts.config.rateLimit } : {}),
-    onPublishRelay(type, payload) {
-      if (!hostKeyPair) return;
+    onPublishRelay(_type, payload) {
       const sealed = seal(sessionKeys.signalKey, sessionKeys.topic, JSON.stringify(payload));
       for (const t of room.getTransports()) {
         if (t instanceof NostrSignaling) {
@@ -183,8 +207,10 @@ export async function startHosting(opts: {
     },
   });
   await host.start();
-  const stopListening = listenForGuests(room, { iceServers: opts.config.iceServers }, (link) =>
-    host.accept(link)
+  const stopListening = listenForGuests(
+    room,
+    { iceServers: opts.config.iceServers, signingKey: hostKeyPair.secretKey },
+    (link) => host.accept(link)
   );
   let closed = false;
   return {
@@ -195,7 +221,22 @@ export async function startHosting(opts: {
       closed = true;
       host.close(reason);
       stopListening();
-      room.close();
+      // Retract the last snapshot from public relays: an "ended" tombstone replaces it, plus a
+      // best-effort NIP-09 deletion. Fire and forget so closing (e.g. on pagehide) never waits;
+      // the relay sockets close once a relay confirmed it or the short timeout passed.
+      const nostr = room.getTransports().find((t) => t instanceof NostrSignaling);
+      if (nostr instanceof NostrSignaling) {
+        void sendTombstone(
+          nostr,
+          opts.credentials,
+          opts.endTombstoneTimeoutMs ?? END_TOMBSTONE_TIMEOUT_MS,
+          "ended"
+        )
+          .catch(() => false)
+          .finally(() => room.close());
+      } else {
+        room.close();
+      }
     },
     async revoke(reason, revokeOpts = {}) {
       if (closed) return;
@@ -230,10 +271,16 @@ export function joinSession(opts: {
   onNotice?: (message: string) => void;
 }): { guest: LiveShareGuest; dispose(): void } {
   if (!isWebRtcAvailable()) throw new LiveShareUnsupportedError();
+  // The host key from the link is the only trust anchor: without it any link holder could answer
+  // as the host and collect this guest's participant key (contract live-share v3.2.0).
+  if (!opts.credentials.hostKey) throw new LiveShareLegacyLinkError();
+  const normHostKey = parseHostKeyFromLink(opts.credentials.hostKey);
+  if (!isValidHostKey(normHostKey)) {
+    throw new Error(
+      "This join link is damaged (its host key is not valid). Ask the owner for it again."
+    );
+  }
   const room = openRoom(opts.credentials, opts.config);
-  const normHostKey = opts.credentials.hostKey
-    ? parseHostKeyFromLink(opts.credentials.hostKey)
-    : undefined;
 
   const guest = new LiveShareGuest({
     sessionId: opts.credentials.sessionId,
@@ -245,6 +292,7 @@ export function joinSession(opts: {
         room,
         {
           iceServers: opts.config.iceServers,
+          hostKey: normHostKey,
           timeoutMs:
             opts.config.dialTimeoutMs ?? (opts.config.relays.length === 0 ? 5_000 : 15_000),
         },
@@ -256,18 +304,16 @@ export function joinSession(opts: {
 
   const sessionKeys = deriveSessionKeys(opts.credentials);
   const unsubs: (() => void)[] = [];
-  if (normHostKey) {
-    for (const t of room.getTransports()) {
-      if (t instanceof NostrSignaling) {
-        unsubs.push(
-          t.subscribeSnapshot(sessionKeys.topic, normHostKey, (event) => {
-            const unsealed = unseal(sessionKeys.signalKey, sessionKeys.topic, event.content);
-            if (!unsealed) return;
-            const payload = parseRelayPayload(unsealed);
-            if (payload) guest.applyRelayPayload(payload, normHostKey);
-          })
-        );
-      }
+  for (const t of room.getTransports()) {
+    if (t instanceof NostrSignaling) {
+      unsubs.push(
+        t.subscribeSnapshot(sessionKeys.topic, normHostKey, (event) => {
+          const unsealed = unseal(sessionKeys.signalKey, sessionKeys.topic, event.content);
+          if (!unsealed) return;
+          const payload = parseRelayPayload(unsealed);
+          if (payload) guest.applyRelayPayload(payload, normHostKey);
+        })
+      );
     }
   }
 
@@ -281,9 +327,17 @@ export function joinSession(opts: {
   };
 }
 
-/** Route path of a join link (hash routing keeps it in the URL fragment, off every server). */
+/**
+ * Route path of a join link (hash routing keeps it in the URL fragment, off every server). Every
+ * link carries the host key: taken from `hostKey`, or derived from the host-only `relaySecret`.
+ * Throws when neither is present, since guests refuse links without it.
+ */
 export function joinPath(credentials: SessionCredentials): string {
-  return credentials.hostKey
-    ? `/join/${credentials.sessionId}/${credentials.secret}/${credentials.hostKey}`
-    : `/join/${credentials.sessionId}/${credentials.secret}`;
+  const hostKey =
+    credentials.hostKey ??
+    (credentials.relaySecret
+      ? deriveHostKeyPair(credentials.relaySecret, credentials.sessionId).hostKeyLink
+      : undefined);
+  if (!hostKey) throw new Error("A join link needs the session's host key.");
+  return `/join/${credentials.sessionId}/${credentials.secret}/${hostKey}`;
 }

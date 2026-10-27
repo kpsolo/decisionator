@@ -399,6 +399,67 @@ describe("LiveShareHost + LiveShareGuest", () => {
     );
     expect(limited.length).toBeGreaterThan(0);
   });
+
+  it("shares one rate limit across all links of a participant (F8)", async () => {
+    const project = new FakeProject();
+    const host = new LiveShareHost({ project, rateLimit: { burst: 2, perSecond: 0.001 } });
+    await host.start();
+    cleanups.push(() => host.close());
+    // Three tabs of one device: one participant, so one bucket, not three.
+    const tabs: LiveShareGuest[] = [];
+    for (let i = 0; i < 3; i++) tabs.push(await joined(makeGuest(host, "Alice", "device-A").guest));
+    expect(host.getState().guests).toHaveLength(1);
+    await tabs[0]?.submit([{ kind: "grade", optionId: "a", value: 3 }]);
+    await tabs[1]?.submit([{ kind: "grade", optionId: "a", value: 4 }]);
+    await expect(
+      tabs[2]?.submit([{ kind: "grade", optionId: "a", value: 5 }])
+    ).rejects.toMatchObject({ code: "rate_limited" });
+    // Another participant still has a full bucket of their own.
+    const bob = await joined(makeGuest(host, "Bob").guest);
+    await bob.submit([{ kind: "grade", optionId: "b", value: 2 }]);
+  });
+
+  it("keeps the rate limit across reconnects of a participant", async () => {
+    const project = new FakeProject();
+    const host = new LiveShareHost({ project, rateLimit: { burst: 1, perSecond: 0.001 } });
+    await host.start();
+    cleanups.push(() => host.close());
+    const first = makeGuest(host, "Alice", "device-A");
+    await joined(first.guest);
+    await first.guest.submit([{ kind: "grade", optionId: "a", value: 3 }]);
+    first.guest.leave();
+    const again = await joined(makeGuest(host, "Alice", "device-A").guest);
+    await expect(again.submit([{ kind: "grade", optionId: "a", value: 4 }])).rejects.toMatchObject({
+      code: "rate_limited",
+    });
+  });
+
+  it("caps simultaneous links per participant, disconnecting the oldest (F8)", async () => {
+    const { host } = await startHost(new FakeProject(), "contribute", 64);
+    const tabs: LiveShareGuest[] = [];
+    for (let i = 0; i < 3; i++) tabs.push(await joined(makeGuest(host, "Alice", "device-A").guest));
+    const fourth = await joined(makeGuest(host, "Alice", "device-A").guest);
+    await until(() => tabs[0]?.getState().status === "failed");
+    expect(tabs[0]?.getState().message).toMatch(/too many tabs/);
+    expect(fourth.getState().status).toBe("live");
+    const guests = host.getState().guests;
+    expect(guests).toHaveLength(1);
+    expect(guests[0]?.connections).toBe(3);
+    // One participant cannot fill the session: others still get in.
+    await joined(makeGuest(host, "Bob").guest);
+    expect(host.getState().guests).toHaveLength(2);
+  });
+
+  it("turns away links beyond the cap on links that have not said hello", async () => {
+    const host = new LiveShareHost({ project: new FakeProject(), maxUnidentifiedLinks: 2 });
+    await host.start();
+    cleanups.push(() => host.close());
+    const silent = [connectPair((l) => host.accept(l)), connectPair((l) => host.accept(l))];
+    const third = connectPair((l) => host.accept(l));
+    await until(() => third.closed);
+    expect(silent.every((l) => !l.closed)).toBe(true);
+    for (const l of silent) l.close();
+  });
 });
 
 describe("option properties over live share (proto 3)", () => {

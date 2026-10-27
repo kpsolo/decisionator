@@ -42,7 +42,10 @@ export interface SessionCredentials {
   sessionId: string;
   /** 128-bit secret; whoever holds it can join and read the signaling traffic. */
   secret: string;
-  /** Host verification key (x-only Schnorr public key) — optional in join link. */
+  /**
+   * Host verification key (x-only Schnorr public key, base64url or hex). Required in join links
+   * since contract live-share v3.2.0: guests verify signaling answers against it.
+   */
   hostKey?: string;
   /** Host-only secret used to derive Schnorr key pair (never travels in links or snapshots). */
   relaySecret?: string;
@@ -137,5 +140,60 @@ export function parseHostKeyFromLink(raw: string): string {
     return raw;
   } catch {
     return raw;
+  }
+}
+
+/** True for a 64-hex x-only Schnorr public key that lies on the curve. */
+export function isValidHostKey(hex: string): boolean {
+  if (!/^[0-9a-f]{64}$/.test(hex)) return false;
+  try {
+    schnorr.utils.lift_x(BigInt(`0x${hex}`));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The fields of a signaling `answer` the host signs (contract live-share §Signaling, v3.2.0). */
+export interface AnswerSignatureInput {
+  /** Rendezvous topic of the session (binds the answer to this session). */
+  topic: string;
+  /** Host attempt id (`from` of the answer). */
+  from: string;
+  /** Guest attempt id (`to` of the answer). */
+  to: string;
+  /** The guest's offer SDP this answer responds to. */
+  offerSdp: string;
+  /** The answer SDP (carries the host's DTLS fingerprint). */
+  answerSdp: string;
+  ts: number;
+  nonce: string;
+}
+
+function answerDigest(input: AnswerSignatureInput): Uint8Array {
+  const text = [
+    "deci-live/answer/v1",
+    input.topic,
+    input.from,
+    input.to,
+    sha256Hex(input.offerSdp),
+    sha256Hex(input.answerSdp),
+    String(input.ts),
+    input.nonce,
+  ].join("\0");
+  return sha256(utf8ToBytes(text));
+}
+
+/** Schnorr signature (128 hex) of an answer envelope with the host secret key. */
+export function signAnswer(secretKey: Uint8Array, input: AnswerSignatureInput): string {
+  return bytesToHex(schnorr.sign(answerDigest(input), secretKey));
+}
+
+/** Verifies {@link signAnswer} against the host key from the join link (64 hex). */
+export function verifyAnswer(hostKey: string, sig: string, input: AnswerSignatureInput): boolean {
+  try {
+    return schnorr.verify(sig, answerDigest(input), hostKey);
+  } catch {
+    return false;
   }
 }

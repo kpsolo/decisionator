@@ -132,6 +132,51 @@ describe("IndexedDB Storage Layer", () => {
     expect(afterDelete).toBeUndefined();
   });
 
+  it("trusts a cached host key only when it came from the join link", async () => {
+    const base = {
+      secret: "s",
+      participantId: "peer:1",
+      displayName: "Bob",
+      name: "Bob",
+      role: "contribute" as const,
+      projectTitle: "T",
+      rev: 1,
+      snapshot: {
+        project: {
+          title: "T",
+          description: "",
+          protected: false,
+          voting: { state: "open" as const, round: 1, topN: 3, liveResults: true },
+          formatVersion: 1 as const,
+        },
+        options: [],
+        grades: [],
+        comments: [],
+        rankings: [],
+        outcomes: [],
+        role: "view" as const,
+      },
+      cachedAt: new Date(2_000_000).toISOString(),
+      lastSyncedAt: new Date(2_000_000).toISOString(),
+      lastOpenedAt: new Date(2_000_000).toISOString(),
+    };
+    await cacheLiveSession({ ...base, sessionId: "pinned", hostKey: "attacker-key" });
+    await cacheLiveSession({
+      ...base,
+      sessionId: "linked",
+      hostKey: "link-key",
+      hostKeyFromLink: true,
+    });
+
+    expect((await getCachedLiveSession("pinned"))?.hostKey).toBeNull();
+    expect((await getCachedLiveSession("linked"))?.hostKey).toBe("link-key");
+    const list = await listCachedLiveSessions();
+    expect(list.find((s) => s.sessionId === "pinned")?.hostKey).toBeNull();
+
+    await deleteCachedLiveSession("pinned");
+    await deleteCachedLiveSession("linked");
+  });
+
   it("enforces LRU eviction keeping 30 most recently opened sessions", async () => {
     // Insert 35 sessions with sequential lastOpenedAt
     for (let i = 1; i <= 35; i++) {

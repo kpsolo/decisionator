@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createSessionCredentials, deriveSessionKeys } from "../src/crypto.js";
+import { createSessionCredentials, deriveHostKeyPair, deriveSessionKeys } from "../src/crypto.js";
 import type { Link } from "../src/link.js";
 import type { SignalEnvelope } from "../src/protocol.js";
 import { dialHost, listenForGuests } from "../src/rtc.js";
@@ -92,6 +92,9 @@ function offer(from: string): SignalEnvelope {
   };
 }
 
+const HOST = deriveHostKeyPair("relay-secret-for-rtc-tests-0123456789", "rtc-sess");
+const signingKey = HOST.secretKey;
+
 const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const c of cleanups.splice(0)) c();
@@ -102,7 +105,7 @@ describe("rtc: host side", () => {
     const { host, guest } = rooms();
     const { pcs, createPeerConnection } = factory();
     const links: Link[] = [];
-    const stop = listenForGuests(host, { iceServers: [], createPeerConnection }, (l) =>
+    const stop = listenForGuests(host, { iceServers: [], createPeerConnection, signingKey }, (l) =>
       links.push(l)
     );
     cleanups.push(
@@ -127,7 +130,7 @@ describe("rtc: host side", () => {
     const { pcs, createPeerConnection } = factory();
     const stop = listenForGuests(
       host,
-      { iceServers: [], createPeerConnection, maxPendingConnections: 4 },
+      { iceServers: [], createPeerConnection, signingKey, maxPendingConnections: 4 },
       () => {}
     );
     cleanups.push(
@@ -149,7 +152,11 @@ describe("rtc: host side", () => {
   it("does not create a second connection for repeated offers from one guest", async () => {
     const { host, guest } = rooms();
     const { pcs, createPeerConnection } = factory();
-    const stop = listenForGuests(host, { iceServers: [], createPeerConnection }, () => {});
+    const stop = listenForGuests(
+      host,
+      { iceServers: [], createPeerConnection, signingKey },
+      () => {}
+    );
     cleanups.push(
       stop,
       () => host.close(),
@@ -177,7 +184,14 @@ describe("rtc: guest side", () => {
     const abort = new AbortController();
     const dialing = dialHost(
       guest,
-      { iceServers: [], createPeerConnection, gatherTimeoutMs: 40, resendMs: 10, timeoutMs: 5000 },
+      {
+        iceServers: [],
+        createPeerConnection,
+        hostKey: HOST.hostKey,
+        gatherTimeoutMs: 40,
+        resendMs: 10,
+        timeoutMs: 5000,
+      },
       abort.signal
     );
     await until(() => pcs.length === 1);

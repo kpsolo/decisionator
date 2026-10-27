@@ -32,8 +32,13 @@ export interface CachedLiveSessionRecord {
   sessionId: string;
   /** Join-link secret the guest already holds (FR-009); deleted with the record. */
   secret: string;
-  /** Host verification key — from the link or pinned from the first welcome. */
+  /** Host verification key from the join link. */
   hostKey: string | null;
+  /**
+   * Set when `hostKey` came from the join link. Records cached before host-signed answers may
+   * hold a key pinned from an unauthenticated welcome, so their key is not trusted.
+   */
+  hostKeyFromLink?: true;
   participantId: string;
   displayName: string;
   name: string;
@@ -194,13 +199,18 @@ export async function getCachedLiveSession(
   sessionId: string
 ): Promise<CachedLiveSessionRecord | undefined> {
   const db = await getDatabase();
-  return db.get("live_sessions", sessionId);
+  const record = await db.get("live_sessions", sessionId);
+  return record && trustedHostKey(record);
 }
 
 export async function listCachedLiveSessions(): Promise<CachedLiveSessionRecord[]> {
   const db = await getDatabase();
   const list = await db.getAllFromIndex("live_sessions", "lastOpenedAt");
-  return list.reverse();
+  return list.reverse().map(trustedHostKey);
+}
+
+function trustedHostKey(record: CachedLiveSessionRecord): CachedLiveSessionRecord {
+  return record.hostKeyFromLink ? record : { ...record, hostKey: null };
 }
 
 export async function deleteCachedLiveSession(sessionId: string): Promise<void> {

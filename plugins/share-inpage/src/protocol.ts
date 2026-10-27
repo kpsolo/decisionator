@@ -19,6 +19,14 @@ export const SignalEnvelopeSchema = z.object({
   /** Sender clock, ms since epoch; stale messages are ignored. */
   ts: z.number().int(),
   sdp: z.string().min(1).max(64_000),
+  /**
+   * Answers only: Schnorr signature by the host key over topic, from, to, the offer and answer
+   * SDP hashes, ts and nonce (see `signAnswer`). Guests drop answers without a valid one.
+   */
+  sig: z
+    .string()
+    .regex(/^[0-9a-f]{128}$/)
+    .optional(),
 });
 export type SignalEnvelope = z.infer<typeof SignalEnvelopeSchema>;
 

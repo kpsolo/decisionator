@@ -38,6 +38,8 @@ export function createLink(pipe: MessagePipe, opts: LinkOptions = {}): Link {
   const maxMessageBytes = opts.maxMessageBytes ?? 16 * 1024 * 1024;
   const heartbeatMs = opts.heartbeatMs ?? 5_000;
   const timeoutMs = opts.timeoutMs ?? 15_000;
+  /** Most chunks one message may be split into (the sender uses FRAME_BYTES per chunk). */
+  const maxChunks = Math.ceil(maxMessageBytes / FRAME_BYTES) + 1;
 
   const messageListeners: ((m: unknown) => void)[] = [];
   /** Messages that arrived before anyone listened, e.g. a refusal sent the moment a link opens. */
@@ -101,18 +103,31 @@ export function createLink(pipe: MessagePipe, opts: LinkOptions = {}): Link {
       if (data.length - 1 <= maxMessageBytes) deliver(data.slice(1));
     } else if (kind === "c") {
       const bar = data.indexOf("|");
+      if (bar < 0) return;
       const [id, indexText, countText] = data.slice(1, bar).split(",");
       const index = Number(indexText);
       const count = Number(countText);
-      if (!id || !Number.isInteger(index) || !Number.isInteger(count) || index >= count) return;
+      // 0 <= index < count, 1 <= count <= the most chunks a message under the size cap needs.
+      if (
+        !id ||
+        !Number.isInteger(index) ||
+        !Number.isInteger(count) ||
+        count < 1 ||
+        index < 0 ||
+        index >= count
+      ) {
+        return;
+      }
       let entry = partial.get(id);
       if (!entry) {
-        if (count * FRAME_BYTES > maxMessageBytes + FRAME_BYTES || partial.size > 8) {
+        if (count > maxChunks || partial.size > 8) {
           shutdown("message too large");
           return;
         }
         entry = { parts: new Array(count), received: 0, size: 0 };
         partial.set(id, entry);
+      } else if (entry.parts.length !== count) {
+        return; // a chunk that disagrees with the message it claims to belong to
       }
       const part = data.slice(bar + 1);
       if (entry.parts[index] === undefined) {

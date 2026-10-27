@@ -147,13 +147,34 @@ export function JoinLivePage() {
     }
   };
 
+  // Links made before contract live-share v3.2.0 carry no host key, so a guest could not tell the
+  // host from any other link holder (who could then capture its identity). Refuse them; the host
+  // itself may still resume from such a link.
+  const isHostHere = !!hostProject && !joinedAs && !isGuestTab();
+  if (!hostKey && !isHostHere) {
+    return (
+      <Card className="mx-auto mt-6 max-w-md">
+        <CardHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+            <ShieldAlert className="h-5 w-5 text-muted-foreground" aria-hidden />
+          </div>
+          <CardTitle>This link is out of date.</CardTitle>
+          <CardDescription>
+            It comes from an older version of Deci and can't prove that it leads to the host. Ask
+            the host to share the session link or QR code again.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   // 2. Returning guest with saved offline deliberation state (FR-003, US2)
   if (cachedSession && (!hostProject || isGuestTab() || joinedAs)) {
     return (
       <GuestSession
         sessionId={sessionId}
         secret={secret}
-        hostKey={hostKey ?? cachedSession.hostKey ?? undefined}
+        hostKey={hostKey}
         displayName={cachedSession.displayName || cachedSession.name}
         initialCached={cachedSession}
       />
@@ -358,8 +379,9 @@ function GuestSession({
         const record: CachedLiveSessionRecord = {
           sessionId,
           secret,
-          // Keep the key learned on first use (TOFU) so later visits can verify relay records.
-          hostKey: hostKey ?? s.hostKey ?? cached?.hostKey ?? null,
+          // Only the key from the join link is trusted (never one learned on first use).
+          hostKey: hostKey ?? null,
+          ...(hostKey ? { hostKeyFromLink: true as const } : {}),
           participantId: s.participantId ?? cached?.participantId ?? "",
           displayName,
           name: s.name ?? cached?.name ?? displayName,
