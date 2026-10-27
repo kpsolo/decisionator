@@ -231,7 +231,7 @@ examples/                            # minimal standalone example plugins for MV
   - Replicates the exact semantics of `SheetStore` while benefiting from Automerge's immutable hash-chained CRDT changes.
 - **Relay & Sync**:
   - `packages/relay`: standalone Hono server with SQLite storage implementing `contracts/relay-protocol.md`.
-  - Authenticated via Ed25519 signed requests (`X-Dcg-Key`, `X-Dcg-Timestamp`, `X-Dcg-Signature`).
+  - Authenticated via Ed25519 signed requests (`X-Dcg-Key`, `X-Dcg-Timestamp`, `X-Dcg-Nonce`, `X-Dcg-Signature`) over method, path with query, timestamp, nonce and body hash; nonces are replay-cached for the freshness window.
   - Stores encrypted `ChangeBatch` (XChaCha20-Poly1305 payload) and signed ACLs.
   - Implements two-step invites, live WebSocket change notifications, and remote agent WebSocket tunneling (`/v1/tunnels`).
 

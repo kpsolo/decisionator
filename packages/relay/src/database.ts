@@ -19,6 +19,8 @@ export interface StoredInvite {
   inviteeKey?: string;
   inviteeEncKey?: string;
   sealedKey?: string;
+  /** SHA-256 hex of the out-of-band invite secret; null for invites created before v2. */
+  secretHash?: string | null;
   createdAt: string;
 }
 
@@ -85,6 +87,15 @@ export class RelayDatabase {
         createdAt TEXT NOT NULL
       );
     `);
+
+    // v2: invites are bound to an out-of-band secret. Older databases gain the column; their
+    // pending invites (no hash) can no longer be accepted.
+    const inviteColumns = this.db.prepare("PRAGMA table_info(invites)").all() as {
+      name: string;
+    }[];
+    if (!inviteColumns.some((col) => col.name === "secretHash")) {
+      this.db.exec("ALTER TABLE invites ADD COLUMN secretHash TEXT");
+    }
   }
 
   saveDoc(docId: string, acl: SignedAcl): void {
@@ -185,13 +196,14 @@ export class RelayDatabase {
     inviteId: string,
     docId: string,
     role: "contribute" | "view",
-    expiresAt: string
+    expiresAt: string,
+    secretHash: string
   ): StoredInvite {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(
-      "INSERT INTO invites (inviteId, docId, role, expiresAt, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO invites (inviteId, docId, role, expiresAt, status, secretHash, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
-    stmt.run(inviteId, docId, role, expiresAt, "pending", now);
+    stmt.run(inviteId, docId, role, expiresAt, "pending", secretHash, now);
     return {
       inviteId,
       docId,

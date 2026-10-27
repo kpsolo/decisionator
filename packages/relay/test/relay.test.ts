@@ -1,7 +1,9 @@
 import {
   encryptXChaCha20,
   generateEncryptionKeyPair,
+  generateInviteSecret,
   generateSigningKeyPair,
+  hashInviteSecret,
   sealBox,
   signEd25519,
   signRequest,
@@ -12,6 +14,60 @@ import WebSocket from "ws";
 import { createRelayApp } from "../src/app.js";
 import type { ChangeBatch, SignedAcl } from "../src/protocol.js";
 import { startRelayServer } from "../src/server.js";
+
+type SigningKeys = ReturnType<typeof generateSigningKeyPair>;
+
+/**
+ * Opens `WS /v1/docs/{docId}/live`, sends `message` (default: a valid signed subscribe from
+ * `signer`) and resolves once the relay answers or closes the socket.
+ */
+async function openLive(
+  port: number,
+  docId: string,
+  signer?: SigningKeys,
+  message?: unknown
+): Promise<{
+  ws: WebSocket;
+  events: Record<string, unknown>[];
+  closed: Promise<{ code: number; reason: string }>;
+}> {
+  const path = `/v1/docs/${docId}/live`;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+  const events: Record<string, unknown>[] = [];
+  const closed = new Promise<{ code: number; reason: string }>((resolve) =>
+    ws.on("close", (code, reason) => resolve({ code, reason: reason.toString() }))
+  );
+  const firstReply = new Promise<void>((resolve) => {
+    ws.on("message", (data) => {
+      events.push(JSON.parse(data.toString()));
+      resolve();
+    });
+    ws.on("close", () => resolve());
+  });
+  await new Promise((r) => ws.on("open", r));
+  if (message !== undefined) {
+    ws.send(typeof message === "string" ? message : JSON.stringify(message));
+  } else if (signer) {
+    const sig = signRequest(
+      "WS",
+      path,
+      Date.now(),
+      new TextEncoder().encode(JSON.stringify({ type: "subscribe", docId })),
+      signer
+    );
+    ws.send(
+      JSON.stringify({
+        type: "subscribe",
+        key: sig["X-Dcg-Key"],
+        timestamp: sig["X-Dcg-Timestamp"],
+        nonce: sig["X-Dcg-Nonce"],
+        signature: sig["X-Dcg-Signature"],
+      })
+    );
+  }
+  if (message !== undefined || signer) await firstReply;
+  return { ws, events, closed };
+}
 
 describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
   it("enforces signed requests and ACL creation", async () => {
@@ -230,10 +286,12 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
       body: docBody,
     });
 
-    // Step 1: Owner creates invite
+    // Step 1: Owner creates invite, bound to an out-of-band secret (link fragment)
+    const inviteSecret = generateInviteSecret();
     const inviteReq = {
       role: "contribute",
       expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      secretHash: hashInviteSecret(inviteSecret),
     };
     const inviteBody = new TextEncoder().encode(JSON.stringify(inviteReq));
     const invRes = await relay.app.request(`/v1/docs/${docId}/invites`, {
@@ -246,9 +304,14 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
     });
     expect(invRes.status).toBe(201);
     const { inviteId } = await invRes.json();
+    expect(inviteId).toMatch(/^inv_[0-9a-f]{32}$/);
 
-    // Step 2: Invitee accepts invite presenting keys
-    const acceptReq = { key: inviteeKey.publicKeyBase64, encKey: inviteeEncKey.publicKeyBase64 };
+    // Step 2: Invitee accepts invite presenting keys and the invite secret
+    const acceptReq = {
+      key: inviteeKey.publicKeyBase64,
+      encKey: inviteeEncKey.publicKeyBase64,
+      secret: inviteSecret,
+    };
     const acceptBody = new TextEncoder().encode(JSON.stringify(acceptReq));
     const acceptRes = await relay.app.request(`/v1/invites/${inviteId}/accept`, {
       method: "POST",
@@ -309,16 +372,7 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
       const ownerKey = generateSigningKeyPair();
       const nodeKey = generateSigningKeyPair();
 
-      // Test live notifications WebSocket
-      const liveWs = new WebSocket(`ws://127.0.0.1:${port}/v1/docs/live-doc/live`);
-      const liveEvents: { type: string; docId: string; seq: number }[] = [];
-      liveWs.on("message", (data) => {
-        liveEvents.push(JSON.parse(data.toString()));
-      });
-
-      await new Promise((r) => liveWs.on("open", r));
-
-      // Append change to trigger live event
+      // Create the doc, then subscribe to live notifications as a member
       const docPayload = {
         docId: "live-doc",
         version: 1,
@@ -348,6 +402,12 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
         body: docBody,
       });
 
+      const live = await openLive(port, "live-doc", ownerKey);
+      expect(live.events[0]).toEqual({ type: "subscribed", docId: "live-doc" });
+      const liveWs = live.ws;
+      const liveEvents = live.events;
+
+      // Append change to trigger live event
       const batchPayload = {
         keyEpoch: 1,
         nonce: "bm9uY2U=",
@@ -370,8 +430,8 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
 
       // Wait for live WS notification
       await new Promise((r) => setTimeout(r, 200));
-      expect(liveEvents.length).toBe(1);
-      const firstEvent = liveEvents[0];
+      expect(liveEvents.length).toBe(2);
+      const firstEvent = liveEvents[1] as { type: string; docId: string; seq: number } | undefined;
       expect(firstEvent?.docId).toBe("live-doc");
       expect(firstEvent?.seq).toBe(1);
 
@@ -395,6 +455,7 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
           type: "hello",
           key: helloSig["X-Dcg-Key"],
           timestamp: helloSig["X-Dcg-Timestamp"],
+          nonce: helloSig["X-Dcg-Nonce"],
           signature: helloSig["X-Dcg-Signature"],
         })
       );
@@ -418,7 +479,7 @@ describe("Relay Protocol & Server Compliance (T113, FR-071)", () => {
       });
 
       await new Promise((r) => setTimeout(r, 200));
-      expect(tunnelId).toBeTruthy();
+      expect(tunnelId).toMatch(/^tun_[0-9a-f]{32}$/);
 
       // Send request to tunnel endpoint
       const tunnelHttpRes = await fetch(`http://127.0.0.1:${port}/t/${tunnelId}/api/v1/ping`);
@@ -475,38 +536,287 @@ describe("Relay hardening", () => {
     return owner;
   }
 
-  it("lets an invite be accepted only once", async () => {
-    const relay = createRelayApp();
-    const owner = await docWithOwner(relay, "doc_accept_once");
-    const invRes = await call(
+  async function createInvite(
+    relay: ReturnType<typeof createRelayApp>,
+    docId: string,
+    owner: Keys
+  ): Promise<{ inviteId: string; secret: string }> {
+    const secret = generateInviteSecret();
+    const res = await call(
       relay,
       "POST",
-      "/v1/docs/doc_accept_once/invites",
-      { role: "contribute", expiresAt: new Date(Date.now() + 86_400_000).toISOString() },
+      `/v1/docs/${docId}/invites`,
+      {
+        role: "contribute",
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        secretHash: hashInviteSecret(secret),
+      },
       owner
     );
-    const { inviteId } = await invRes.json();
+    expect(res.status).toBe(201);
+    const { inviteId } = await res.json();
+    return { inviteId, secret };
+  }
 
-    const invitee = generateSigningKeyPair();
-    const first = await call(
+  function accept(
+    relay: ReturnType<typeof createRelayApp>,
+    inviteId: string,
+    signer: Keys,
+    secret: string,
+    key = signer.publicKeyBase64
+  ) {
+    return call(
       relay,
       "POST",
       `/v1/invites/${inviteId}/accept`,
-      { key: invitee.publicKeyBase64, encKey: generateEncryptionKeyPair().publicKeyBase64 },
-      invitee
+      { key, encKey: generateEncryptionKeyPair().publicKeyBase64, secret },
+      signer
     );
-    expect(first.status).toBe(200);
+  }
 
+  it("lets an invite be accepted only once", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_accept_once");
+    const { inviteId, secret } = await createInvite(relay, "doc_accept_once", owner);
+
+    const invitee = generateSigningKeyPair();
+    expect((await accept(relay, inviteId, invitee, secret)).status).toBe(200);
+
+    // Even a holder of the secret cannot rebind an accepted invite.
+    const late = generateSigningKeyPair();
+    expect((await accept(relay, inviteId, late, secret)).status).toBe(409);
+    expect(relay.db.getInvite(inviteId)?.inviteeKey).toBe(invitee.publicKeyBase64);
+  });
+
+  it("issues 128-bit random invite ids", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_ids");
+    const ids = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      const { inviteId } = await createInvite(relay, "doc_ids", owner);
+      expect(inviteId).toMatch(/^inv_[0-9a-f]{32}$/);
+      ids.add(inviteId);
+    }
+    expect(ids.size).toBe(5);
+  });
+
+  it("requires a secret hash when creating an invite", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_no_hash");
+    const res = await call(
+      relay,
+      "POST",
+      "/v1/docs/doc_no_hash/invites",
+      { role: "view", expiresAt: new Date(Date.now() + 86_400_000).toISOString() },
+      owner
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("does not let a non-invitee accept a pending invite", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_hijack");
+    const { inviteId, secret } = await createInvite(relay, "doc_hijack", owner);
     const attacker = generateSigningKeyPair();
-    const second = await call(
+
+    // Knows the inviteId but not the out-of-band secret.
+    expect((await accept(relay, inviteId, attacker, generateInviteSecret())).status).toBe(403);
+    // Missing secret entirely.
+    const noSecret = await call(
       relay,
       "POST",
       `/v1/invites/${inviteId}/accept`,
       { key: attacker.publicKeyBase64, encKey: generateEncryptionKeyPair().publicKeyBase64 },
       attacker
     );
-    expect(second.status).toBe(409);
-    expect(relay.db.getInvite(inviteId)?.inviteeKey).toBe(invitee.publicKeyBase64);
+    expect(noSecret.status).toBe(400);
+    // Signs with its own key but tries to bind someone else's key.
+    const victim = generateSigningKeyPair();
+    expect((await accept(relay, inviteId, attacker, secret, victim.publicKeyBase64)).status).toBe(
+      403
+    );
+
+    const invite = relay.db.getInvite(inviteId);
+    expect(invite?.status).toBe("pending");
+    expect(invite?.inviteeKey).toBeNull();
+
+    // The real invitee still can.
+    const invitee = generateSigningKeyPair();
+    expect((await accept(relay, inviteId, invitee, secret)).status).toBe(200);
+  });
+
+  it("rejects a replayed signed request", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_replay");
+    const path = "/v1/docs/doc_replay/changes";
+    const headers = signRequest("GET", path, Date.now(), new Uint8Array(), owner);
+    const first = await relay.app.request(path, { method: "GET", headers });
+    expect(first.status).toBe(200);
+    const replay = await relay.app.request(path, { method: "GET", headers });
+    expect(replay.status).toBe(401);
+    expect((await replay.json()).error).toContain("Replayed");
+  });
+
+  it("rejects requests without a nonce", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_no_nonce");
+    const path = "/v1/docs/doc_no_nonce/changes";
+    const { "X-Dcg-Nonce": _nonce, ...headers } = signRequest(
+      "GET",
+      path,
+      Date.now(),
+      new Uint8Array(),
+      owner
+    );
+    const res = await relay.app.request(path, { method: "GET", headers });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects query-string tampering", async () => {
+    const relay = createRelayApp();
+    const owner = await docWithOwner(relay, "doc_query");
+    const signed = "/v1/docs/doc_query/changes?after=0&limit=10";
+    const ok = await relay.app.request(signed, {
+      method: "GET",
+      headers: signRequest("GET", signed, Date.now(), new Uint8Array(), owner),
+    });
+    expect(ok.status).toBe(200);
+
+    const tampered = await relay.app.request("/v1/docs/doc_query/changes?after=5&limit=10", {
+      method: "GET",
+      headers: signRequest("GET", signed, Date.now(), new Uint8Array(), owner),
+    });
+    expect(tampered.status).toBe(401);
+  });
+
+  it("rate-limits mutating requests per signer key", async () => {
+    const relay = createRelayApp({
+      rateLimits: { key: { capacity: 3, refillPerSecond: 0 } },
+    });
+    const owner = await docWithOwner(relay, "doc_rate_key"); // 1st token
+    const path = "/v1/docs/doc_rate_key/snapshots";
+    const snap = { seq: 1, keyEpoch: 1, nonce: "n", ciphertext: "c" };
+    expect((await call(relay, "POST", path, snap, owner)).status).toBe(200);
+    expect((await call(relay, "POST", path, snap, owner)).status).toBe(200);
+    const limited = await call(relay, "POST", path, snap, owner);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBeTruthy();
+
+    // Reads are not limited per key, and another key has its own bucket.
+    const read = "/v1/docs/doc_rate_key/changes";
+    const readRes = await relay.app.request(read, {
+      method: "GET",
+      headers: signRequest("GET", read, Date.now(), new Uint8Array(), owner),
+    });
+    expect(readRes.status).toBe(200);
+  });
+
+  it("rate-limits mutating requests per client IP before verifying signatures", async () => {
+    const relay = createRelayApp({ rateLimits: { ip: { capacity: 2, refillPerSecond: 0 } } });
+    const res = [];
+    for (let i = 0; i < 3; i++) {
+      res.push((await relay.app.request("/v1/docs/x", { method: "PUT", body: "{}" })).status);
+    }
+    expect(res).toEqual([401, 401, 429]);
+  });
+
+  it("rate-limits tunnel endpoints", async () => {
+    const relay = createRelayApp({ rateLimits: { ip: { capacity: 2, refillPerSecond: 0 } } });
+    const statuses = [];
+    for (let i = 0; i < 3; i++) {
+      statuses.push((await relay.app.request("/t/tun_unknown/api/v1/ping")).status);
+    }
+    expect(statuses).toEqual([503, 503, 429]);
+  });
+
+  it("rejects unauthenticated live WebSocket subscriptions", async () => {
+    const service = await startRelayServer({ limits: { liveAuthTimeoutMs: 300 } });
+    try {
+      const owner = generateSigningKeyPair();
+      const ownerEnc = generateEncryptionKeyPair();
+      const members = [
+        { key: owner.publicKeyBase64, encKey: ownerEnc.publicKeyBase64, role: "owner" as const },
+      ];
+      service.db.saveDoc("doc_ws", {
+        docId: "doc_ws",
+        version: 1,
+        keyEpoch: 1,
+        members,
+        ownerSignature: signEd25519(
+          new TextEncoder().encode(
+            JSON.stringify({ docId: "doc_ws", version: 1, keyEpoch: 1, members })
+          ),
+          owner.privateKey
+        ),
+      });
+
+      // No subscribe message at all -> closed after the auth timeout.
+      const silent = await openLive(service.port, "doc_ws");
+      expect((await silent.closed).code).toBe(1008);
+
+      // Unsigned subscribe -> rejected.
+      const unsigned = await openLive(service.port, "doc_ws", undefined, { type: "subscribe" });
+      expect((await unsigned.closed).code).toBe(1008);
+
+      // Validly signed by a non-member -> rejected.
+      const outsider = await openLive(service.port, "doc_ws", generateSigningKeyPair());
+      expect((await outsider.closed).code).toBe(1008);
+      expect(outsider.events[0]?.error).toContain("not an ACL member");
+
+      // Signed for a different doc (signature does not cover this doc) -> rejected.
+      const sig = signRequest(
+        "WS",
+        "/v1/docs/other/live",
+        Date.now(),
+        new TextEncoder().encode(JSON.stringify({ type: "subscribe", docId: "other" })),
+        owner
+      );
+      const wrongDoc = await openLive(service.port, "doc_ws", undefined, {
+        type: "subscribe",
+        key: sig["X-Dcg-Key"],
+        timestamp: sig["X-Dcg-Timestamp"],
+        nonce: sig["X-Dcg-Nonce"],
+        signature: sig["X-Dcg-Signature"],
+      });
+      expect((await wrongDoc.closed).code).toBe(1008);
+
+      // The member subscribes; a second subscribe on the same socket closes it.
+      const member = await openLive(service.port, "doc_ws", owner);
+      expect(member.events[0]).toEqual({ type: "subscribed", docId: "doc_ws" });
+      member.ws.send(JSON.stringify({ type: "subscribe" }));
+      expect((await member.closed).code).toBe(1008);
+    } finally {
+      await service.close();
+    }
+  });
+
+  it("caps live subscribers per doc", async () => {
+    const service = await startRelayServer({ limits: { maxLiveSubscribersPerDoc: 1 } });
+    try {
+      const owner = generateSigningKeyPair();
+      const members = [
+        {
+          key: owner.publicKeyBase64,
+          encKey: generateEncryptionKeyPair().publicKeyBase64,
+          role: "owner" as const,
+        },
+      ];
+      service.db.saveDoc("doc_cap", {
+        docId: "doc_cap",
+        version: 1,
+        keyEpoch: 1,
+        members,
+        ownerSignature: "unused-by-live",
+      });
+      const first = await openLive(service.port, "doc_cap", owner);
+      expect(first.events[0]?.type).toBe("subscribed");
+      const second = await openLive(service.port, "doc_cap", owner);
+      expect((await second.closed).code).toBe(1008);
+      expect(second.events[0]?.error).toContain("Too many");
+      first.ws.close();
+    } finally {
+      await service.close();
+    }
   });
 
   it("applies the batch size and storage limits to snapshots", async () => {

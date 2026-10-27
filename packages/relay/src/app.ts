@@ -1,20 +1,30 @@
-import { verifyEd25519, verifyRequestSignature } from "@decisionator/core";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  RequestReplayCache,
+  hashInviteSecret,
+  verifyEd25519,
+  verifyRequestSignature,
+} from "@decisionator/core";
 import { type Context, Hono } from "hono";
 import { RelayDatabase } from "./database.js";
 import {
   AcceptInviteSchema,
   ChangeBatchSchema,
   CreateInviteSchema,
+  type ParticipantRole,
   PostInviteKeySchema,
   type SignedAcl,
   SignedAclSchema,
 } from "./protocol.js";
+import { type TokenBucketConfig, TokenBucketLimiter } from "./rate-limit.js";
 
 export interface RelayLimits {
   maxBatchSizeBytes: number; // default 1 MB
   maxDocStorageBytes: number; // default 50 MB
   maxMembersPerDoc: number; // default 50
   maxTunnelBodyBytes: number; // default 1 MB
+  maxLiveSubscribersPerDoc: number; // default 100
+  liveAuthTimeoutMs: number; // default 5 s to send the signed subscribe message
 }
 
 export const DEFAULT_RELAY_LIMITS: RelayLimits = {
@@ -22,13 +32,42 @@ export const DEFAULT_RELAY_LIMITS: RelayLimits = {
   maxDocStorageBytes: 50 * 1024 * 1024,
   maxMembersPerDoc: 50,
   maxTunnelBodyBytes: 1 * 1024 * 1024,
+  maxLiveSubscribersPerDoc: 100,
+  liveAuthTimeoutMs: 5_000,
+};
+
+/** Token buckets (in-memory, per relay process). */
+export interface RelayRateLimits {
+  /** Per client IP, on mutating `/v1/*` requests and on `/t/{tunnelId}/*`. */
+  ip: TokenBucketConfig;
+  /** Per verified signer key, on mutating `/v1/*` requests. */
+  key: TokenBucketConfig;
+  /** Per tunnel id, on `/t/{tunnelId}/*` (protects the node behind it). */
+  tunnel: TokenBucketConfig;
+}
+
+export const DEFAULT_RELAY_RATE_LIMITS: RelayRateLimits = {
+  ip: { capacity: 120, refillPerSecond: 2 },
+  key: { capacity: 60, refillPerSecond: 1 },
+  tunnel: { capacity: 60, refillPerSecond: 1 },
 };
 
 export interface RelayServerOptions {
   db?: RelayDatabase;
   dbPath?: string;
   limits?: Partial<RelayLimits>;
+  /** Override the default rate limits; `false` disables rate limiting. */
+  rateLimits?: Partial<RelayRateLimits> | false;
+  /** Take the client IP from the first `X-Forwarded-For` entry (only behind a trusted proxy). */
+  trustProxy?: boolean;
 }
+
+/** A 128-bit cryptographically random identifier: `<prefix>_<32 hex chars>`. */
+export function randomId(prefix: string): string {
+  return `${prefix}_${randomBytes(16).toString("hex")}`;
+}
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function createRelayApp(options: RelayServerOptions = {}) {
   const db = options.db ?? new RelayDatabase(options.dbPath ?? ":memory:");
@@ -36,8 +75,80 @@ export function createRelayApp(options: RelayServerOptions = {}) {
     ...DEFAULT_RELAY_LIMITS,
     ...options.limits,
   };
+  const rateLimits =
+    options.rateLimits === false
+      ? undefined
+      : { ...DEFAULT_RELAY_RATE_LIMITS, ...options.rateLimits };
+  const ipLimiter = rateLimits ? new TokenBucketLimiter(rateLimits.ip) : undefined;
+  const keyLimiter = rateLimits ? new TokenBucketLimiter(rateLimits.key) : undefined;
+  const tunnelLimiter = rateLimits ? new TokenBucketLimiter(rateLimits.tunnel) : undefined;
+
+  // (key, nonce) pairs of verified signed requests and WS hellos, for the freshness window.
+  const replayCache = new RequestReplayCache();
 
   const app = new Hono();
+
+  function clientIp(c: Context): string {
+    if (options.trustProxy) {
+      const forwarded = c.req.header("X-Forwarded-For")?.split(",")[0]?.trim();
+      if (forwarded) return forwarded;
+    }
+    const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined;
+    return env?.incoming?.socket?.remoteAddress ?? "unknown";
+  }
+
+  function tooManyRequests(c: Context, retryAfterSeconds: number) {
+    c.header("Retry-After", String(retryAfterSeconds));
+    return c.json({ error: "Rate limit exceeded" }, 429);
+  }
+
+  // Per-IP limit on mutating API requests (before any signature work).
+  app.use("/v1/*", async (c, next) => {
+    if (ipLimiter && MUTATING_METHODS.has(c.req.method)) {
+      const wait = ipLimiter.take(`v1:${clientIp(c)}`);
+      if (wait > 0) return tooManyRequests(c, wait);
+    }
+    await next();
+  });
+
+  // Per-IP and per-tunnel limits on the public tunnel endpoints.
+  app.use("/t/:tunnelId/*", async (c, next) => {
+    if (ipLimiter && tunnelLimiter) {
+      const tunnelId = c.req.param("tunnelId") ?? "";
+      // Only live tunnels get a bucket, so random ids cannot crowd out real ones.
+      const wait =
+        ipLimiter.take(`t:${clientIp(c)}`) ||
+        (tunnels.has(tunnelId) ? tunnelLimiter.take(tunnelId) : 0);
+      if (wait > 0) return tooManyRequests(c, wait);
+    }
+    await next();
+  });
+
+  /**
+   * Verifies a signed request or WS message against the shared replay cache. `pathAndQuery` is
+   * the request target as received.
+   */
+  function verifySigned(
+    method: string,
+    pathAndQuery: string,
+    timestamp: string | undefined,
+    nonce: string | undefined,
+    signature: string | undefined,
+    key: string | undefined,
+    body: Uint8Array
+  ) {
+    return verifyRequestSignature(method, pathAndQuery, timestamp, nonce, signature, key, body, {
+      replayCache,
+    });
+  }
+
+  /** The signer's role in the doc's current ACL, or undefined when not a member / no doc. */
+  function memberRole(docId: string, key: string): ParticipantRole | undefined {
+    const doc = db.getDoc(docId);
+    if (!doc) return undefined;
+    const acl: SignedAcl = JSON.parse(doc.aclJson);
+    return acl.members.find((m) => m.key === key)?.role;
+  }
 
   // Active WebSocket tunnels: tunnelId -> ws handler/send callback
   const tunnels = new Map<
@@ -74,18 +185,21 @@ export function createRelayApp(options: RelayServerOptions = {}) {
     | { authenticated: false; response: Response }
   > {
     const method = c.req.method;
-    const path = c.req.path;
+    const url = new URL(c.req.url);
+    const pathAndQuery = `${url.pathname}${url.search}`;
     const keyHeader = c.req.header("X-Dcg-Key");
     const tsHeader = c.req.header("X-Dcg-Timestamp");
+    const nonceHeader = c.req.header("X-Dcg-Nonce");
     const sigHeader = c.req.header("X-Dcg-Signature");
 
     const rawBuffer = await c.req.raw.arrayBuffer();
     const rawBody = new Uint8Array(rawBuffer);
 
-    const verification = verifyRequestSignature(
+    const verification = verifySigned(
       method,
-      path,
+      pathAndQuery,
       tsHeader,
+      nonceHeader,
       sigHeader,
       keyHeader,
       rawBody
@@ -95,6 +209,11 @@ export function createRelayApp(options: RelayServerOptions = {}) {
         authenticated: false,
         response: c.json({ error: verification.error || "Authentication failed" }, 401),
       };
+    }
+
+    if (keyLimiter && MUTATING_METHODS.has(method)) {
+      const wait = keyLimiter.take(keyHeader);
+      if (wait > 0) return { authenticated: false, response: tooManyRequests(c, wait) };
     }
 
     let jsonBody: Record<string, unknown> | undefined = undefined;
@@ -386,8 +505,14 @@ export function createRelayApp(options: RelayServerOptions = {}) {
       return c.json({ error: "Invalid invite payload", details: parsed.error.issues }, 400);
     }
 
-    const inviteId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const invite = db.createInvite(inviteId, docId, parsed.data.role, parsed.data.expiresAt);
+    const inviteId = randomId("inv");
+    const invite = db.createInvite(
+      inviteId,
+      docId,
+      parsed.data.role,
+      parsed.data.expiresAt,
+      parsed.data.secretHash
+    );
     return c.json(invite, 201);
   });
 
@@ -408,6 +533,21 @@ export function createRelayApp(options: RelayServerOptions = {}) {
     const parsed = AcceptInviteSchema.safeParse(auth.jsonBody);
     if (!parsed.success) {
       return c.json({ error: "Invalid accept payload", details: parsed.error.issues }, 400);
+    }
+
+    // The bound signing key must be the one that signed this request (proof of possession).
+    if (parsed.data.key !== auth.signerKey) {
+      return c.json({ error: "Accepted key must be the request signer" }, 403);
+    }
+    // Only the holder of the out-of-band invite secret (link fragment) may accept. Without this,
+    // anyone who learned the inviteId could bind their keys and receive the sealed project key.
+    if (!invite.secretHash) {
+      return c.json({ error: "Invite has no secret binding; ask the owner for a new invite" }, 403);
+    }
+    const expected = Buffer.from(invite.secretHash, "utf8");
+    const presented = Buffer.from(hashInviteSecret(parsed.data.secret), "utf8");
+    if (expected.length !== presented.length || !timingSafeEqual(expected, presented)) {
+      return c.json({ error: "Invalid invite secret" }, 403);
     }
 
     // Only pending → accepted, once: otherwise anyone holding the inviteId could replace the
@@ -493,7 +633,7 @@ export function createRelayApp(options: RelayServerOptions = {}) {
       );
     }
 
-    const reqId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const reqId = `req_${randomUUID()}`;
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(c.req.header())) {
       if (typeof v === "string") headers[k] = v;
@@ -534,5 +674,8 @@ export function createRelayApp(options: RelayServerOptions = {}) {
     tunnels,
     liveSubscribers,
     limits,
+    replayCache,
+    verifySigned,
+    memberRole,
   };
 }
