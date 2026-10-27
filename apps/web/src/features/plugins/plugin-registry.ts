@@ -6,6 +6,7 @@ import strategyOwnerPickManifest from "../../../../../plugins/strategy-owner-pic
 import strategyRandomManifest from "../../../../../plugins/strategy-random/decisionator-plugin.json";
 import strategyWeightedManifest from "../../../../../plugins/strategy-weighted/decisionator-plugin.json";
 import { type PluginManifest, validateManifest } from "../../host/module-host.js";
+import { normalizePermissions } from "../../host/permission-consent.js";
 
 export interface InstalledPlugin {
   id: string;
@@ -125,6 +126,8 @@ export function installPlugin(
   bundleCode = ""
 ): InstalledPlugin {
   const validated = validateManifest(manifestInput);
+  const requested = new Set(normalizePermissions(validated.permissions));
+  const granted = normalizePermissions(grantedPermissions).filter((p) => requested.has(p));
 
   const existing = getInstalledPlugins();
   const index = existing.findIndex((p) => p.id === validated.id);
@@ -141,7 +144,7 @@ export function installPlugin(
     source,
     bundleCode,
     enabled: true,
-    grantedPermissions,
+    grantedPermissions: granted,
     settings: {},
     installedAt: new Date().toISOString(),
   };

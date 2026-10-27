@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GrantManager } from "./grants.js";
 import {
+  CONTRIBUTION_TARGET_NOT_FOUND_MESSAGE,
   CONTRIBUTION_TOO_LARGE_MESSAGE,
   agentOptionProperties,
   agentSetOptionProperty,
@@ -24,6 +25,7 @@ import type { AgentStateStore } from "./state.js";
 export interface McpServerOptions {
   grantManager: GrantManager;
   stateStore: AgentStateStore;
+  /** The bearer token from the HTTP `Authorization` header of this request. */
   defaultToken?: string;
 }
 
@@ -31,13 +33,18 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   const { grantManager, stateStore } = options;
   const server = new McpServer({
     name: "decisionator-agent-mcp",
-    version: "1.3.0",
+    version: "1.4.0",
   });
 
+  /**
+   * The grant token comes only from the transport: the HTTP `Authorization` header (passed in as
+   * `defaultToken`) or `authInfo` set by the server-side transport. A token inside the JSON-RPC
+   * body (`params._meta`) is ignored (agentic API 1.4.0): bodies get logged, cached and relayed.
+   */
   const getToken = (extra: unknown): string => {
     if (options.defaultToken) return options.defaultToken;
-    const ex = extra as { authInfo?: { token?: string }; _meta?: { token?: string } } | undefined;
-    return ex?.authInfo?.token || ex?._meta?.token || "";
+    const ex = extra as { authInfo?: { token?: string } } | undefined;
+    return ex?.authInfo?.token || "";
   };
 
   // 1. agent_hello
@@ -232,6 +239,14 @@ export function createMcpServer(options: McpServerOptions): McpServer {
       }
 
       const effectiveTarget = target || auth.grant.target;
+      if (!stateStore.targetExists(auth.grant.projectId, effectiveTarget)) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `[404] NOT_FOUND: ${CONTRIBUTION_TARGET_NOT_FOUND_MESSAGE}` },
+          ],
+        };
+      }
       const targetId =
         effectiveTarget.kind === "option"
           ? effectiveTarget.optionId

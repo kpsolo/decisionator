@@ -7,6 +7,7 @@ import {
   type PropertyScalar,
   type PropertyValue,
   type SourceRef,
+  type TargetRef,
   checkPropertyValue,
   effectivePropertyValues,
   propertyValueBytes,
@@ -43,6 +44,8 @@ export interface ProjectData {
   options: Option[];
   contributions: Contribution[];
   sourceRefs: { id: string; title?: string; url?: string }[];
+  /** Ideas agents may comment on (`target.kind === "idea"`). Default `[]`. */
+  ideas?: { id: string; text?: string }[];
   /** Property declarations of the project's enabled plugins. Default `[]`. */
   optionProperties?: DeclaredOptionProperty[];
   /** Stored property values, shared and per person. Default `[]`. */
@@ -151,6 +154,30 @@ export class AgentStateStore {
     };
     p.properties = [...(p.properties ?? []), stored];
     return { ok: true, value: stored };
+  }
+
+  /**
+   * Whether a contribution target exists in the project (agentic API 1.4.0): an option or idea
+   * id must name one of the project's options or ideas; a project target needs the project.
+   */
+  targetExists(projectId: string, target: TargetRef): boolean {
+    const p = this.projects.get(projectId);
+    if (!p) return false;
+    if (target.kind === "option") return p.options.some((o) => o.id === target.optionId);
+    if (target.kind === "idea") return (p.ideas ?? []).some((i) => i.id === target.ideaId);
+    return true;
+  }
+
+  /**
+   * Drops per-grant state of grants the grant manager forgot: pseudonym maps and the per-request
+   * contribution index. Contributions stay in their project.
+   */
+  forgetGrants(grantIds: readonly string[]): void {
+    for (const id of grantIds) {
+      this.pseudonymMaps.delete(id);
+      this.reversePseudonymMaps.delete(id);
+      this.contributionsByRequest.delete(id);
+    }
   }
 
   getProject(projectId: string): ProjectData | undefined {

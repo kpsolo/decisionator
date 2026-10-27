@@ -11,6 +11,7 @@ import type {
 import Ajv2020 from "ajv/dist/2020.js";
 import semver from "semver";
 import manifestSchema from "../../../../specs/001-decision-engine-core/contracts/plugin-manifest.schema.json";
+import { PermissionConsent } from "./permission-consent.js";
 import { SandboxHost, createLinkedRpcPair } from "./sandbox/index.js";
 
 export interface HostPlatformVersions {
@@ -195,15 +196,40 @@ export async function withTimeout<T>(
 
 /**
  * Module Host: loads and manages first-party plugins implementing plugin-sdk contracts.
+ *
+ * Permissions are never taken from the manifest as-is (F12): a sandbox instance gets only what
+ * `consent` grants, which is the first-party allowlist or an approval the person gave for this
+ * plugin id, version and permission set. Call `requestPermissions(manifest)` (the consent hook
+ * point, e.g. when a person installs or enables a plugin) before registering it; registering an
+ * un-approved plugin runs it with no permissions.
  */
 export class ModuleHost {
   private stores = new Map<string, { manifest: PluginManifest; store: ProjectStore }>();
   private strategies = new Map<string, { manifest: PluginManifest; strategy: StrategyPlugin }>();
   private ideaSources = new Map<string, { manifest: PluginManifest; source: IdeaSourcePlugin }>();
   public readonly sandboxHost: SandboxHost;
+  public readonly consent: PermissionConsent;
 
-  constructor(private hostVersions: HostPlatformVersions = HOST_PLATFORM_VERSIONS) {
+  constructor(
+    private hostVersions: HostPlatformVersions = HOST_PLATFORM_VERSIONS,
+    consent: PermissionConsent = new PermissionConsent()
+  ) {
     this.sandboxHost = new SandboxHost(hostVersions);
+    this.consent = consent;
+  }
+
+  /**
+   * Asks the person to approve the permissions a plugin requests (unless pre-approved or approved
+   * before) and returns the permissions it will be granted.
+   */
+  async requestPermissions(rawManifest: unknown): Promise<string[]> {
+    const manifest = validateManifest(rawManifest, this.hostVersions);
+    return this.consent.request(manifest);
+  }
+
+  /** The permissions a registered plugin's sandbox instance gets (consent-checked). */
+  grantedPermissions(manifest: PluginManifest): string[] {
+    return this.consent.granted(manifest);
   }
 
   registerProjectStore(rawManifest: unknown, store: ProjectStore): void {
@@ -287,7 +313,7 @@ export class ModuleHost {
 
     this.sandboxHost.createInstance({
       manifest,
-      grantedPermissions: manifest.permissions ? [...manifest.permissions] : [],
+      grantedPermissions: this.grantedPermissions(manifest),
       capabilities: {
         getOAuthToken: async () => ({ accessToken: "", expiresAt: "" }),
         getProjectSnapshot: async () => emptySnapshot,
@@ -346,7 +372,7 @@ export class ModuleHost {
 
     this.sandboxHost.createInstance({
       manifest,
-      grantedPermissions: manifest.permissions ? [...manifest.permissions] : [],
+      grantedPermissions: this.grantedPermissions(manifest),
       capabilities: {
         getOAuthToken: async () => ({ accessToken: "", expiresAt: "" }),
         getProjectSnapshot: async () => emptySnapshot,

@@ -25,6 +25,7 @@ import { Input } from "../../components/ui/input.js";
 import { Switch } from "../../components/ui/switch.js";
 import { toast } from "../../components/ui/use-toast.js";
 import { cn } from "../../lib/utils.js";
+import { ownerBridgeFetch, useOwnerToken } from "../agents/owner-bridge.js";
 import { participantVoteResets } from "../history/reset-entries.js";
 import { projectKey, useLiveShare } from "./LiveShareContext.js";
 import { QrCode } from "./QrCode.js";
@@ -182,6 +183,10 @@ function LivePanel() {
   };
 
   const [proposals, setProposals] = useState<LiveModerationProposal[]>([]);
+  // Owner bridge to the local node: only with the owner token this tab was given (never a
+  // built-in token). Without it, nothing is sent and agent moderation stays off.
+  const ownerToken = useOwnerToken();
+  const bridgeProject = `?projectId=${encodeURIComponent(session.target.projectRef.id)}`;
 
   const handleRevokeConfirm = async (purgeRelays: boolean) => {
     await live.revoke("This session link has been revoked by the owner.", { purgeRelays });
@@ -194,16 +199,16 @@ function LivePanel() {
 
   // Sync state with local agent bridge and fetch pending moderation proposals (US6)
   useEffect(() => {
+    if (!ownerToken) {
+      setProposals([]);
+      return;
+    }
     let active = true;
     const syncAgentBridge = async () => {
       try {
-        await fetch("http://127.0.0.1:4178/api/v1/live-session", {
+        await ownerBridgeFetch(`/live-session${bridgeProject}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer deci_agent_token_local",
-          },
-          body: JSON.stringify({
+          body: {
             hosting: true,
             readOnly: currentRole === "view",
             revoked: false,
@@ -215,12 +220,10 @@ function LivePanel() {
               gradeCount: r.gradeCount,
               hasBallot: r.hasBallot,
             })),
-          }),
+          },
         });
 
-        const res = await fetch("http://127.0.0.1:4178/api/v1/live-session/proposals", {
-          headers: { Authorization: "Bearer deci_agent_token_local" },
-        });
+        const res = await ownerBridgeFetch(`/live-session/proposals${bridgeProject}`);
         if (res.ok && active) {
           const data = (await res.json()) as { proposals?: LiveModerationProposal[] };
           if (Array.isArray(data.proposals)) {
@@ -228,7 +231,7 @@ function LivePanel() {
           }
         }
       } catch {
-        // Node not running locally
+        // Node not running locally, or the owner token was refused
       }
     };
 
@@ -238,7 +241,22 @@ function LivePanel() {
       active = false;
       clearInterval(interval);
     };
-  }, [currentRole, roster]);
+  }, [currentRole, roster, ownerToken, bridgeProject]);
+
+  const decideProposal = async (
+    prop: LiveModerationProposal,
+    decision: "accepted" | "dismissed"
+  ) => {
+    if (!ownerToken) return;
+    try {
+      await ownerBridgeFetch(
+        `/live-session/proposals/${encodeURIComponent(prop.id)}/decision${bridgeProject}`,
+        { method: "POST", body: { decision } }
+      );
+    } catch {
+      // Node not running
+    }
+  };
 
   const handleAcceptProposal = async (prop: LiveModerationProposal) => {
     try {
@@ -254,18 +272,7 @@ function LivePanel() {
         await live.revoke("This session link has been revoked by the owner.");
       }
 
-      try {
-        await fetch(`http://127.0.0.1:4178/api/v1/live-session/proposals/${prop.id}/decision`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer deci_agent_token_local",
-          },
-          body: JSON.stringify({ decision: "accepted" }),
-        });
-      } catch {
-        // Node not running
-      }
+      await decideProposal(prop, "accepted");
 
       setProposals((prev) => prev.filter((p) => p.id !== prop.id));
       toast({
@@ -282,18 +289,7 @@ function LivePanel() {
   };
 
   const handleDismissProposal = async (prop: LiveModerationProposal) => {
-    try {
-      await fetch(`http://127.0.0.1:4178/api/v1/live-session/proposals/${prop.id}/decision`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer deci_agent_token_local",
-        },
-        body: JSON.stringify({ decision: "dismissed" }),
-      });
-    } catch {
-      // Node not running
-    }
+    await decideProposal(prop, "dismissed");
 
     setProposals((prev) => prev.filter((p) => p.id !== prop.id));
     toast({
@@ -438,6 +434,16 @@ function LivePanel() {
             })}
           </div>
         </section>
+      )}
+
+      {!ownerToken && (
+        <p className="m-0 flex gap-2 text-[11px] text-muted-foreground">
+          <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Agent moderation is off: this tab is not connected to the local node. Connect it with
+            the node's owner token in the project's Agents tab.
+          </span>
+        </p>
       )}
 
       {/* Participant Roster (US5, FR-014, FR-030) */}

@@ -9,31 +9,34 @@ export interface FrameManagerOptions {
   bundleCode: string;
 }
 
-export class FrameManager {
-  private iframe?: HTMLIFrameElement;
-  private endpoint?: RpcEndpoint;
+/** Escapes text for an HTML text node or a double-quoted attribute. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-  constructor(private options: FrameManagerOptions) {}
+/**
+ * The frame document. The CSP comes only from validated `net:` origins (`buildPluginCsp`) and the
+ * manifest name is HTML-escaped, so neither can inject markup or another policy.
+ */
+export function buildFrameSrcdoc(
+  options: Pick<FrameManagerOptions, "grantedPermissions" | "manifest" | "bundleCode">
+): string {
+  const { grantedPermissions, manifest, bundleCode } = options;
+  const { cspHeaderOrMeta } = buildPluginCsp(grantedPermissions);
+  const isStrategy = Boolean(manifest.provides?.strategy);
+  const title = escapeHtml(String(manifest.name ?? ""));
 
-  createFrame(): { iframe: HTMLIFrameElement; endpoint: RpcEndpoint } {
-    const { grantedPermissions, manifest, bundleCode, container } = this.options;
-    const { cspHeaderOrMeta } = buildPluginCsp(grantedPermissions);
-
-    const iframe = document.createElement("iframe");
-    // Standard sandboxing per R4: allow-scripts only (opaque origin 'null', no cookies, no storage, no parent access)
-    iframe.setAttribute("sandbox", "allow-scripts");
-    iframe.style.display = "none";
-    iframe.setAttribute("data-plugin-id", manifest.id);
-
-    const isStrategy = Boolean(manifest.provides?.strategy);
-
-    // Bootstrap script that sets up RPC inside the sandbox frame
-    const srcdoc = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="${cspHeaderOrMeta}">
-  <title>Plugin Frame: ${manifest.name}</title>
+  <meta http-equiv="Content-Security-Policy" content="${escapeHtml(cspHeaderOrMeta)}">
+  <title>Plugin Frame: ${title}</title>
 </head>
 <body>
   <script>
@@ -196,6 +199,25 @@ export class FrameManager {
   </script>
 </body>
 </html>`;
+}
+
+export class FrameManager {
+  private iframe?: HTMLIFrameElement;
+  private endpoint?: RpcEndpoint;
+
+  constructor(private options: FrameManagerOptions) {}
+
+  createFrame(): { iframe: HTMLIFrameElement; endpoint: RpcEndpoint } {
+    const { grantedPermissions, manifest, bundleCode, container } = this.options;
+
+    const iframe = document.createElement("iframe");
+    // Standard sandboxing per R4: allow-scripts only (opaque origin 'null', no cookies, no storage, no parent access)
+    iframe.setAttribute("sandbox", "allow-scripts");
+    iframe.style.display = "none";
+    iframe.setAttribute("data-plugin-id", manifest.id);
+
+    // Bootstrap script that sets up RPC inside the sandbox frame
+    const srcdoc = buildFrameSrcdoc({ grantedPermissions, manifest, bundleCode });
 
     iframe.srcdoc = srcdoc;
 

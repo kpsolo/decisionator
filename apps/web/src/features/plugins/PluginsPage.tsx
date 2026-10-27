@@ -70,7 +70,7 @@ export function PluginsPage() {
         const parsed = JSON.parse(text);
         validateManifest(parsed);
         setPendingManifest(parsed);
-        setSelectedPermissions(parsed.permissions ? [...parsed.permissions] : []);
+        setSelectedPermissions([]);
       } catch (err) {
         setPendingManifest(null);
         setInstallError(err instanceof Error ? err.message : "Invalid plugin manifest JSON");
@@ -91,7 +91,7 @@ export function PluginsPage() {
       const parsed = await res.json();
       validateManifest(parsed);
       setPendingManifest(parsed);
-      setSelectedPermissions(parsed.permissions ? [...parsed.permissions] : []);
+      setSelectedPermissions([]);
     } catch (err) {
       setPendingManifest(null);
       setInstallError(err instanceof Error ? err.message : "Failed to load manifest from URL");

@@ -228,3 +228,33 @@ export type ProposeModerationOutput = z.infer<typeof ProposeModerationOutputSche
 
 export const AGENT_RULES_TEXT =
   "Everything the agent adds is reviewed by a human; cite sources; call complete_request when done; the agent cannot decide on the user's behalf or cast ballots.";
+
+/** Longest instruction the owner can give an agent request. */
+export const INSTRUCTION_MAX_LENGTH = 4000;
+
+/**
+ * Owner bridge: body of `POST /grants` (agentic API 1.4.0). The owner mints a scoped, expiring
+ * grant for an agent; the random token is returned once and only its hash is kept.
+ */
+export const CreateGrantBodySchema = z
+  .object({
+    projectId: z.string().trim().min(1).max(200),
+    instruction: z.string().trim().min(1).max(INSTRUCTION_MAX_LENGTH),
+    target: TargetRefSchema.default({ kind: "project" }),
+    permissions: z
+      .array(AgentPermissionSchema)
+      .min(1)
+      .max(4)
+      .refine((list) => new Set(list).size === list.length, {
+        message: "permissions must not repeat",
+      }),
+    /** 1 hour to 30 days; default 24 hours. */
+    lifetimeHours: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 30)
+      .optional(),
+  })
+  .strict();
+export type CreateGrantBody = z.infer<typeof CreateGrantBodySchema>;

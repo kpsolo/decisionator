@@ -543,13 +543,14 @@ function ProjectView() {
           </TabsContent>
 
           <TabsContent value="agents" className="space-y-4 mt-0">
-            <AgentBrief
-              projectTitle={snapshot.project.title}
-              target={{ kind: "project" }}
-              token="deci_agent_token_local"
-              instruction={`Analyze project "${snapshot.project.title}" and provide notes, research, pros/cons or proposed options.`}
-              expiresAt={new Date(Date.now() + 24 * 3600 * 1000).toISOString()}
-            />
+            {isOwner && (
+              <AgentBrief
+                projectId={projectRef.id}
+                projectTitle={snapshot.project.title}
+                target={{ kind: "project" }}
+                instruction={`Analyze project "${snapshot.project.title}" and provide notes, research, pros/cons or proposed options.`}
+              />
+            )}
             <ContributionReview
               contributions={snapshot.contributions || []}
               onReviewAction={handleReviewAction}

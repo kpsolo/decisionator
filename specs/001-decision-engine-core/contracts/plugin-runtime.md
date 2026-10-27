@@ -1,4 +1,4 @@
-# Contract: Plugin Runtime (host ⇄ plugin RPC) — v1.1.0
+# Contract: Plugin Runtime (host ⇄ plugin RPC) — v1.2.0
 
 > **Scope: sandboxed loading ships with US6.** In the MVP, first-party modules implement the same contracts in-process (research R26).
 
@@ -11,6 +11,25 @@ See [research.md R4](../research.md) for the isolation model.
   `/_plugin/<id>/<version>/frame` with an opaque origin (`CSP: sandbox allow-scripts`).
 - `connect-src` contains only the `net:` origins the user granted. No cookies, storage, parent
   DOM, top navigation, popups or clipboard access.
+- A `net:` permission is an exact `https` origin: `net:https://<host>[:<port>]`, lower-case,
+  with no wildcard, `*`, path, query, credentials, whitespace, quotes or semicolons. The host
+  parses it as a URL and drops anything else, so `net:*` never becomes `connect-src *` (1.2.0).
+- The frame document escapes the manifest name and builds its CSP only from validated origins
+  (1.2.0).
+
+## Permission consent (1.2.0)
+
+A manifest's `permissions` are a **request**, never a grant. The host grants them only when:
+
+- the plugin is a first-party built-in on the host's explicit allowlist (by id, with the most it
+  may get) and requests nothing beyond that list; or
+- the person approved them in a consent dialog that lists every requested permission. The
+  approval is stored per plugin id, version and exact permission set, so a new version or a
+  wider set asks again. A refusal is not stored.
+
+Without either, the plugin runs with **no** permissions (deny by default). Malformed
+permissions are never granted. Host implementation: `apps/web/src/host/permission-consent.ts`
+(`ModuleHost.requestPermissions` is the consent hook point).
 - For plugins that provide a strategy, `Math.random` and `crypto.getRandomValues` throw
   `DeterminismError`. Use `ctx.rng`.
 - The frame loads the plugin's `main` bundle, which MUST call `definePlugin()` from
@@ -90,5 +109,6 @@ contract versions. Otherwise the host refuses to load it and shows
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2.0 | 2026-10-27 | Permission consent (deny by default, first-party allowlist, approval per id, version and permission set); strict `net:` origin parsing; escaped frame title (F12) |
 | 1.1.0 | 2026-10-07 | Option view calls and `properties.set` / `properties.reset` (feature 005) |
 | 1.0.0 | 2026-10-05 | Initial runtime |

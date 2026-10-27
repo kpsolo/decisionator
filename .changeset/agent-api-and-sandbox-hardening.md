@@ -1,0 +1,8 @@
+---
+"@decisionator/node": minor
+"@decisionator/web": patch
+---
+
+Agent API 1.4.0 and plugin runtime 1.2.0 (security hardening). The node gains owner-only `POST /grants` (zod-validated; returns the random grant token once, keeps only its hash; audited as `agent_grant_created`) and `DELETE /grants/{id}`. `add_contribution` (REST and MCP) now returns 404 `NOT_FOUND` for option or idea targets that do not exist in the grant's project. MCP reads the grant token only from the `Authorization` header and ignores tokens in the JSON-RPC body (`params._meta`). Grants that expired, were revoked or completed are pruned after one hour together with their pseudonym maps, and a client presenting more than 20 invalid tokens per minute gets 429 (the owner token is never throttled). Browser access is limited to allowed origins (CORS; `allowedOrigins` / `DECISIONATOR_ALLOWED_ORIGINS`). The web app no longer ships a hard-coded bridge token: the owner pastes the node's owner token (kept in memory and `sessionStorage` only); without it, agent access and live-session moderation are off and explained, and "Ask my agent" mints a real grant through the node. Plugin permissions are granted only after consent (first-party allowlist, or a person's approval stored per plugin id, version and permission set; deny by default); `net:` permissions must be exact https origins, so `net:*` never becomes `connect-src *`; the sandbox frame escapes the manifest name. The Vite dev server binds to 127.0.0.1 unless `VITE_HOST` is set.
+
+Installing a plugin starts with no permission ticked, and only permissions the manifest requests and that are well formed are stored as granted.

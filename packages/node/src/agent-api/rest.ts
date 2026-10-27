@@ -13,6 +13,7 @@ import {
   AgentNameSchema,
   CONTRIBUTION_BODY_MAX_BYTES,
   CompleteRequestInputSchema,
+  CreateGrantBodySchema,
   LiveSessionDataSchema,
   ProposalDecisionBodySchema,
   ProposeModerationInputSchema,
@@ -73,6 +74,10 @@ export function contributionBodyTooLarge(body: unknown): boolean {
 }
 
 export const CONTRIBUTION_TOO_LARGE_MESSAGE = `Contribution body exceeds ${CONTRIBUTION_BODY_MAX_BYTES} bytes (64 KB)`;
+
+/** A contribution about an option or idea the grant's project does not have (1.4.0). */
+export const CONTRIBUTION_TARGET_NOT_FOUND_MESSAGE =
+  "Target not found: the option or idea does not exist in this project";
 
 /**
  * Shared by REST and MCP: an agent sets a shared option property. Needs `contribute` and the
@@ -362,6 +367,9 @@ export function createRestRouter(options: RestApiOptions): Hono<RestEnv> {
     }
 
     const effectiveTarget = data.target || auth.grant.target;
+    if (!stateStore.targetExists(auth.grant.projectId, effectiveTarget)) {
+      return c.json({ error: "NOT_FOUND", message: CONTRIBUTION_TARGET_NOT_FOUND_MESSAGE }, 404);
+    }
     const targetId =
       effectiveTarget.kind === "option"
         ? effectiveTarget.optionId
@@ -616,6 +624,47 @@ export function createRestRouter(options: RestApiOptions): Hono<RestEnv> {
     return c.json({ ok: true, proposal: updated });
   });
 
+  // Owner: mint an agent grant. The token is returned once; only its hash is kept (1.4.0).
+  router.post("/grants", async (c) => {
+    const denied = ownerOnly(c);
+    if (denied) return denied;
+    const body = await readJsonBody(c, false);
+    const parsed = body.ok ? CreateGrantBodySchema.safeParse(body.value) : null;
+    if (!parsed?.success) {
+      return invalid(c, parsed?.error.issues[0]?.message ?? "Request body must be a JSON object");
+    }
+    const { grant, token } = grantManager.createGrant(parsed.data);
+    grantManager.recordAudit("agent_grant_created", {
+      grantId: grant.id,
+      projectId: grant.projectId,
+      target: grant.target,
+      permissions: grant.permissions,
+      expiresAt: grant.expiresAt,
+    });
+    c.header("Cache-Control", "no-store");
+    return c.json(
+      {
+        id: grant.id,
+        token,
+        projectId: grant.projectId,
+        target: grant.target,
+        permissions: grant.permissions,
+        expiresAt: grant.expiresAt,
+      },
+      201
+    );
+  });
+
+  // Owner: revoke an agent grant.
+  router.delete("/grants/:id", async (c) => {
+    const denied = ownerOnly(c);
+    if (denied) return denied;
+    if (!grantManager.revokeGrant(c.req.param("id"))) {
+      return c.json({ error: "NOT_FOUND", message: "Grant not found" }, 404);
+    }
+    return c.json({ ok: true });
+  });
+
   // 11. GET /openapi.json (OpenAPI 3.1 schema)
   router.get("/openapi.json", (c) => {
     const openapi = generateOpenApiSpec();
@@ -630,7 +679,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
     openapi: "3.1.0",
     info: {
       title: "Decisionator Agent API",
-      version: "1.3.0",
+      version: "1.4.0",
       description: "Local & remote agent API for Decisionator with full MCP parity.",
     },
     paths: {

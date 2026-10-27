@@ -12,6 +12,8 @@ export interface StoredGrant {
   createdAt: string;
   expiresAt: string;
   status: AgentRequestStatus;
+  /** When the grant was revoked or completed (it can no longer write from then on). */
+  endedAt?: string;
   summary?: string;
   agentName?: string;
   contributionsCount: number;
@@ -37,11 +39,81 @@ export interface GrantVerificationResult {
   grant?: StoredGrant;
 }
 
+export interface GrantManagerOptions {
+  /**
+   * How long a grant that has expired, been revoked or been completed is kept (so its agent still
+   * gets `EXPIRED`/`REVOKED` instead of `UNAUTHORIZED`) before it and its state are forgotten.
+   * Default 1 hour.
+   */
+  retentionMs?: number;
+  /** Least time between two automatic prunes on access. Default 1 minute. */
+  pruneIntervalMs?: number;
+  /** Clock, for tests. */
+  now?: () => number;
+}
+
+/** Called with the ids of the grants that were just forgotten. */
+export type GrantPruneListener = (grantIds: string[]) => void;
+
+export const GRANT_RETENTION_MS = 3600_000;
+const PRUNE_INTERVAL_MS = 60_000;
+
 export class GrantManager {
   private grants = new Map<string, StoredGrant>(); // id -> grant
   private tokenHashToId = new Map<string, string>(); // tokenHash -> id
+  private pruneListeners = new Set<GrantPruneListener>();
+  private lastPrune = 0;
+  private readonly retentionMs: number;
+  private readonly pruneIntervalMs: number;
+  private readonly now: () => number;
 
-  constructor(private auditLog?: AuditLog) {}
+  constructor(
+    private auditLog?: AuditLog,
+    options: GrantManagerOptions = {}
+  ) {
+    this.retentionMs = options.retentionMs ?? GRANT_RETENTION_MS;
+    this.pruneIntervalMs = options.pruneIntervalMs ?? PRUNE_INTERVAL_MS;
+    this.now = options.now ?? Date.now;
+  }
+
+  /** Registers a listener for forgotten grants (e.g. to drop their pseudonym maps). */
+  onPrune(listener: GrantPruneListener): () => void {
+    this.pruneListeners.add(listener);
+    return () => this.pruneListeners.delete(listener);
+  }
+
+  /**
+   * Forgets grants that ended (expired, revoked or completed) more than the retention period ago,
+   * together with their token hash, and tells the prune listeners. Returns the forgotten ids.
+   */
+  prune(now: number = this.now()): string[] {
+    this.lastPrune = now;
+    const removed: string[] = [];
+    for (const [id, grant] of this.grants) {
+      const expiry = Date.parse(grant.expiresAt);
+      const ended = grant.endedAt ? Date.parse(grant.endedAt) : Number.POSITIVE_INFINITY;
+      const endedAt = Math.min(Number.isNaN(expiry) ? 0 : expiry, ended);
+      if (endedAt + this.retentionMs < now) {
+        this.grants.delete(id);
+        this.tokenHashToId.delete(grant.tokenHash);
+        removed.push(id);
+      }
+    }
+    if (removed.length > 0) {
+      for (const listener of this.pruneListeners) listener(removed);
+    }
+    return removed;
+  }
+
+  /** Number of grants currently kept (live ones and recently ended ones). */
+  get size(): number {
+    return this.grants.size;
+  }
+
+  private maybePrune(): void {
+    const now = this.now();
+    if (now - this.lastPrune >= this.pruneIntervalMs) this.prune(now);
+  }
 
   static hashToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
@@ -49,10 +121,11 @@ export class GrantManager {
 
   createGrant(options: CreateGrantOptions): { grant: StoredGrant; token: string } {
     // Generate 256-bit bearer token (32 random bytes hex)
+    this.maybePrune();
     const token = randomBytes(32).toString("hex");
     const tokenHash = GrantManager.hashToken(token);
 
-    const now = new Date();
+    const now = new Date(this.now());
     const lifetimeHours = Math.min(Math.max(options.lifetimeHours ?? 24, 1), 24 * 30);
     const expiresAt = new Date(now.getTime() + lifetimeHours * 3600 * 1000).toISOString();
 
@@ -68,7 +141,7 @@ export class GrantManager {
       expiresAt,
       status: "open",
       contributionsCount: 0,
-      callsWindowStart: Date.now(),
+      callsWindowStart: this.now(),
       callsInWindow: 0,
     };
 
@@ -83,6 +156,8 @@ export class GrantManager {
   }
 
   resolveGrantByToken(token: string): StoredGrant | undefined {
+    if (!token) return undefined;
+    this.maybePrune();
     const hash = GrantManager.hashToken(token);
     const id = this.tokenHashToId.get(hash);
     if (!id) return undefined;
@@ -93,6 +168,7 @@ export class GrantManager {
     const grant = this.grants.get(id);
     if (!grant) return false;
     grant.status = "revoked";
+    grant.endedAt ??= new Date(this.now()).toISOString();
     this.auditLog?.record("agent_grant_revoked", {
       grantId: id,
       projectId: grant.projectId,
@@ -104,6 +180,7 @@ export class GrantManager {
     const grant = this.grants.get(id);
     if (!grant) return false;
     grant.status = "completed";
+    grant.endedAt ??= new Date(this.now()).toISOString();
     if (summary) grant.summary = summary;
     this.auditLog?.record("agent_request_completed", {
       grantId: id,
@@ -147,7 +224,7 @@ export class GrantManager {
       };
     }
 
-    const now = Date.now();
+    const now = this.now();
     const expiryTime = new Date(grant.expiresAt).getTime();
 
     // 1. Check expiration

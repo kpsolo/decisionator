@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   type InstalledPlugin,
   getInstalledPlugins,
+  installPlugin,
   subscribePlugins,
   updatePlugin,
 } from "./plugin-registry.js";
@@ -76,5 +77,20 @@ describe("plugin registry", () => {
     updatePlugin("org.decisionator.option-status", { enabled: true });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.find((p) => p.id === "org.decisionator.option-status")?.enabled).toBe(false);
+  });
+
+  it("grants only requested, well-formed permissions the person selected", () => {
+    const base = getInstalledPlugins().find((p) => p.id === "org.decisionator.option-status");
+    const manifest = {
+      ...base?.manifest,
+      id: "com.example.third-party",
+      permissions: ["project:read", "net:https://api.example.com"],
+    };
+    const installed = installPlugin(manifest, { type: "url", url: "https://example.com/p.json" }, [
+      "project:read",
+      "net:*",
+      "clipboard:read",
+    ]);
+    expect(installed.grantedPermissions).toEqual(["project:read"]);
   });
 });

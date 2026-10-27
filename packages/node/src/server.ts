@@ -1,7 +1,9 @@
 import { serve } from "@hono/node-server";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import { AuditLog } from "./agent-api/audit.js";
 import { GrantManager } from "./agent-api/grants.js";
 import { createMcpServer } from "./agent-api/mcp.js";
@@ -9,6 +11,34 @@ import { OwnerAuth } from "./agent-api/owner.js";
 import { createRestRouter } from "./agent-api/rest.js";
 import { REQUEST_BODY_MAX_BYTES } from "./agent-api/schemas.js";
 import { AgentStateStore } from "./agent-api/state.js";
+import { AuthFailureThrottle } from "./agent-api/throttle.js";
+
+/**
+ * Browser origins that may call the node by default: the Vite dev server and preview on this
+ * machine. The hosted app's origin is added with `allowedOrigins` /
+ * `DECISIONATOR_ALLOWED_ORIGINS`.
+ */
+export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+];
+
+/** The client a request comes from (its socket address), for throttling. */
+function clientKey(c: Context): string {
+  try {
+    return getConnInfo(c).remote.address ?? "unknown";
+  } catch {
+    // In-memory requests (tests) have no socket.
+    return "local";
+  }
+}
+
+const bearerToken = (header: string | undefined): string => {
+  const match = (header ?? "").match(/^Bearer\s+(.+)$/i);
+  return match?.[1] ? match[1].trim() : "";
+};
 
 export interface NodeServerOptions {
   grantManager?: GrantManager;
@@ -22,6 +52,13 @@ export interface NodeServerOptions {
    * `ownerToken` for the owner's app. Agent grant tokens are never accepted there.
    */
   ownerToken?: string;
+  /**
+   * Browser origins allowed to call the node (CORS), e.g. the hosted app. Defaults to
+   * `DEFAULT_ALLOWED_ORIGINS`. Requests without an `Origin` (agents, CLI) are unaffected.
+   */
+  allowedOrigins?: readonly string[];
+  /** Throttle for invalid tokens (default: 20 failures per minute per client). */
+  authFailureThrottle?: AuthFailureThrottle;
 }
 
 export function createNodeApp(options?: NodeServerOptions): {
@@ -36,6 +73,11 @@ export function createNodeApp(options?: NodeServerOptions): {
   const grantManager = options?.grantManager || new GrantManager(auditLog);
   const stateStore = options?.stateStore || new AgentStateStore();
   const ownerAuth = new OwnerAuth(options?.ownerToken);
+  const throttle = options?.authFailureThrottle ?? new AuthFailureThrottle();
+  const allowedOrigins = new Set(options?.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS);
+
+  // Forgotten grants take their pseudonym maps and request index with them.
+  grantManager.onPrune((ids) => stateStore.forgetGrants(ids));
 
   const app = new Hono();
 
@@ -62,6 +104,37 @@ export function createNodeApp(options?: NodeServerOptions): {
     return next();
   });
 
+  // Only listed browser origins may read responses (the owner's tab uses the owner bridge).
+  app.use(
+    "*",
+    cors({
+      origin: (origin) => (allowedOrigins.has(origin) ? origin : null),
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowHeaders: ["Authorization", "Content-Type", "X-Agent-Name", "Mcp-Session-Id"],
+      maxAge: 600,
+    })
+  );
+
+  // Invalid-token throttle (1.4.0): too many 401s from one client get 429 for the rest of the
+  // window. The owner token always passes, so a noisy local agent cannot lock the owner out.
+  const throttled = (c: Context) => {
+    if (c.req.method === "OPTIONS") return null;
+    const key = clientKey(c);
+    if (!throttle.isBlocked(key)) return null;
+    if (ownerAuth.verify(bearerToken(c.req.header("authorization")))) return null;
+    c.header("Retry-After", String(throttle.retryAfterSeconds(key)));
+    return c.json(
+      { error: "RATE_LIMITED", message: "Too many invalid tokens; try again later" },
+      429
+    );
+  };
+  app.use("/api/v1/*", async (c, next) => {
+    const blocked = throttled(c);
+    if (blocked) return blocked;
+    await next();
+    if (c.res.status === 401) throttle.recordFailure(clientKey(c));
+  });
+
   // REST API mounted under /api/v1
   const restRouter = createRestRouter({ grantManager, stateStore, ownerAuth });
   app.route("/api/v1", restRouter);
@@ -79,9 +152,13 @@ export function createNodeApp(options?: NodeServerOptions): {
     })
   );
   app.all("/mcp", async (c) => {
-    const authHeader = c.req.header("authorization") || "";
-    const match = authHeader.match(/^Bearer\s+(.+)$/i);
-    const token = match?.[1] ? match[1].trim() : "";
+    const blocked = throttled(c);
+    if (blocked) return blocked;
+    // The grant token comes only from the Authorization header, never from the JSON-RPC body.
+    const token = bearerToken(c.req.header("authorization"));
+    if (token && !grantManager.resolveGrantByToken(token)) {
+      throttle.recordFailure(clientKey(c));
+    }
 
     const mcpServer = createMcpServer({
       grantManager,
@@ -100,9 +177,14 @@ export function createNodeApp(options?: NodeServerOptions): {
 export function startNodeServer(opts?: { port?: number; hostname?: string } & NodeServerOptions) {
   const port = opts?.port ?? 4178;
   const hostname = opts?.hostname ?? "127.0.0.1";
+  const envOrigins = (process.env.DECISIONATOR_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
   const { app, grantManager, stateStore, auditLog, ownerToken } = createNodeApp({
     ...opts,
     ownerToken: opts?.ownerToken ?? (process.env.DECISIONATOR_OWNER_TOKEN || undefined),
+    allowedOrigins: opts?.allowedOrigins ?? [...DEFAULT_ALLOWED_ORIGINS, ...envOrigins],
   });
 
   const server = serve({

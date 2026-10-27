@@ -2,9 +2,10 @@ import type { AuditEvent } from "@decisionator/core";
 
 /**
  * Audit event types the node records. Extends the core set with `agent_property_set`: an agent
- * set a shared option property (agentic API 1.1.0).
+ * set a shared option property (agentic API 1.1.0), and `agent_grant_created`: the owner minted
+ * a grant through the owner bridge (1.4.0).
  */
-export type AgentAuditEventType = AuditEvent["type"] | "agent_property_set";
+export type AgentAuditEventType = AuditEvent["type"] | "agent_property_set" | "agent_grant_created";
 export type AgentAuditEvent = Omit<AuditEvent, "type"> & { type: AgentAuditEventType };
 
 export class AuditLog {

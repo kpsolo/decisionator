@@ -7,7 +7,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
     server: {
-      host: "0.0.0.0",
+      // Loopback only by default. To test from other devices on the network (e.g. live sessions
+      // on a phone), opt in with VITE_HOST=0.0.0.0 (or a specific interface address).
+      // 127.0.0.1 rather than "localhost", which may resolve to ::1 only (Playwright uses 127.0.0.1).
+      host: env.VITE_HOST?.trim() || "127.0.0.1",
       port: 5173,
       watch: {
         ignored: ["**/playwright-report/**", "**/test-results/**"],
