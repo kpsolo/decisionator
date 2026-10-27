@@ -46,7 +46,7 @@ export const ProjectSchema = z.object({
     .object({
       id: z.string().min(1).max(200),
       version: z.string().min(1).max(40),
-      settings: z.record(z.unknown()).default({}),
+      settings: z.record(z.string(), z.unknown()).default({}),
       at: z.string().optional(),
       by: z.string().optional(),
     })

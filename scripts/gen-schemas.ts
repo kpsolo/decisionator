@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import {
   CommentSchema,
   GradeSchema,
@@ -31,7 +31,10 @@ const schemas = {
 };
 
 for (const [name, schema] of Object.entries(schemas)) {
-  const jsonSchema = zodToJsonSchema(schema, name);
+  const jsonSchema = {
+    title: name,
+    ...z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }),
+  };
   const targetPath = path.join(schemaDir, `${name}.schema.json`);
   fs.writeFileSync(targetPath, JSON.stringify(jsonSchema, null, 2), "utf-8");
   console.log(`Generated schema: ${targetPath}`);

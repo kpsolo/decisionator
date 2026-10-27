@@ -93,7 +93,7 @@ export type GuestMessage = z.infer<typeof GuestMessageSchema>;
 export const LiveRoleSchema = z.enum(["contribute", "view"]);
 export type LiveRole = z.infer<typeof LiveRoleSchema>;
 
-const Snapshot = z.record(z.unknown());
+const Snapshot = z.record(z.string(), z.unknown());
 
 const Welcome = z.object({
   t: z.literal("welcome"),
@@ -149,7 +149,7 @@ export type HostMessage = z.infer<typeof HostMessageSchema>;
 // the relay secret, or a buggy host, must not be able to hand guests something that is not a
 // project snapshot.
 
-const RecordList = z.array(z.record(z.unknown()));
+const RecordList = z.array(z.record(z.string(), z.unknown()));
 
 /** The structural minimum of a redacted ProjectSnapshot that a guest renders. */
 export const RelaySnapshotSchema = z

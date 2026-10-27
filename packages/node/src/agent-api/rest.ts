@@ -1,7 +1,8 @@
 import type { AgentPermission, PropertyValue, TargetRef } from "@decisionator/core";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
+
 import type { GrantManager, GrantVerificationResult, HttpStatus } from "./grants.js";
 import type { OwnerAuth } from "./owner.js";
 import {
@@ -641,7 +642,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: false,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(AgentHelloInputSchema),
+                schema: z.toJSONSchema(AgentHelloInputSchema, { io: "input" }),
               },
             },
           },
@@ -683,7 +684,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: true,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(AddContributionInputSchema),
+                schema: z.toJSONSchema(AddContributionInputSchema, { io: "input" }),
               },
             },
           },
@@ -708,7 +709,9 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: true,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(UpdateContributionInputSchema.omit({ id: true })),
+                schema: z.toJSONSchema(UpdateContributionInputSchema.omit({ id: true }), {
+                  io: "input",
+                }),
               },
             },
           },
@@ -725,7 +728,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: true,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(ProposeOptionInputSchema),
+                schema: z.toJSONSchema(ProposeOptionInputSchema, { io: "input" }),
               },
             },
           },
@@ -758,7 +761,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: true,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(SetOptionPropertyBodySchema),
+                schema: z.toJSONSchema(SetOptionPropertyBodySchema, { io: "input" }),
               },
             },
           },
@@ -778,7 +781,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: false,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(CompleteRequestInputSchema),
+                schema: z.toJSONSchema(CompleteRequestInputSchema, { io: "input" }),
               },
             },
           },
@@ -805,7 +808,7 @@ export function generateOpenApiSpec(): Record<string, unknown> {
             required: true,
             content: {
               "application/json": {
-                schema: zodToJsonSchema(ProposeModerationInputSchema),
+                schema: z.toJSONSchema(ProposeModerationInputSchema, { io: "input" }),
               },
             },
           },

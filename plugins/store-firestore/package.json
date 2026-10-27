@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "@decisionator/core": "workspace:*",
-    "@decisionator/plugin-sdk": "workspace:*",
-    "firebase": "^10.14.1"
+    "@decisionator/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

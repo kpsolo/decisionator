@@ -32,8 +32,7 @@ export const ProjectExportV1Schema = z.object({
       rankings: z.array(RankingSchema).optional().default([]),
       properties: z.array(PropertyValueSchema).optional().default([]),
     })
-    .optional()
-    .default({}),
+    .prefault({}),
   /** Every reset entry, in append order. Absent before 005 US6. */
   resets: z.array(ResetSchema).optional().default([]),
 });

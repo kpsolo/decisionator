@@ -390,7 +390,7 @@ export function createProjectWorkbook(bundle: ProjectExportV1): Uint8Array {
             ? `Round ${h.record.round ?? 1}`
             : (title.get(h.record.optionId) ?? h.record.optionId),
           h.kind === "ranking"
-            ? lines(h.record.ranking.map((id) => title.get(id) ?? id))
+            ? lines(h.record.ranking.map((id: string) => title.get(id) ?? id))
             : h.record.value,
           h.record.by,
           h.record.byName,
