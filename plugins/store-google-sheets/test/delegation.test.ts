@@ -76,7 +76,7 @@ describe("GoogleSheetsProjectStore delegated append and protected writes", () =>
     expect(dump).not.toContain("Ann");
     for (const range of raw.valueRanges) {
       for (const row of (range.values ?? []).slice(1)) {
-        expect(row[4]?.startsWith("enc:v1:")).toBe(true);
+        expect(row[4]?.startsWith("enc:v2:")).toBe(true);
       }
     }
 

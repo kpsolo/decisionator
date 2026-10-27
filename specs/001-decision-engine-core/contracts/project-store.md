@@ -1,4 +1,4 @@
-# Contract: Project Store — v1.4.0
+# Contract: Project Store — v1.4.1
 
 The extension point that keeps project storage pluggable (spec FR-011, Principle I).
 - MVP implementation: `store-google-sheets` ([sheet-store.md](./sheet-store.md)).
@@ -100,6 +100,18 @@ the superseded and cleared entries and every reset, oldest first (rule 9), and
 4. Rate limiting, queueing and backoff (FR-020) belong to the store. `AppendResult` reports
    `{queued: n, sent: n}` so the UI can show "syncing paused".
 5. With a `password`, the store encrypts all content before it leaves the browser (FR-017).
+   Since v1.4.1 (security hardening):
+   - a password that is set (`createProject`, `enablePassword`, …) has at least 12 characters
+     (`assertPasswordStrength` from `@decisionator/core`); shorter ones are refused before
+     anything is written;
+   - a KDF iteration count read from stored data is checked with `checkKdfIterations`
+     ([100 000, 5 000 000]) before it is used;
+   - values are sealed with codec `enc:v2:` and a seal context naming where the value lives
+     (e.g. `["option", id, "title"]`, `["comment", id, "body"]`, `["property", id, "value"]`,
+     `["meta", "title"]`), so a ciphertext moved to another record or field does not decrypt;
+     legacy `enc:v1:` values are still read;
+   - once a project's key is loaded in a session, the store never writes it in plaintext, even if
+     the stored data now says it is unprotected (an error starting with `PROTECTION_DOWNGRADE`).
 6. **Delegated append (v1.2.0).** `append(ref, entries, { onBehalfOf })` lets the project owner
    record entries for another participant, e.g. a guest of a live session relayed through the
    owner's tab, or the original author when a project is moved between stores.
@@ -228,6 +240,7 @@ covers:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.4.1 (unreleased) | 2026-10-27 | Rule 5 hardened (security audit F4, F6, F10, F11): minimum password length 12, bounded KDF iterations from stored data, codec `enc:v2:` with a seal context (AES-GCM additional data; `enc:v1:` still read), no plaintext writes once a project's key is loaded (`PROTECTION_DOWNGRADE`). Contract kit uses a 12+ character password |
 | 1.4.0 (unreleased) | 2026-10-07 | Add the `property` entry kind and `ProjectSnapshot.properties`: plugin-declared option property values, `shared` (owner only) or `person` (per participant), latest-wins per slot, `null` clears, delegation only for `person`, encrypted in password mode (rule 8). Add the `reset` entry kind and `ProjectSnapshot.history`: stores append every grade, ranking, property and reset and build the snapshot with `effectiveEntries`; owner-only resets except a self `properties` reset (rule 9). Add `MetaPatch.strategy` and `Project.strategy`/`strategyChanges` (owner only, last 20 changes, settings encrypted in password mode; rule 10). Contract kit covers rules 8.1–8.6, 9 and 10 |
 | 1.3.0 (unreleased) | 2026-10-06 | Add optional `ProjectSnapshot.warnings`: records skipped because they failed validation, so the UI can name them |
 | 1.2.1 (unreleased) | 2026-10-06 | `share` is owner-only: non-owners get `PERMISSION_DENIED` (rule 7). `removeUsers` must revoke the named collaborators; Google refuses it with `NOT_SUPPORTED` while link sharing stays on. Contract kit covers both |

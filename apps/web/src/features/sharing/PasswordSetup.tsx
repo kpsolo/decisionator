@@ -75,7 +75,7 @@ export const PasswordSetup: React.FC<PasswordSetupProps> = ({ onEnablePassword, 
               <li>
                 <strong>Metadata remains visible in Google Sheets:</strong> collaborator emails,
                 option IDs, timestamps, and row counts remain readable in the Sheet grid. Option
-                titles, descriptions, and comments are fully encrypted (<code>enc:v1:…</code>).
+                titles, descriptions, and comments are fully encrypted (<code>enc:v2:…</code>).
               </li>
               <li>The Google Sheet title will be renamed to "Deci project (protected)".</li>
             </ul>

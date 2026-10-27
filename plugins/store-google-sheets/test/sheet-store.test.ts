@@ -61,7 +61,7 @@ describe("GoogleSheetsProjectStore", () => {
       const raw = await client.batchGetValues(ref.id, ["contributions!A:F"]);
       const rows = raw.valueRanges[0]?.values ?? [];
       expect(rows).toHaveLength(2);
-      expect(rows[1]?.[5]?.startsWith("enc:v1:")).toBe(true);
+      expect(rows[1]?.[5]?.startsWith("enc:v2:")).toBe(true);
       expect(JSON.stringify(raw)).not.toContain("Agent research note");
 
       const snap = await setupStore().store.openProject(ref, { password: PASSWORD });
@@ -92,7 +92,7 @@ describe("GoogleSheetsProjectStore", () => {
       expect(grades).toHaveLength(3);
       expect(grades[1]?.[0]).toBe("g_blank");
       expect(grades[2]?.[0]).toBe("g_1");
-      expect(grades[2]?.[4]?.startsWith("enc:v1:")).toBe(true);
+      expect(grades[2]?.[4]?.startsWith("enc:v2:")).toBe(true);
       const meta = raw.valueRanges[1]?.values ?? [];
       expect(meta[0]).toEqual(["key", "value"]);
       expect(meta.find((r) => r[0] === "custom")?.[1]).toBe("kept");
@@ -355,7 +355,7 @@ describe("GoogleSheetsProjectStore", () => {
       ]);
 
       const raw = await client.batchGetValues(ref.id, ["properties!A:E"]);
-      expect(raw.valueRanges[0]?.values?.[1]?.[4]?.startsWith("enc:v1:")).toBe(true);
+      expect(raw.valueRanges[0]?.values?.[1]?.[4]?.startsWith("enc:v2:")).toBe(true);
 
       const snap = await setupStore().store.openProject(ref, { password: PASSWORD });
       expect(snap.properties?.map((p) => p.value)).toEqual(["seen"]);
@@ -376,7 +376,7 @@ describe("GoogleSheetsProjectStore", () => {
       ]);
 
       const raw = await client.batchGetValues(ref.id, ["resets!A:D"]);
-      expect(raw.valueRanges[0]?.values?.[1]?.[3]?.startsWith("enc:v1:")).toBe(true);
+      expect(raw.valueRanges[0]?.values?.[1]?.[3]?.startsWith("enc:v2:")).toBe(true);
 
       const snap = await setupStore().store.openProject(ref, { password: PASSWORD });
       expect(snap.properties).toEqual([]);

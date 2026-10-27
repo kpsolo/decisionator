@@ -9,6 +9,7 @@ import {
   type PropertyValue,
   type Ranking,
   type Reset,
+  type SealContext,
   effectiveEntries,
   monotonicNow,
 } from "@decisionator/core";
@@ -41,12 +42,17 @@ import {
   checkVerifier,
   decrypt,
   encrypt,
+  isSealed,
   setupPasswordProtection,
   verifyAndDerivePasswordKey,
 } from "./crypto.js";
 import { openOption, sealOption } from "./option-seal.js";
 
-const ENCRYPTED_PREFIX = "enc:v1:";
+/** Seal contexts (codec v2 additional data): where each sealed value lives. */
+const TITLE_CONTEXT: SealContext = ["meta", "title"];
+const DESCRIPTION_CONTEXT: SealContext = ["meta", "description"];
+const commentContext = (id: string): SealContext => ["comment", id, "body"];
+const propertyContext = (id: string): SealContext => ["property", id, "value"];
 
 /**
  * Text fields of protected projects are stored encrypted. An empty value (e.g. the body of a
@@ -54,45 +60,57 @@ const ENCRYPTED_PREFIX = "enc:v1:";
  * are read back unchanged instead of making the whole project unreadable. Ciphertext that does
  * not decrypt is an error, never returned as text.
  */
-async function openSealed(value: string, key: CryptoKey): Promise<string> {
-  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-  return decrypt(value, key);
+async function openSealed(value: string, key: CryptoKey, context: SealContext): Promise<string> {
+  if (!isSealed(value)) return value;
+  return decrypt(value, key, context);
 }
 
-async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
-  return body === "" ? "" : encrypt(body, key);
+async function encryptCommentBody(body: string, key: CryptoKey, id: string): Promise<string> {
+  return body === "" ? "" : encrypt(body, key, commentContext(id));
 }
 
 /** Property values of protected projects are stored as their JSON, encrypted. */
-async function sealPropertyValue(value: PropertyScalar, key: CryptoKey): Promise<string> {
-  return encrypt(JSON.stringify(value), key);
+async function sealPropertyValue(
+  value: PropertyScalar,
+  key: CryptoKey,
+  id: string
+): Promise<string> {
+  return encrypt(JSON.stringify(value), key, propertyContext(id));
 }
 
-async function openPropertyValue(value: PropertyScalar, key: CryptoKey): Promise<PropertyScalar> {
-  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-  return JSON.parse(await decrypt(value, key)) as PropertyScalar;
+async function openPropertyValue(
+  value: PropertyScalar,
+  key: CryptoKey,
+  id: string
+): Promise<PropertyScalar> {
+  if (!isSealed(value)) return value;
+  return JSON.parse(await decrypt(value, key, propertyContext(id))) as PropertyScalar;
 }
 
 type StoredStrategy = Pick<Project, "strategy" | "strategyChanges">;
 
 /** Strategy meta of protected projects is stored as its JSON, encrypted, like the title. */
-async function sealJson<T>(value: T | undefined, key: CryptoKey | undefined) {
+async function sealJson<T>(value: T | undefined, key: CryptoKey | undefined, field: string) {
   if (value === undefined || !key) return value;
-  return encrypt(JSON.stringify(value), key);
+  return encrypt(JSON.stringify(value), key, ["meta", field]);
 }
 
-async function openJson<T>(value: T | string | undefined, key: CryptoKey | undefined) {
+async function openJson<T>(
+  value: T | string | undefined,
+  key: CryptoKey | undefined,
+  field: string
+) {
   if (typeof value !== "string") return value;
-  if (!key || !value.startsWith(ENCRYPTED_PREFIX)) return undefined;
-  return JSON.parse(await decrypt(value, key)) as T;
+  if (!key || !isSealed(value)) return undefined;
+  return JSON.parse(await decrypt(value, key, ["meta", field])) as T;
 }
 
 async function readStrategy(
   doc: FirestoreProjectDoc,
   key: CryptoKey | undefined
 ): Promise<StoredStrategy> {
-  const strategy = await openJson(doc.strategy, key);
-  const strategyChanges = await openJson(doc.strategyChanges, key);
+  const strategy = await openJson(doc.strategy, key, "strategy");
+  const strategyChanges = await openJson(doc.strategyChanges, key, "strategyChanges");
   return {
     ...(strategy ? { strategy } : {}),
     ...(strategyChanges ? { strategyChanges } : {}),
@@ -106,6 +124,13 @@ export interface FirebaseConfig {
   appId?: string;
 }
 
+/**
+ * EXPERIMENTAL, IN-MEMORY MOCK of a Firestore-backed store. Nothing is sent over the network and
+ * nothing persists beyond this object; there is no server-side security, so every role and
+ * authorship check below is client-side only. A real Firestore backend must ship `firestore.rules`
+ * enforcing authorship (`by` = the signed-in user), roles, owner-only meta/options/outcomes and
+ * append-only entries — see this package's README.
+ */
 export class FirestoreProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.firestore";
   private listeners = new Map<string, Set<(snapshot: ProjectSnapshot) => void>>();
@@ -163,15 +188,15 @@ export class FirestoreProjectStore implements ProjectStore {
     const inputOpts = input.options || [];
 
     let key: CryptoKey | undefined;
-    if (opts?.password) {
+    if (opts?.password !== undefined) {
       const p = await setupPasswordProtection(opts.password);
       salt = p.salt;
       verifier = p.verifier;
       iterations = p.iterations;
       key = p.key;
 
-      initialTitle = await encrypt(initialTitle, p.key);
-      initialDesc = await encrypt(initialDesc, p.key);
+      initialTitle = await encrypt(initialTitle, p.key, TITLE_CONTEXT);
+      initialDesc = await encrypt(initialDesc, p.key, DESCRIPTION_CONTEXT);
     }
 
     for (const [idx, o] of inputOpts.entries()) {
@@ -195,7 +220,7 @@ export class FirestoreProjectStore implements ProjectStore {
       formatVersion: 2,
       title: initialTitle,
       description: initialDesc,
-      protected: Boolean(opts?.password),
+      protected: opts?.password !== undefined,
       salt,
       iterations,
       verifier,
@@ -227,8 +252,8 @@ export class FirestoreProjectStore implements ProjectStore {
       const key = await this.unlock(ref.id, doc, opts?.password);
 
       // Decrypt project
-      const decryptedTitle = await openSealed(doc.title, key);
-      const decryptedDesc = await openSealed(doc.description, key);
+      const decryptedTitle = await openSealed(doc.title, key, TITLE_CONTEXT);
+      const decryptedDesc = await openSealed(doc.description, key, DESCRIPTION_CONTEXT);
 
       const decryptedOptions: Option[] = [];
       for (const opt of optsMap.values()) {
@@ -239,11 +264,14 @@ export class FirestoreProjectStore implements ProjectStore {
         this.buildEntries(entryList);
 
       const decryptedComments = await Promise.all(
-        comments.map(async (c) => ({ ...c, body: await openSealed(c.body, key) }))
+        comments.map(async (c) => ({
+          ...c,
+          body: await openSealed(c.body, key, commentContext(c.id)),
+        }))
       );
       const openValues = (list: PropertyValue[]) =>
         Promise.all(
-          list.map(async (p) => ({ ...p, value: await openPropertyValue(p.value, key) }))
+          list.map(async (p) => ({ ...p, value: await openPropertyValue(p.value, key, p.id) }))
         );
       const decryptedProperties = await openValues(properties);
       const decryptedHistory = { ...history, properties: await openValues(history.properties) };
@@ -342,12 +370,20 @@ export class FirestoreProjectStore implements ProjectStore {
 
     // Protected projects keep comment bodies encrypted, so writes need the session key.
     // Bodies are sealed before anything is written, so a failure leaves no partial append.
-    const key = doc.protected ? this.requireKey(ref.id) : undefined;
+    const key = this.writeKey(ref.id, doc);
+    // Ids are chosen up front: sealed values are bound to the id of their entry.
+    const entryIds = entries.map(
+      () => `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+    );
     const bodies = await Promise.all(
-      entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
+      entries.map((e, i) =>
+        e.kind === "comment" && key ? encryptCommentBody(e.body, key, entryIds[i] ?? "") : null
+      )
     );
     const sealedValues = await Promise.all(
-      entries.map((e) => (e.kind === "property" && key ? sealPropertyValue(e.value, key) : null))
+      entries.map((e, i) =>
+        e.kind === "property" && key ? sealPropertyValue(e.value, key, entryIds[i] ?? "") : null
+      )
     );
 
     const entryList = this.entries.get(ref.id) || [];
@@ -357,7 +393,8 @@ export class FirestoreProjectStore implements ProjectStore {
     for (const [i, e] of entries.entries()) {
       // Strictly increasing stamps keep "appended after a reset" decidable by time.
       now = monotonicNow();
-      const entryId = `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const entryId =
+        entryIds[i] ?? `e_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       if (e.kind === "grade") {
         entryList.push({
           id: entryId,
@@ -450,7 +487,7 @@ export class FirestoreProjectStore implements ProjectStore {
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update options");
 
     // Protected projects keep option text encrypted, so edits need the session key.
-    const key = doc.protected ? this.requireKey(ref.id) : undefined;
+    const key = this.writeKey(ref.id, doc);
     const seal = <T extends Partial<Option>>(o: T): Promise<T> =>
       key ? sealOption(o, key) : Promise.resolve(o);
     // Sealed before anything is written, so a failure leaves no partial update.
@@ -496,11 +533,11 @@ export class FirestoreProjectStore implements ProjectStore {
     const role = this.resolveRole(doc, this.currentUser);
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update meta");
 
-    const key = doc.protected ? this.requireKey(ref.id) : undefined;
-    const seal = (value: string | undefined) =>
-      value !== undefined && key ? encrypt(value, key) : value;
-    const title = await seal(patch.title);
-    const description = await seal(patch.description);
+    const key = this.writeKey(ref.id, doc);
+    const seal = (value: string | undefined, context: SealContext) =>
+      value !== undefined && key ? encrypt(value, key, context) : value;
+    const title = await seal(patch.title, TITLE_CONTEXT);
+    const description = await seal(patch.description, DESCRIPTION_CONTEXT);
     const now = monotonicNow();
     let strategyMeta: Pick<FirestoreProjectDoc, "strategy" | "strategyChanges"> | undefined;
     if (patch.strategy) {
@@ -511,8 +548,8 @@ export class FirestoreProjectStore implements ProjectStore {
         now
       );
       strategyMeta = {
-        strategy: await sealJson(next.strategy, key),
-        strategyChanges: await sealJson(next.strategyChanges, key),
+        strategy: await sealJson(next.strategy, key, "strategy"),
+        strategyChanges: await sealJson(next.strategyChanges, key, "strategyChanges"),
       };
     }
 
@@ -613,8 +650,21 @@ export class FirestoreProjectStore implements ProjectStore {
     return key;
   }
 
-  private requireKey(projectId: string): CryptoKey {
+  /**
+   * The key writes to the project must be sealed with, or `undefined` for a plain project. A
+   * project unlocked in this session is never written in plaintext, even if its document now says
+   * it is not protected (that would be an encryption downgrade).
+   */
+  private writeKey(projectId: string, doc: FirestoreProjectDoc): CryptoKey | undefined {
     const key = this.keys.get(projectId);
+    if (!doc.protected) {
+      if (key) {
+        throw new Error(
+          "PROTECTION_DOWNGRADE: this project was unlocked with a password in this session but is no longer marked protected; refusing to write it unencrypted"
+        );
+      }
+      return undefined;
+    }
     if (!key) throw new Error("Password required");
     return key;
   }

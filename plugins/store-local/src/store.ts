@@ -3,18 +3,23 @@ import {
   type Comment,
   type Contribution,
   type Grade,
+  KDF_DEFAULT_ITERATIONS,
   type Option,
   type OutcomeRecord,
   type Project,
   type PropertyValue,
   type Ranking,
   type Reset,
+  type SealContext,
+  assertPasswordStrength,
+  checkKdfIterations,
   checkVerifier,
   decrypt,
   deriveKey,
   effectiveEntries,
   encrypt,
   generateSalt,
+  isSealed,
   makeVerifier,
   monotonicNow,
 } from "@decisionator/core";
@@ -46,29 +51,35 @@ import { type IDBPDatabase, openDB } from "idb";
 import { announceChange, instanceId, listenForChanges, withProjectLock } from "./cross-tab.js";
 import { openOption, sealOption } from "./option-seal.js";
 
-const ENCRYPTED_PREFIX = "enc:v1:";
+/** Seal contexts (codec v2 additional data): where each sealed value lives. */
+const TITLE_CONTEXT: SealContext = ["meta", "title"];
+const DESCRIPTION_CONTEXT: SealContext = ["meta", "description"];
+const STRATEGY_CONTEXT: SealContext = ["meta", "strategy", "settings"];
+const commentContext = (id: string): SealContext => ["comment", id, "body"];
+const propertyContext = (id: string): SealContext => ["property", id, "value"];
 
 /**
  * Text fields of protected projects are stored encrypted. An empty value (e.g. the body of a
  * hide/unhide toggle comment) is stored as-is, and values written in plaintext by older versions
  * are read back unchanged instead of making the whole project unreadable.
  */
-async function openSealed(value: string, key: CryptoKey): Promise<string> {
-  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-  return decrypt(value, key);
+async function openSealed(value: string, key: CryptoKey, context: SealContext): Promise<string> {
+  if (!isSealed(value)) return value;
+  return decrypt(value, key, context);
 }
 
-async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
-  return body === "" ? "" : encrypt(body, key);
+async function encryptCommentBody(body: string, key: CryptoKey, id: string): Promise<string> {
+  return body === "" ? "" : encrypt(body, key, commentContext(id));
 }
 
 /** Property values of protected projects are stored as an encrypted JSON string. */
 async function openPropertyValue(
   value: PropertyValue["value"],
-  key: CryptoKey
+  key: CryptoKey,
+  id: string
 ): Promise<PropertyValue["value"]> {
-  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-  return JSON.parse(await decrypt(value, key)) as PropertyValue["value"];
+  if (!isSealed(value)) return value;
+  return JSON.parse(await decrypt(value, key, propertyContext(id))) as PropertyValue["value"];
 }
 
 /**
@@ -230,16 +241,19 @@ export class LocalProjectStore implements ProjectStore {
       order: o.order ?? idx + 1,
     }));
 
-    if (opts?.password) {
+    if (opts?.password !== undefined) {
+      assertPasswordStrength(opts.password);
       const salt = generateSalt();
-      const iter = 600_000;
+      const iter = KDF_DEFAULT_ITERATIONS;
       const cryptoKey = await deriveKey(opts.password, salt, iter);
       saltB64 = bytesToBase64(salt);
       verifier = await makeVerifier(cryptoKey);
       iterations = iter;
 
-      initialTitle = await encrypt(input.title, cryptoKey);
-      initialDesc = input.description ? await encrypt(input.description, cryptoKey) : "";
+      initialTitle = await encrypt(input.title, cryptoKey, TITLE_CONTEXT);
+      initialDesc = input.description
+        ? await encrypt(input.description, cryptoKey, DESCRIPTION_CONTEXT)
+        : "";
       initialOptions = await Promise.all(initialOptions.map((opt) => sealOption(opt, cryptoKey)));
     }
 
@@ -248,7 +262,7 @@ export class LocalProjectStore implements ProjectStore {
         formatVersion: 1,
         title: initialTitle,
         description: initialDesc,
-        protected: Boolean(opts?.password),
+        protected: opts?.password !== undefined,
         salt: saltB64,
         iterations,
         verifier,
@@ -309,18 +323,21 @@ export class LocalProjectStore implements ProjectStore {
     if (doc.meta.protected) {
       const cryptoKey = await this.unlock(ref.id, doc, opts?.password);
       if (strategySettings !== undefined) {
-        strategySettings = await openSealed(strategySettings, cryptoKey);
+        strategySettings = await openSealed(strategySettings, cryptoKey, STRATEGY_CONTEXT);
       }
-      finalTitle = await openSealed(finalTitle, cryptoKey);
-      finalDesc = await openSealed(finalDesc, cryptoKey);
+      finalTitle = await openSealed(finalTitle, cryptoKey, TITLE_CONTEXT);
+      finalDesc = await openSealed(finalDesc, cryptoKey, DESCRIPTION_CONTEXT);
       finalOptions = await Promise.all(doc.options.map((o) => openOption(o, cryptoKey)));
       finalComments = await Promise.all(
-        doc.comments.map(async (c) => ({ ...c, body: await openSealed(c.body, cryptoKey) }))
+        doc.comments.map(async (c) => ({
+          ...c,
+          body: await openSealed(c.body, cryptoKey, commentContext(c.id)),
+        }))
       );
       finalProperties = await Promise.all(
         finalProperties.map(async (p) => ({
           ...p,
-          value: await openPropertyValue(p.value, cryptoKey),
+          value: await openPropertyValue(p.value, cryptoKey, p.id),
         }))
       );
     }
@@ -454,24 +471,33 @@ export class LocalProjectStore implements ProjectStore {
       // Automerge rejects `undefined` values, so the key is omitted when there is no name.
       const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
+      const newId = (prefix: string) =>
+        `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      // Ids are chosen up front: sealed values are bound to the id of their record.
+      const ids = entries.map((e) =>
+        e.kind === "comment" ? newId("c") : e.kind === "property" ? newId("p") : ""
+      );
+
       // Protected projects keep comment bodies encrypted, so writes need the session key.
       // `A.change` is synchronous, so bodies are sealed up front.
-      const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
+      const key = this.writeKey(ref.id, doc);
       const bodies = await Promise.all(
-        entries.map((e) => (e.kind === "comment" && key ? encryptCommentBody(e.body, key) : null))
+        entries.map((e, i) =>
+          e.kind === "comment" && key ? encryptCommentBody(e.body, key, ids[i] ?? "") : null
+        )
       );
       // Property values are sealed as JSON strings, also up front.
       const values = await Promise.all(
-        entries.map((e) =>
-          e.kind === "property" && key ? encrypt(JSON.stringify(e.value), key) : null
+        entries.map((e, i) =>
+          e.kind === "property" && key
+            ? encrypt(JSON.stringify(e.value), key, propertyContext(ids[i] ?? ""))
+            : null
         )
       );
 
       // Every entry is appended, never replaced, and stamped with a strictly increasing time so
       // a reset clears exactly the entries appended before it (contract `history-resets`).
       const stamps = entries.map(() => monotonicNow());
-      const newId = (prefix: string) =>
-        `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       return A.change(doc, (d) => {
         for (const [i, entry] of entries.entries()) {
@@ -488,7 +514,7 @@ export class LocalProjectStore implements ProjectStore {
             d.grades.push(newGrade);
           } else if (entry.kind === "comment") {
             const newComment: Comment = {
-              id: newId("c"),
+              id: ids[i] || newId("c"),
               optionId: entry.optionId,
               body: bodies[i] ?? entry.body,
               by,
@@ -525,7 +551,7 @@ export class LocalProjectStore implements ProjectStore {
             // `null`, never `undefined`.
             const record = propertyRecord(
               { ...entry, value: values[i] ?? entry.value },
-              { id: newId("p"), at, by, ...byName }
+              { id: ids[i] || newId("p"), at, by, ...byName }
             );
             if (!d.properties) d.properties = [];
             d.properties.push(record);
@@ -551,7 +577,7 @@ export class LocalProjectStore implements ProjectStore {
 
       // Protected projects keep option text encrypted, so edits need the session key.
       // `A.change` is synchronous, so options are sealed up front.
-      const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
+      const key = this.writeKey(ref.id, doc);
       const seal = <T extends Partial<Option>>(o: T): Promise<T> =>
         key ? sealOption(o, key) : Promise.resolve(o);
       const sealedOps = await Promise.all(
@@ -594,11 +620,11 @@ export class LocalProjectStore implements ProjectStore {
         throw new Error("PERMISSION_DENIED: Only owner can update metadata");
       }
 
-      const key = doc.meta.protected ? this.requireKey(ref.id) : undefined;
-      const seal = (value: string | undefined) =>
-        value !== undefined && key ? encrypt(value, key) : value;
-      const title = await seal(patch.title);
-      const description = await seal(patch.description);
+      const key = this.writeKey(ref.id, doc);
+      const seal = (value: string | undefined, context: SealContext) =>
+        value !== undefined && key ? encrypt(value, key, context) : value;
+      const title = await seal(patch.title, TITLE_CONTEXT);
+      const description = await seal(patch.description, DESCRIPTION_CONTEXT);
       // Strategy choice: stamped here, settings kept as (sealed) JSON.
       const current: Pick<Project, "strategy" | "strategyChanges"> = {
         ...(doc.meta.strategyChanges
@@ -615,7 +641,7 @@ export class LocalProjectStore implements ProjectStore {
         ? applyStrategyPatch(current, patch.strategy, this.currentUser, monotonicNow())
         : undefined;
       const strategySettings = next?.strategy
-        ? await seal(JSON.stringify(next.strategy.settings))
+        ? await seal(JSON.stringify(next.strategy.settings), STRATEGY_CONTEXT)
         : undefined;
 
       return A.change(doc, (d) => {
@@ -725,7 +751,9 @@ export class LocalProjectStore implements ProjectStore {
       throw new Error("Password required");
     }
     const salt = base64ToBytes(doc.meta.salt);
-    const key = await deriveKey(password, salt, doc.meta.iterations || 600_000);
+    // Older docs may lack the count; they were written with the default.
+    const iterations = checkKdfIterations(doc.meta.iterations ?? KDF_DEFAULT_ITERATIONS);
+    const key = await deriveKey(password, salt, iterations);
     if (!(await checkVerifier(doc.meta.verifier, key))) {
       throw new Error("Incorrect password");
     }
@@ -733,8 +761,21 @@ export class LocalProjectStore implements ProjectStore {
     return key;
   }
 
-  private requireKey(projectId: string): CryptoKey {
+  /**
+   * The key writes to the project must be sealed with, or `undefined` for a plain project. A
+   * project unlocked in this session is never written in plaintext, even if its document now says
+   * it is not protected (that would be an encryption downgrade).
+   */
+  private writeKey(projectId: string, doc: A.Doc<AutomergeProjectDoc>): CryptoKey | undefined {
     const key = this.keys.get(projectId);
+    if (!doc.meta.protected) {
+      if (key) {
+        throw new Error(
+          "PROTECTION_DOWNGRADE: this project was unlocked with a password in this session but is no longer marked protected; refusing to write it unencrypted"
+        );
+      }
+      return undefined;
+    }
     if (!key) throw new Error("Password required");
     return key;
   }

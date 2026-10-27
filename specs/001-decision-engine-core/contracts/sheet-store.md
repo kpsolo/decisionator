@@ -10,19 +10,19 @@ Normative layout of a project stored as a Google Sheet. It implements
 | OAuth | Google Identity Services token model, scope `drive.file` only, token in memory |
 | APIs | Drive v3 (`files.create`, `files.get`, `files.list`, `permissions.*`, `about.get`), Sheets v4 (`spreadsheets.create`, `values.batchGet`, `values.append`, `values.batchUpdate`; `spreadsheets.get` and `spreadsheets.batchUpdate` only for the migrations), Picker (`setFileIds`) |
 | File tag | Drive `appProperties`: `decisionator=project`, `formatVersion=1` |
-| Share link | `https://kpsolo.github.io/decisionator/#/p/<fileId>` (base URL configurable, R28) |
+| Share link | `<app origin + path>#/p/<fileId>`, taken from the running page (`location`); `https://kpsolo.github.io/decisionator/` only when there is no page (R28) |
 
 ## Tabs and columns
 
 Row 1 of every tab is a header row, and data starts at row 2. The `payload` column holds JSON.
-In password mode it holds `enc:v1:<base64 iv>:<base64 ciphertext>` instead (AES-256-GCM over the
-JSON, research R22). Timestamps are ISO-8601 UTC. `by` is the author's participant ID: the Google
-account email, stamped by the store.
+In password mode it holds `enc:v2:<base64 iv>:<base64 ciphertext>` instead (AES-256-GCM over the
+JSON, research R22) — see **Password mode codec** below. Timestamps are ISO-8601 UTC. `by` is the
+author's participant ID: the Google account email, stamped by the store.
 
 | Tab | Columns | Written by | Semantics |
 |-----|---------|-----------|-----------|
 | `meta` | `key`, `value` | owner | Key/value rows, listed below. |
-| `options` | `id`, `order`, `status`, `at`, `by`, `payload` | owner | One row per option. `payload` = option fields from [options-format.schema.json](./options-format.schema.json). `status` is `active` or `removed`. The owner updates rows in place (`values.batchUpdate`). |
+| `options` | `id`, `order`, `status`, `at`, `by`, `payload` | owner | One row per option. `payload` = option fields from [options-format.schema.json](./options-format.schema.json). `status` is `active` or `removed`. The owner updates rows in place (`values.batchUpdate`). Since layout 2.4.0 the `by` column holds the option's author, like the payload's `by`; older rows hold the owner who last rewrote the row. A row whose payload `by` differs from a `by` column that is not the owner is skipped with a warning. |
 | `grades` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"value": 1..5, "byName"?: string}`. The latest row per (`by`, `optionId`) counts. |
 | `comments` | `id`, `at`, `by`, `optionId`, `payload` | contributors | **Append-only.** `payload` = `{"body": markdown, "replaces"?: id, "hidden"?: bool, "byName"?: string}`. Edits and hides are new rows that reference `replaces`. Only the owner may hide others' comments. |
 | `rankings` | `id`, `at`, `by`, `payload` | contributors | **Append-only.** `payload` = `{"ranking": [optionId…], "round": n, "byName"?: string}`. The latest row per (`by`, `round`) counts. |
@@ -74,6 +74,62 @@ case: direct edits in Google Sheets). An invalid `voting` meta value falls back 
 and is reported as `meta row <n>`. A row in
 a contributor tab whose `by` does not match a known participant is still shown, but flagged.
 
+**Duplicate ids** (append-only tabs): identical copies of a row (a write queue flushed twice)
+count once. Copies of one `id` whose content differs are a conflict — e.g. a row inserted in the
+sheet to shadow someone's entry — and **every** copy is skipped with one warning
+(`"<tab> row <n>: id <id> appears more than once with different content; every copy is ignored"`),
+so neither the original nor the inserted row wins.
+
+## Password mode codec
+
+- Key: PBKDF2-HMAC-SHA-256 over the password with the `salt` meta value, `kdfIterations`
+  iterations (written as 600 000), AES-256-GCM. New passwords must have at least 12 characters
+  (`createProject` and `enablePassword` refuse shorter ones before writing anything).
+- `kdfIterations` is read from the sheet, which every writer can edit: a value outside
+  [100 000, 5 000 000] is refused (`INVALID_KDF`) instead of used.
+- Values are `enc:v2:<iv>:<ciphertext>`: AES-GCM with **additional data** that names where the
+  value lives, so a ciphertext copied to another row or field no longer decrypts:
+  - meta values: `["decisionator/aad/v2", "meta", <key>]` (`title`, `description`, `strategy`,
+    `strategyChanges`); the verifier: `[..., "verifier"]`;
+  - payloads: `["decisionator/aad/v2", "row", <tab>, <every column before payload>]`, e.g.
+    `grades` binds `id`, `at`, `by` and `optionId`; editing any of those columns makes the row
+    fail to decrypt (skipped with a warning).
+  The additional data is the UTF-8 JSON of that array. The spreadsheet id is not part of it: the
+  key already differs per project (random salt), and a copied spreadsheet must stay readable.
+- `enc:v1:` values (no additional data) written before layout 2.4.0 are still read; every write
+  produces `enc:v2:`. There is no bulk re-encryption: v1 rows keep the old (swappable) property
+  until they are rewritten.
+- **Downgrade guard**: once a project is seen protected or unlocked in a session, the store never
+  believes a later `protected=false` in `meta` (`PROTECTION_DOWNGRADE`: `openProject` and writes
+  that read meta fail; other writes still go out encrypted with the session key). Nothing is
+  written in plaintext while the project's key is loaded. A change of `salt`, `verifier` or
+  `kdfIterations` after the first unlock in the session is treated as tampering
+  (`PROTECTION_TAMPERED`) and the pinned values are kept. `forgetProject` clears this state.
+
+## Trust model (what Drive writers can forge)
+
+Google Drive has one write permission per file: everyone with `writer` access (a "contribute"
+collaborator, or anyone with a contribute link) can edit **any cell of any tab** in the Sheets
+UI or the API, bypassing the store. All role and authorship rules in this contract are enforced
+by the Deci client only. Concretely, a writer can:
+
+- append or edit rows with any `by` (impersonate another participant or the owner), any `at`, or
+  any `optionId`; fabricate `outcomes` rows; change other people's grades, ballots, comments and
+  properties; delete rows;
+- edit the `meta` tab (`owner`, `voting`, `strategy`, the protection keys) and the `options` tab;
+- in password mode, without the password: delete or reorder encrypted rows, replay an old
+  ciphertext in its own row, re-add `enc:v1:` legacy values, or break rows (they are skipped). They
+  cannot read or create valid ciphertext, and v2 values cannot be moved to another row or field.
+
+The store makes such edits **visible or inert where it can** (skipped-row warnings, duplicate-id
+conflicts, author mismatch on options, AAD on encrypted payloads, downgrade and KDF tamper
+guards), but **authorship and outcome integrity against collaborators are not guaranteed**. Share
+"contribute" access only with people trusted not to tamper with the sheet; use a live session
+(the host mediates every write) or a future server-backed store for untrusted participants.
+Viewers (`reader`) cannot change anything. When the permission lookup is rate limited or offline,
+an append uses the role seen earlier in the session (Drive refuses the queued rows on flush if
+access was revoked); with no role seen yet, the append fails.
+
 **Visibility of per-person properties**: Per-person values are shown in the app only to their author, but anyone with access to the spreadsheet can read the raw properties tab, as with grades.
 
 ## Sync and quota budget (research R23)
@@ -110,6 +166,7 @@ used to import into local mode in US7.
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.4.0 | 2026-10-27 | Security hardening (audit F3, F4, F6, F10, F11, F15): codec `enc:v2:` with AES-GCM additional data binding meta keys and row columns (`enc:v1:` still read); `kdfIterations` bounded to [100 000, 5 000 000]; passwords of at least 12 characters in `createProject` and `enablePassword`; downgrade and KDF-tamper guards; conflicting duplicate ids skip every copy; options `by` column holds the author and a mismatching row is skipped; append without a known role refused; share link from the running app's origin; documented trust model |
 | 2.3.0 | 2026-10-07 | Add the `resets` tab (`id`, `at`, `by`, `payload`) and the `strategy` and `strategyChanges` meta keys (project-store contract v1.4.0, history-resets and strategy-choice contracts); `resets` is added by the same migration as `properties`; reset payloads and both meta values are encrypted in password mode (and by `enablePassword`); the store keeps every grade, ballot and property row and applies latest-wins and resets on read, returning the rest as `history`; new rows are stamped with strictly increasing times |
 | 2.3.0 | 2026-10-07 | Add the `properties` tab (`id`, `at`, `by`, `optionId`, `payload`) for plugin-defined option properties (project-store contract v1.4.0); added by migration when missing on open, `formatVersion` stays 2; encrypted in password mode and by `enablePassword` like the other payload tabs; per-person values are readable in the raw tab |
 | 2.2.0 | 2026-10-06 | Skipped rows reported in `ProjectSnapshot.warnings` (project-store contract v1.3.0); v1 to v2 migration lists tabs and adds `contributions` with `spreadsheets.batchUpdate` (`addSheet`) and writes the `formatVersion` row in place; `enablePassword` encrypts every content tab, `contributions` included |

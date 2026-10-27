@@ -36,7 +36,7 @@ export interface FirestoreProjectDoc {
   }[];
   /**
    * Chosen decision strategy (ProjectStore 1.4.0). In protected projects: its JSON, encrypted
-   * (`enc:v1:`), like the title.
+   * (`enc:v2:`; older data `enc:v1:`), like the title.
    */
   strategy?: NonNullable<Project["strategy"]> | string;
   /** The last 20 strategy changes. In protected projects: their JSON, encrypted. */
@@ -110,7 +110,7 @@ export type FirestoreEntryDoc =
       plugin: string;
       key: string;
       scope: PropertyScope;
-      /** In protected projects: the JSON of the value, encrypted (`enc:v1:`). */
+      /** In protected projects: the JSON of the value, encrypted (`enc:v2:`; older data `enc:v1:`). */
       value: PropertyScalar;
       by: string;
       byName?: string;

@@ -6,6 +6,26 @@ import type {
 } from "@decisionator/plugin-sdk";
 import type { GoogleApiClient } from "./google-api.js";
 
+/** Used only when there is no running page to take the app's address from (e.g. Node tests). */
+export const FALLBACK_APP_URL = "https://kpsolo.github.io/decisionator/";
+
+/**
+ * The app's base URL (origin and path, no query or hash) taken from the running page, so a
+ * self-hosted or forked deployment hands out links to itself; `FALLBACK_APP_URL` outside a page.
+ */
+export function appBaseUrl(): string {
+  const loc = (globalThis as { location?: { origin?: string; pathname?: string } }).location;
+  const origin = loc?.origin;
+  if (!origin || origin === "null" || !/^https?:\/\//.test(origin)) return FALLBACK_APP_URL;
+  const path = loc?.pathname || "/";
+  return `${origin}${path.replace(/index\.html?$/, "")}`;
+}
+
+/** The link that opens project `id` in the app (hash routing). */
+export function projectLinkUrl(id: string): string {
+  return `${appBaseUrl()}#/p/${encodeURIComponent(id)}`;
+}
+
 /**
  * Drive permissions and share operations according to contracts/sheet-store.md
  */
@@ -21,7 +41,7 @@ export async function getProjectShareState(
     linkSharing: {
       enabled: !!linkPerm,
       role: linkPerm?.role === "writer" ? "contribute" : "view",
-      url: `https://kpsolo.github.io/decisionator/#/p/${ref.id}`,
+      url: projectLinkUrl(ref.id),
     },
     collaborators: userPerms.map((p) => ({
       email: p.emailAddress || "",

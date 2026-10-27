@@ -58,7 +58,7 @@ describe("LocalProjectStore password-protected projects", () => {
     await store.append(ref, [{ kind: "comment", optionId: OPT, body: "Plaintext must not leak" }]);
 
     const raw = await readRaw(dbName, ref.id);
-    expect(raw.comments[0]?.body.startsWith("enc:v1:")).toBe(true);
+    expect(raw.comments[0]?.body.startsWith("enc:v2:")).toBe(true);
     expect(JSON.stringify(raw)).not.toContain("Plaintext must not leak");
 
     const reopened = await new LocalProjectStore(OWNER, dbName).openProject(ref, {
@@ -405,5 +405,73 @@ describe("LocalProjectStore author stamping", () => {
 
     await owner.append(ref, [{ kind: "outcome", outcome }]);
     expect((await owner.openProject(ref)).outcomes).toHaveLength(1);
+  });
+});
+
+async function editRaw(
+  dbName: string,
+  id: string,
+  edit: (doc: AutomergeProjectDoc) => void
+): Promise<void> {
+  const db = await openDB(dbName, 1);
+  try {
+    const record = await db.get("docs", id);
+    const doc = A.change(A.load<AutomergeProjectDoc>(record.bytes), edit);
+    await db.put("docs", { ...record, bytes: A.save(doc) });
+  } finally {
+    db.close();
+  }
+}
+
+describe("LocalProjectStore crypto hardening", () => {
+  const second: Option = { ...option, id: "opt_2", order: 2, title: "Option 2" };
+
+  it("refuses passwords shorter than 12 characters", async () => {
+    const store = new LocalProjectStore(OWNER, freshDbName());
+    await expect(
+      store.createProject({ title: "Weak", options: [option] }, { password: "short" })
+    ).rejects.toThrow(/at least 12/);
+  });
+
+  it("does not decrypt an option title swapped in from another option", async () => {
+    const dbName = freshDbName();
+    const store = new LocalProjectStore(OWNER, dbName);
+    const ref = await store.createProject(
+      { title: "Secret", options: [option, second] },
+      { password: PASSWORD }
+    );
+    await editRaw(dbName, ref.id, (doc) => {
+      const a = doc.options[0];
+      const b = doc.options[1];
+      if (!a || !b) throw new Error("options missing");
+      const title = a.title;
+      a.title = b.title;
+      b.title = title;
+    });
+    await expect(
+      new LocalProjectStore(OWNER, dbName).openProject(ref, { password: PASSWORD })
+    ).rejects.toThrow();
+  });
+
+  it("refuses KDF iteration counts outside [100k, 5M] from the stored document", async () => {
+    const { dbName, ref } = await protectedProject();
+    await editRaw(dbName, ref.id, (doc) => {
+      doc.meta.iterations = 10;
+    });
+    await expect(
+      new LocalProjectStore(OWNER, dbName).openProject(ref, { password: PASSWORD })
+    ).rejects.toThrow(/INVALID_KDF/);
+  });
+
+  it("never writes plaintext to a project unlocked in this session that was flipped to unprotected", async () => {
+    const { dbName, store, ref } = await protectedProject();
+    await store.openProject(ref, { password: PASSWORD });
+    await editRaw(dbName, ref.id, (doc) => {
+      doc.meta.protected = false;
+    });
+    await expect(
+      store.append(ref, [{ kind: "comment", optionId: OPT, body: "Must stay sealed" }])
+    ).rejects.toThrow(/PROTECTION_DOWNGRADE/);
+    expect(JSON.stringify(await readRaw(dbName, ref.id))).not.toContain("Must stay sealed");
   });
 });

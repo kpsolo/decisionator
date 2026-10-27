@@ -1,9 +1,13 @@
 import {
+  KDF_DEFAULT_ITERATIONS,
+  assertPasswordStrength,
+  checkKdfIterations,
   checkVerifier,
   decrypt,
   deriveKey,
   encrypt,
   generateSalt,
+  isSealed,
   makeVerifier,
 } from "@decisionator/core";
 
@@ -32,10 +36,12 @@ export function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
+/** New salt, verifier and key for a project password (at least 12 characters). */
 export async function setupPasswordProtection(password: string) {
+  assertPasswordStrength(password);
   const saltBytes = generateSalt();
   const salt = bytesToBase64(saltBytes);
-  const iterations = 600000;
+  const iterations = KDF_DEFAULT_ITERATIONS;
   const key = await deriveKey(password, saltBytes, iterations);
   const verifier = await makeVerifier(key);
   return { salt, iterations, verifier, key };
@@ -44,11 +50,12 @@ export async function setupPasswordProtection(password: string) {
 export async function verifyAndDerivePasswordKey(
   password: string,
   saltB64: string,
-  iterations: number,
+  iterations: unknown,
   verifier: string
 ): Promise<CryptoKey> {
   const saltBytes = base64ToBytes(saltB64);
-  const key = await deriveKey(password, saltBytes, iterations);
+  // The count comes from the stored project document: bounded before use.
+  const key = await deriveKey(password, saltBytes, checkKdfIterations(iterations));
   const ok = await checkVerifier(verifier, key);
   if (!ok) {
     throw new Error("Incorrect password");
@@ -56,4 +63,4 @@ export async function verifyAndDerivePasswordKey(
   return key;
 }
 
-export { checkVerifier, encrypt, decrypt };
+export { checkVerifier, encrypt, decrypt, isSealed };

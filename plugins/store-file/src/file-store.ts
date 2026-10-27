@@ -2,18 +2,23 @@ import {
   type Comment,
   type Contribution,
   type Grade,
+  KDF_DEFAULT_ITERATIONS,
   type Option,
   type OutcomeRecord,
   type Project,
   type PropertyValue,
   type Ranking,
   type Reset,
+  type SealContext,
+  assertPasswordStrength,
+  checkKdfIterations,
   checkVerifier,
   decrypt,
   deriveKey,
   effectiveEntries,
   encrypt,
   generateSalt,
+  isSealed,
   makeVerifier,
   monotonicNow,
 } from "@decisionator/core";
@@ -45,36 +50,43 @@ import { type IDBPDatabase, openDB } from "idb";
 import { announceChange, instanceId, listenForChanges, withProjectLock } from "./cross-tab.js";
 import { openOption, sealOption } from "./option-seal.js";
 
-const ENCRYPTED_PREFIX = "enc:v1:";
+/** Seal contexts (codec v2 additional data): where each sealed value lives. */
+const TITLE_CONTEXT: SealContext = ["meta", "title"];
+const DESCRIPTION_CONTEXT: SealContext = ["meta", "description"];
+const STRATEGY_CONTEXT: SealContext = ["meta", "strategy", "settings"];
+const commentContext = (id: string): SealContext => ["comment", id, "body"];
+const propertyContext = (id: string): SealContext => ["property", id, "value"];
 
 /**
  * Text fields of protected projects are stored encrypted. An empty value (e.g. the body of a
  * hide/unhide toggle comment) is stored as-is, and values written in plaintext by older versions
  * are read back unchanged instead of making the whole project unreadable.
  */
-async function openSealed(value: string, key: CryptoKey): Promise<string> {
-  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-  return decrypt(value, key);
+async function openSealed(value: string, key: CryptoKey, context: SealContext): Promise<string> {
+  if (!isSealed(value)) return value;
+  return decrypt(value, key, context);
 }
 
-async function encryptCommentBody(body: string, key: CryptoKey): Promise<string> {
-  return body === "" ? "" : encrypt(body, key);
+async function encryptCommentBody(body: string, key: CryptoKey, id: string): Promise<string> {
+  return body === "" ? "" : encrypt(body, key, commentContext(id));
 }
 
 /** Property values of protected projects are stored as an encrypted JSON string. */
 async function sealPropertyValue(
   value: PropertyValue["value"],
-  key: CryptoKey | undefined
+  key: CryptoKey | undefined,
+  id: string
 ): Promise<PropertyValue["value"]> {
-  return key ? encrypt(JSON.stringify(value), key) : value;
+  return key ? encrypt(JSON.stringify(value), key, propertyContext(id)) : value;
 }
 
 async function openPropertyValue(
   value: PropertyValue["value"],
-  key: CryptoKey
+  key: CryptoKey,
+  id: string
 ): Promise<PropertyValue["value"]> {
-  if (typeof value !== "string" || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-  return JSON.parse(await decrypt(value, key)) as PropertyValue["value"];
+  if (!isSealed(value)) return value;
+  return JSON.parse(await decrypt(value, key, propertyContext(id))) as PropertyValue["value"];
 }
 
 /**
@@ -103,7 +115,10 @@ async function sealStrategy(
     by: strategy.by ?? "",
   };
   return key
-    ? { ...stamp, sealedSettings: await encrypt(JSON.stringify(strategy.settings), key) }
+    ? {
+        ...stamp,
+        sealedSettings: await encrypt(JSON.stringify(strategy.settings), key, STRATEGY_CONTEXT),
+      }
     : { ...stamp, settings: strategy.settings };
 }
 
@@ -114,7 +129,10 @@ async function openStrategy(
   let settings = stored.settings ?? {};
   if (stored.sealedSettings !== undefined) {
     if (!key) throw new Error("Password required");
-    settings = JSON.parse(await decrypt(stored.sealedSettings, key)) as Record<string, unknown>;
+    settings = JSON.parse(await decrypt(stored.sealedSettings, key, STRATEGY_CONTEXT)) as Record<
+      string,
+      unknown
+    >;
   }
   return { id: stored.id, version: stored.version, settings, at: stored.at, by: stored.by };
 }
@@ -310,16 +328,17 @@ export class FileProjectStore implements ProjectStore {
       by: this.currentUser,
     }));
 
-    if (opts?.password) {
+    if (opts?.password !== undefined) {
+      assertPasswordStrength(opts.password);
       const saltBytes = generateSalt();
       salt = bytesToBase64(saltBytes);
-      iterations = 600000;
+      iterations = KDF_DEFAULT_ITERATIONS;
 
       const key = await deriveKey(opts.password, saltBytes, iterations);
       verifier = await makeVerifier(key);
 
-      initialTitle = await encrypt(initialTitle, key);
-      initialDesc = await encrypt(initialDesc, key);
+      initialTitle = await encrypt(initialTitle, key, TITLE_CONTEXT);
+      initialDesc = await encrypt(initialDesc, key, DESCRIPTION_CONTEXT);
 
       initialOptions = await Promise.all(initialOptions.map((opt) => sealOption(opt, key)));
     }
@@ -330,7 +349,7 @@ export class FileProjectStore implements ProjectStore {
         formatVersion: 2,
         title: initialTitle,
         description: initialDesc,
-        protected: Boolean(opts?.password),
+        protected: opts?.password !== undefined,
         salt,
         iterations,
         verifier,
@@ -366,17 +385,18 @@ export class FileProjectStore implements ProjectStore {
 
     const role = this.resolveRole(doc, this.currentUser);
     const key = doc.meta.protected ? await this.unlock(doc, opts?.password) : undefined;
-    const open = (value: string) => (key ? openSealed(value, key) : Promise.resolve(value));
+    const open = (value: string, context: SealContext) =>
+      key ? openSealed(value, key, context) : Promise.resolve(value);
 
     const options = key
       ? await Promise.all(doc.options.map((opt) => openOption(opt, key)))
       : [...doc.options];
     const comments = await Promise.all(
-      doc.comments.map(async (c) => ({ ...c, body: await open(c.body) }))
+      doc.comments.map(async (c) => ({ ...c, body: await open(c.body, commentContext(c.id)) }))
     );
     const properties = await Promise.all(
       (doc.properties ?? []).map(async (p) =>
-        key ? { ...p, value: await openPropertyValue(p.value, key) } : { ...p }
+        key ? { ...p, value: await openPropertyValue(p.value, key, p.id) } : { ...p }
       )
     );
     // Latest wins and resets, with the superseded and cleared entries as history.
@@ -389,8 +409,8 @@ export class FileProjectStore implements ProjectStore {
 
     return {
       project: {
-        title: await open(doc.meta.title),
-        description: await open(doc.meta.description),
+        title: await open(doc.meta.title, TITLE_CONTEXT),
+        description: await open(doc.meta.description, DESCRIPTION_CONTEXT),
         protected: doc.meta.protected,
         formatVersion: 2,
         voting: { ...doc.meta.voting },
@@ -479,11 +499,7 @@ export class FileProjectStore implements ProjectStore {
       const by = delegated?.by ?? this.currentUser;
       const byName = delegated?.byName !== undefined ? { byName: delegated.byName } : {};
 
-      let key: CryptoKey | undefined;
-      if (doc.meta.protected) {
-        key = this.keys.get(doc.id);
-        if (!key) throw new Error("Password required");
-      }
+      const key = this.writeKey(doc);
 
       let now = "";
       let sent = 0;
@@ -503,10 +519,11 @@ export class FileProjectStore implements ProjectStore {
           });
           sent++;
         } else if (e.kind === "comment") {
+          const id = newId("cmt");
           doc.comments.push({
-            id: newId("cmt"),
+            id,
             optionId: e.optionId,
-            body: key ? await encryptCommentBody(e.body, key) : e.body,
+            body: key ? await encryptCommentBody(e.body, key, id) : e.body,
             by,
             ...byName,
             at: now,
@@ -537,9 +554,10 @@ export class FileProjectStore implements ProjectStore {
           });
           sent++;
         } else if (e.kind === "property") {
+          const id = newId("prp");
           const record = propertyRecord(
-            { ...e, value: await sealPropertyValue(e.value, key) },
-            { id: newId("prp"), at: now, by, ...byName }
+            { ...e, value: await sealPropertyValue(e.value, key, id) },
+            { id, at: now, by, ...byName }
           );
           doc.properties = [...(doc.properties ?? []), record];
           sent++;
@@ -577,7 +595,7 @@ export class FileProjectStore implements ProjectStore {
     if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update options");
 
     // Protected projects keep option text encrypted, so edits need the session key.
-    const key = doc.meta.protected ? this.requireKey(doc.id) : undefined;
+    const key = this.writeKey(doc);
     const seal = <T extends Partial<Option>>(o: T): Promise<T> =>
       key ? sealOption(o, key) : Promise.resolve(o);
 
@@ -614,12 +632,14 @@ export class FileProjectStore implements ProjectStore {
       const role = this.resolveRole(doc, this.currentUser);
       if (role !== "owner") throw new Error("PERMISSION_DENIED: Only owner can update meta");
 
-      const key = doc.meta.protected ? this.requireKey(doc.id) : undefined;
+      const key = this.writeKey(doc);
       if (patch.title !== undefined) {
-        doc.meta.title = key ? await encrypt(patch.title, key) : patch.title;
+        doc.meta.title = key ? await encrypt(patch.title, key, TITLE_CONTEXT) : patch.title;
       }
       if (patch.description !== undefined) {
-        doc.meta.description = key ? await encrypt(patch.description, key) : patch.description;
+        doc.meta.description = key
+          ? await encrypt(patch.description, key, DESCRIPTION_CONTEXT)
+          : patch.description;
       }
       if (patch.voting) doc.meta.voting = { ...doc.meta.voting, ...patch.voting };
       if (patch.strategy !== undefined) {
@@ -724,7 +744,8 @@ export class FileProjectStore implements ProjectStore {
       this.keys.delete(doc.id);
       throw new Error("Password required");
     }
-    const key = await deriveKey(password, base64ToBytes(doc.meta.salt), doc.meta.iterations);
+    const iterations = checkKdfIterations(doc.meta.iterations);
+    const key = await deriveKey(password, base64ToBytes(doc.meta.salt), iterations);
     if (!(await checkVerifier(doc.meta.verifier, key))) {
       throw new Error("Incorrect password");
     }
@@ -732,8 +753,21 @@ export class FileProjectStore implements ProjectStore {
     return key;
   }
 
-  private requireKey(projectId: string): CryptoKey {
-    const key = this.keys.get(projectId);
+  /**
+   * The key writes to `doc` must be sealed with, or `undefined` for a plain project. A project
+   * unlocked in this session is never written in plaintext, even if its document now says it is
+   * not protected (that would be an encryption downgrade).
+   */
+  private writeKey(doc: StoredFileProject): CryptoKey | undefined {
+    const key = this.keys.get(doc.id);
+    if (!doc.meta.protected) {
+      if (key) {
+        throw new Error(
+          "PROTECTION_DOWNGRADE: this project was unlocked with a password in this session but is no longer marked protected; refusing to write it unencrypted"
+        );
+      }
+      return undefined;
+    }
     if (!key) throw new Error("Password required");
     return key;
   }

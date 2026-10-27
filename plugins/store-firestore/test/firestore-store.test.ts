@@ -75,7 +75,7 @@ describe("FirestoreProjectStore password-protected projects", () => {
 
     const raw = readRaw(store, ref);
     const stored = raw.entries[0];
-    expect(stored?.kind === "comment" && stored.body.startsWith("enc:v1:")).toBe(true);
+    expect(stored?.kind === "comment" && stored.body.startsWith("enc:v2:")).toBe(true);
     expect(JSON.stringify(raw)).not.toContain("Plaintext must not leak");
 
     const reopened = await otherClient(store).openProject(ref, { password: PASSWORD });
@@ -325,5 +325,50 @@ describe("FirestoreProjectStore author stamping", () => {
 
     await owner.append(ref, [{ kind: "outcome", outcome }]);
     expect((await owner.openProject(ref)).outcomes).toHaveLength(1);
+  });
+});
+
+describe("FirestoreProjectStore crypto hardening", () => {
+  const second: Option = { ...option, id: "opt_2", order: 2, title: "Option 2" };
+
+  it("refuses passwords shorter than 12 characters", async () => {
+    const store = new FirestoreProjectStore(OWNER);
+    await expect(
+      store.createProject({ title: "Weak", options: [option] }, { password: "short" })
+    ).rejects.toThrow(/at least 12/);
+  });
+
+  it("does not decrypt an option title swapped in from another option", async () => {
+    const store = new FirestoreProjectStore(OWNER);
+    const ref = await store.createProject(
+      { title: "Secret", options: [option, second] },
+      { password: PASSWORD }
+    );
+    const [a, b] = readRaw(store, ref).options;
+    if (!a || !b) throw new Error("options missing");
+    [a.title, b.title] = [b.title, a.title];
+    await expect(otherClient(store).openProject(ref, { password: PASSWORD })).rejects.toThrow();
+  });
+
+  it("refuses KDF iteration counts outside [100k, 5M] from the stored document", async () => {
+    const { store, ref } = await protectedProject();
+    const project = readRaw(store, ref).project;
+    if (!project) throw new Error("project missing");
+    project.iterations = 99_999;
+    await expect(otherClient(store).openProject(ref, { password: PASSWORD })).rejects.toThrow(
+      /INVALID_KDF/
+    );
+  });
+
+  it("never writes plaintext to a project unlocked in this session that was flipped to unprotected", async () => {
+    const { store, ref } = await protectedProject();
+    await store.openProject(ref, { password: PASSWORD });
+    const project = readRaw(store, ref).project;
+    if (!project) throw new Error("project missing");
+    project.protected = false;
+    await expect(
+      store.append(ref, [{ kind: "comment", optionId: OPT, body: "Must stay sealed" }])
+    ).rejects.toThrow(/PROTECTION_DOWNGRADE/);
+    expect(JSON.stringify(readRaw(store, ref).entries)).not.toContain("Must stay sealed");
   });
 });

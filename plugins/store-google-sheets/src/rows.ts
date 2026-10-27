@@ -43,7 +43,9 @@ function errorMessage(err: unknown): string {
 export async function decodeOptionRow(
   row: string[],
   rowIndex: number,
-  payloadHook?: PayloadHook
+  payloadHook?: PayloadHook,
+  /** The project owner (meta `owner`), see the `by` check below. */
+  ownerId?: string
 ): Promise<RowDecodeResult<Option>> {
   const [id, orderStr, status, at, by, rawPayload] = row;
   if (!rawPayload) {
@@ -63,8 +65,17 @@ export async function decodeOptionRow(
 
   try {
     const parsed = JSON.parse(jsonStr);
-    // The payload is authoritative; the columns only fill fields it lacks. The `by` column holds
-    // the owner who last rewrote the tab, not necessarily the option's author.
+    // The payload is authoritative; the columns only fill fields it lacks. The `by` column and
+    // the payload's `by` both name the option's author (sheet layout 2.4.0); rows written
+    // earlier hold the owner who last rewrote the tab in the column instead. Any other
+    // disagreement means the row was edited in the sheet to claim someone else's authorship: the
+    // row is dropped rather than letting either value win.
+    const payloadBy = typeof parsed?.by === "string" && parsed.by ? parsed.by : undefined;
+    if (payloadBy && by && payloadBy !== by && by !== ownerId) {
+      return {
+        warning: `options row ${rowIndex}: author mismatch between the by column (${by}) and the payload (${payloadBy}); row ignored`,
+      };
+    }
     const parseRes = OptionSchema.safeParse({
       ...parsed,
       id: parsed.id ?? id,

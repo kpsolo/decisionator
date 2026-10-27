@@ -1,9 +1,9 @@
 {
   "manifestVersion": 1,
   "id": "org.decisionator.store.firestore",
-  "name": "Firebase Firestore store",
+  "name": "Firestore store (experimental, in-memory)",
   "version": "0.1.0",
-  "description": "Store decision projects in Google Cloud Firebase Firestore with real-time sync and client-side encryption",
+  "description": "EXPERIMENTAL in-memory mock of a Firestore-backed store: data lives only in this tab and is lost on reload; there is no network sync and no server-side security (no firestore.rules). Password-protected projects are encrypted client-side. Not for real data.",
   "platform": {
     "runtime": "^1.0.0",
     "projectStore": "^1.2.0"
@@ -17,8 +17,5 @@
       "supportsIndividualRemoval": true
     }
   },
-  "permissions": [
-    "net:https://firestore.googleapis.com",
-    "net:https://identitytoolkit.googleapis.com"
-  ]
+  "permissions": []
 }

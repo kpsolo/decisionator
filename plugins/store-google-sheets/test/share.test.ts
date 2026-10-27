@@ -160,10 +160,10 @@ describe("Sharing and Password Store Compliance (T061)", () => {
       expect(val).not.toContain("Confidential Details");
     }
 
-    // Verify options payload is encrypted enc:v1:...
+    // Verify options payload is encrypted enc:v2:...
     for (const row of optionsValues.slice(1)) {
       const payloadStr = row[5];
-      expect(payloadStr?.startsWith("enc:v1:")).toBe(true);
+      expect(payloadStr?.startsWith("enc:v2:")).toBe(true);
       expect(payloadStr).not.toContain(secretOptionTitle);
     }
   });

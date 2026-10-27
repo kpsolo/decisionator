@@ -62,7 +62,7 @@ describe("FileProjectStore password-protected projects", () => {
     await store.append(ref, [{ kind: "comment", optionId: OPT, body: "Plaintext must not leak" }]);
 
     const raw = await readRaw(dbName, ref.id);
-    expect(raw.comments[0]?.body.startsWith("enc:v1:")).toBe(true);
+    expect(raw.comments[0]?.body.startsWith("enc:v2:")).toBe(true);
     expect(JSON.stringify(raw)).not.toContain("Plaintext must not leak");
 
     const reopened = await new FileProjectStore(OWNER, dbName).openProject(ref, {
@@ -317,7 +317,7 @@ describe("FileProjectStore linked files", () => {
       kdf.iterations
     );
     expect(await checkVerifier(kdf.verifier, key)).toBe(true);
-    expect(await decrypt(written.project.title, key)).toBe("Secret");
+    expect(await decrypt(written.project.title, key, ["meta", "title"])).toBe("Secret");
   });
 
   it("reports a failed write of the linked file instead of swallowing it", async () => {
@@ -463,5 +463,71 @@ describe("FileProjectStore author stamping", () => {
 
     await owner.append(ref, [{ kind: "outcome", outcome }]);
     expect((await owner.openProject(ref)).outcomes).toHaveLength(1);
+  });
+});
+
+async function editRaw(
+  dbName: string,
+  id: string,
+  edit: (doc: Record<string, unknown> & { meta: Record<string, unknown> }) => void
+): Promise<void> {
+  const db = await openDB(dbName, 1);
+  try {
+    const doc = await db.get("projects", id);
+    edit(doc);
+    await db.put("projects", doc);
+  } finally {
+    db.close();
+  }
+}
+
+describe("FileProjectStore crypto hardening", () => {
+  const second: Option = { ...option, id: "opt_2", order: 2, title: "Option 2" };
+
+  it("refuses passwords shorter than 12 characters", async () => {
+    const store = new FileProjectStore(OWNER, freshDbName());
+    await expect(
+      store.createProject({ title: "Weak", options: [option] }, { password: "short" })
+    ).rejects.toThrow(/at least 12/);
+  });
+
+  it("does not decrypt an option title swapped in from another option", async () => {
+    const dbName = freshDbName();
+    const store = new FileProjectStore(OWNER, dbName);
+    const ref = await store.createProject(
+      { title: "Secret", options: [option, second] },
+      { password: PASSWORD }
+    );
+    await editRaw(dbName, ref.id, (doc) => {
+      const [a, b] = doc.options as { title: string }[];
+      if (!a || !b) throw new Error("options missing");
+      [a.title, b.title] = [b.title, a.title];
+    });
+    await expect(
+      new FileProjectStore(OWNER, dbName).openProject(ref, { password: PASSWORD })
+    ).rejects.toThrow();
+  });
+
+  it("refuses KDF iteration counts outside [100k, 5M] from the stored document", async () => {
+    const { dbName, ref } = await protectedProject();
+    await editRaw(dbName, ref.id, (doc) => {
+      doc.meta.iterations = 1_000_000_000;
+    });
+    await expect(
+      new FileProjectStore(OWNER, dbName).openProject(ref, { password: PASSWORD })
+    ).rejects.toThrow(/INVALID_KDF/);
+  });
+
+  it("never writes plaintext to a project unlocked in this session that was flipped to unprotected", async () => {
+    const { dbName, store, ref } = await protectedProject();
+    await store.openProject(ref, { password: PASSWORD });
+    await editRaw(dbName, ref.id, (doc) => {
+      doc.meta.protected = false;
+    });
+    await expect(
+      store.append(ref, [{ kind: "comment", optionId: OPT, body: "Must stay sealed" }])
+    ).rejects.toThrow(/PROTECTION_DOWNGRADE/);
+    await expect(store.updateMeta(ref, { title: "Leak" })).rejects.toThrow(/PROTECTION_DOWNGRADE/);
+    expect(JSON.stringify(await readRaw(dbName, ref.id))).not.toContain("Must stay sealed");
   });
 });

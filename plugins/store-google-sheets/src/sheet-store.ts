@@ -1,9 +1,13 @@
 import {
+  KDF_DEFAULT_ITERATIONS,
   type Option,
   type Project,
   ProjectSchema,
+  type SealContext,
   type VotingState,
   VotingStateSchema,
+  assertPasswordStrength,
+  checkKdfIterations,
   checkVerifier,
   decrypt,
   deriveKey,
@@ -51,7 +55,33 @@ import {
   decodeRankingRow,
   decodeResetRow,
 } from "./rows.js";
+import { projectLinkUrl } from "./share.js";
 import { watchProjectChanges } from "./watch.js";
+
+function downgradeError(): Error {
+  return new Error(
+    "PROTECTION_DOWNGRADE: this project is password protected, but its sheet now says it is not (the meta tab was edited). Nothing is written unencrypted; reopen the project after checking the sheet."
+  );
+}
+
+function tamperedKdfError(): Error {
+  return new Error(
+    "PROTECTION_TAMPERED: the project's salt, verifier or KDF iteration count changed during this session (the meta tab was edited). The project is not opened with the changed values."
+  );
+}
+
+/** Seal context (codec v2 additional data) of a meta value. */
+function metaContext(name: string): SealContext {
+  return ["meta", name];
+}
+
+/**
+ * Seal context of a row's payload: the tab plus every column before the payload, so a payload
+ * moved to another row, or a row whose id, author, time or option was edited, no longer decrypts.
+ */
+function rowContext(tab: string, columns: readonly (string | undefined)[]): SealContext {
+  return ["row", tab, ...columns.map((c) => c ?? "")];
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
@@ -127,7 +157,7 @@ async function readStrategyMeta(
     const raw = meta.values.get(name);
     if (!raw) continue;
     try {
-      const json = key ? await decrypt(raw, key) : raw;
+      const json = key ? await decrypt(raw, key, metaContext(name)) : raw;
       const parsed = ProjectSchema.shape[name].safeParse(JSON.parse(json));
       if (!parsed.success) {
         throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
@@ -154,18 +184,35 @@ const PAYLOAD_TABS: [string, string, number][] = [
   ["resets", "A:D", 3],
 ];
 
+/** Payload column of each tab. */
+const PAYLOAD_COLUMN = new Map(PAYLOAD_TABS.map(([tab, , column]) => [tab, column]));
+
 /** Tabs added after format v1 was released; a project may lack them until it is migrated. */
 const LATER_TABS = ["contributions", "properties", "resets"];
+
+/** Key derivation parameters of a protected project as first seen (and trusted) this session. */
+interface KdfParams {
+  salt: string;
+  verifier: string;
+  iterations: string;
+}
+
 export class GoogleSheetsProjectStore implements ProjectStore {
   readonly id = "org.decisionator.store.google-sheets";
   private client: GoogleApiClient;
   private queue: WriteQueue;
   /** Keys of protected projects unlocked in this session, by spreadsheet id. Memory only. */
   private keys = new Map<string, CryptoKey>();
-  /** Last known protection flag per spreadsheet, so `append` knows whether to encrypt. */
+  /**
+   * Last known protection flag per spreadsheet, so `append` knows whether to encrypt. Once a
+   * project is seen protected it stays protected for the session: the flag lives in the meta tab,
+   * which every writer can edit, so a later "false" is a downgrade attempt (see `noteProtection`).
+   */
   private protection = new Map<string, boolean>();
-  /** Last known role per spreadsheet, used when the permission lookup is rate limited. */
-  private roles = new Map<string, ParticipantRole>();
+  /** Salt, verifier and iteration count per protected spreadsheet, pinned at first unlock. */
+  private kdfParams = new Map<string, KdfParams>();
+  /** Last known role per spreadsheet and when it was looked up, used when the lookup fails. */
+  private roles = new Map<string, { role: ParticipantRole; at: number }>();
   /** Last known voting round per spreadsheet, used when meta cannot be read during `append`. */
   private rounds = new Map<string, number>();
   /** Option ids seen at the last open, so `append` can check property entries without a read. */
@@ -246,6 +293,9 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   }
 
   async createProject(input: NewProject, opts?: { password?: string }): Promise<ProjectRef> {
+    const password = opts?.password;
+    // Checked before anything is created in Drive.
+    if (password !== undefined) assertPasswordStrength(password);
     const identity = await this.auth.getIdentity();
     const sheetTitles = [
       "meta",
@@ -260,7 +310,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     ];
     // A protected project's Drive file name must not reveal its title (same name as
     // `enablePassword` uses).
-    const fileName = opts?.password ? PROTECTED_FILE_NAME : input.title;
+    const fileName = password !== undefined ? PROTECTED_FILE_NAME : input.title;
     const spreadsheet = await this.client.createSpreadsheet(fileName, sheetTitles);
     const spreadsheetId = spreadsheet.spreadsheetId;
 
@@ -276,10 +326,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     let saltBase64 = "";
     let verifier = "";
 
-    if (opts?.password) {
+    if (password !== undefined) {
       const salt = generateSalt();
       saltBase64 = bytesToBase64(salt);
-      cryptoKey = await deriveKey(opts.password, salt, 600_000);
+      cryptoKey = await deriveKey(password, salt, KDF_DEFAULT_ITERATIONS);
       verifier = await makeVerifier(cryptoKey);
     }
 
@@ -290,18 +340,21 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       ["formatVersion", "2"],
       ["createdAt", new Date().toISOString()],
       ["owner", identity.participantId],
-      ["protected", opts?.password ? "true" : "false"],
+      ["protected", cryptoKey ? "true" : "false"],
       ["voting", JSON.stringify(voting)],
     ];
 
-    if (opts?.password && cryptoKey) {
+    if (cryptoKey) {
       metaRows.push(["kdf", "pbkdf2-sha256"]);
-      metaRows.push(["kdfIterations", "600000"]);
+      metaRows.push(["kdfIterations", String(KDF_DEFAULT_ITERATIONS)]);
       metaRows.push(["salt", saltBase64]);
       metaRows.push(["verifier", verifier]);
-      metaRows.push(["title", await encrypt(input.title, cryptoKey)]);
+      metaRows.push(["title", await encrypt(input.title, cryptoKey, metaContext("title"))]);
       if (input.description) {
-        metaRows.push(["description", await encrypt(input.description, cryptoKey)]);
+        metaRows.push([
+          "description",
+          await encrypt(input.description, cryptoKey, metaContext("description")),
+        ]);
       }
     } else {
       metaRows.push(["title", input.title]);
@@ -313,18 +366,19 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const optionsRows: string[][] = [["id", "order", "status", "at", "by", "payload"]];
     if (input.options) {
       for (const opt of input.options) {
-        let payloadStr = JSON.stringify(opt);
-        if (cryptoKey) {
-          payloadStr = await encrypt(payloadStr, cryptoKey);
-        }
-        optionsRows.push([
+        // The `by` column names the option's author, like the payload does (F3: they must agree).
+        const columns = [
           opt.id,
           String(opt.order ?? 0),
           opt.status,
           opt.at || new Date().toISOString(),
-          identity.participantId,
-          payloadStr,
-        ]);
+          opt.by || identity.participantId,
+        ];
+        let payloadStr = JSON.stringify(opt);
+        if (cryptoKey) {
+          payloadStr = await encrypt(payloadStr, cryptoKey, rowContext("options", columns));
+        }
+        optionsRows.push([...columns, payloadStr]);
       }
     }
 
@@ -343,8 +397,15 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       { range: "resets!A:D", values: [[...TAB_HEADERS.resets]] },
     ]);
 
-    this.protection.set(spreadsheetId, Boolean(opts?.password));
-    this.roles.set(spreadsheetId, "owner");
+    this.protection.set(spreadsheetId, cryptoKey !== undefined);
+    if (cryptoKey) {
+      this.kdfParams.set(spreadsheetId, {
+        salt: saltBase64,
+        verifier,
+        iterations: String(KDF_DEFAULT_ITERATIONS),
+      });
+    }
+    this.roles.set(spreadsheetId, { role: "owner", at: Date.now() });
     this.rounds.set(spreadsheetId, voting.round);
     this.optionIds.set(spreadsheetId, new Set((input.options ?? []).map((o) => o.id)));
     return { store: "google-sheets", id: spreadsheetId };
@@ -385,18 +446,31 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const metaMap = meta.values;
 
     const isProtected = metaMap.get("protected") === "true";
-    this.protection.set(ref.id, isProtected);
+    // A protected project never turns plain mid-session (throws PROTECTION_DOWNGRADE).
+    this.noteProtection(ref.id, isProtected);
     let cryptoKey: CryptoKey | undefined;
 
     if (isProtected) {
-      const verifierStr = metaMap.get("verifier") || "";
+      const params: KdfParams = {
+        salt: metaMap.get("salt") || "",
+        verifier: metaMap.get("verifier") || "",
+        iterations: metaMap.get("kdfIterations") || String(KDF_DEFAULT_ITERATIONS),
+      };
+      // Salt, verifier and iterations pinned earlier this session must not change.
+      const pinned = this.kdfParams.get(ref.id);
+      if (
+        pinned &&
+        (pinned.salt !== params.salt ||
+          pinned.verifier !== params.verifier ||
+          pinned.iterations !== params.iterations)
+      ) {
+        throw tamperedKdfError();
+      }
       if (opts?.password) {
-        const saltStr = metaMap.get("salt") || "";
-        const iterations = Number.parseInt(metaMap.get("kdfIterations") || "600000", 10);
-        const salt = base64ToBytes(saltStr);
-
-        cryptoKey = await deriveKey(opts.password, salt, iterations);
-        const valid = await checkVerifier(verifierStr, cryptoKey);
+        // Bounded: the count comes from the sheet, which every writer can edit.
+        const iterations = checkKdfIterations(params.iterations);
+        cryptoKey = await deriveKey(opts.password, base64ToBytes(params.salt), iterations);
+        const valid = await checkVerifier(params.verifier, cryptoKey);
         if (!valid) {
           throw new Error("Incorrect password");
         }
@@ -404,20 +478,21 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       } else {
         // A project unlocked earlier in this session opens with the remembered key.
         const cached = this.keys.get(ref.id);
-        if (!cached || !(await checkVerifier(verifierStr, cached))) {
+        if (!cached || !(await checkVerifier(params.verifier, cached))) {
           this.keys.delete(ref.id);
           throw new Error("Password required to decrypt project");
         }
         cryptoKey = cached;
       }
+      this.kdfParams.set(ref.id, params);
     }
 
     let title = metaMap.get("title") || file.name;
     let description = metaMap.get("description") || "";
     if (isProtected && cryptoKey) {
-      title = await decrypt(title, cryptoKey);
+      title = await decrypt(title, cryptoKey, metaContext("title"));
       if (description) {
-        description = await decrypt(description, cryptoKey);
+        description = await decrypt(description, cryptoKey, metaContext("description"));
       }
     }
 
@@ -480,25 +555,57 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     // Every row is validated on its own: a row that fails (e.g. after a direct edit in Google
     // Sheets) is skipped and reported instead of making the whole project unavailable.
     const key = cryptoKey;
-    const hook = key ? (payload: string) => decrypt(payload, key) : undefined;
+    /** Decrypts a row's payload, bound to the row's tab and leading columns. */
+    const hookFor = (tab: string, row: string[]) =>
+      key
+        ? (payload: string) =>
+            decrypt(payload, key, rowContext(tab, row.slice(0, PAYLOAD_COLUMN.get(tab))))
+        : undefined;
     const decodeTab = async <T>(
       tab: string,
-      decode: (row: string[], rowIndex: number) => Promise<RowDecodeResult<T>>,
+      decode: (
+        row: string[],
+        rowIndex: number,
+        hook: ((payload: string) => Promise<string>) | undefined
+      ) => Promise<RowDecodeResult<T>>,
       onEntity?: (entity: T, rowIndex: number) => void
     ): Promise<T[]> => {
       const entities: T[] = [];
+      const rows = tabRows(tab).slice(1);
       // Append-only rows carry a unique id. The same row twice (e.g. two tabs flushed one write
-      // queue, or a flush was interrupted before its rows were removed) counts once.
+      // queue, or a flush was interrupted before its rows were removed) counts once. Copies of an
+      // id that differ are a conflict, e.g. a row inserted in the sheet to shadow someone's entry:
+      // every copy is dropped with a warning, so neither the original nor the forgery wins.
+      const copies = new Map<string, Set<string>>();
+      if (tab !== "options") {
+        for (const row of rows) {
+          const rowId = row[0];
+          if (!rowId || row.every((cell) => !cell)) continue;
+          const set = copies.get(rowId) ?? new Set<string>();
+          set.add(JSON.stringify(row));
+          copies.set(rowId, set);
+        }
+      }
       const seenIds = new Set<string>();
-      for (const [i, row] of tabRows(tab).slice(1).entries()) {
+      const reported = new Set<string>();
+      for (const [i, row] of rows.entries()) {
         if (row.every((cell) => !cell)) continue;
         const rowId = row[0];
         if (tab !== "options" && rowId) {
+          if ((copies.get(rowId)?.size ?? 0) > 1) {
+            if (!reported.has(rowId)) {
+              reported.add(rowId);
+              warnings.push(
+                `${tab} row ${i + 2}: id ${rowId} appears more than once with different content; every copy is ignored`
+              );
+            }
+            continue;
+          }
           if (seenIds.has(rowId)) continue;
           seenIds.add(rowId);
         }
         // Sheet row numbers are 1-based and row 1 is the header.
-        const res = await decode(row, i + 2);
+        const res = await decode(row, i + 2, hookFor(tab, row));
         if (res.entity) {
           entities.push(res.entity);
           onEntity?.(res.entity, i + 2);
@@ -507,10 +614,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       return entities;
     };
 
+    const owner = metaMap.get("owner");
     const optionRowOf = new Map<string, number>();
     const options = await decodeTab(
       "options",
-      (row, n) => decodeOptionRow(row, n, hook),
+      (row, n, hook) => decodeOptionRow(row, n, hook, owner),
       (option, n) => {
         if (!optionRowOf.has(option.id)) optionRowOf.set(option.id, n);
       }
@@ -518,22 +626,26 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     this.optionIds.set(ref.id, new Set(options.map((o) => o.id)));
     this.optionRows.set(ref.id, { rowOf: optionRowOf, rowCount: tabRows("options").length });
 
-    const grades = await decodeTab("grades", (row, n) => decodeGradeRow(row, n, undefined, hook));
+    const grades = await decodeTab("grades", (row, n, hook) =>
+      decodeGradeRow(row, n, undefined, hook)
+    );
 
-    const comments = await decodeTab("comments", (row, n) =>
+    const comments = await decodeTab("comments", (row, n, hook) =>
       decodeCommentRow(row, n, undefined, hook)
     );
 
-    const rankings = await decodeTab("rankings", (row, n) =>
+    const rankings = await decodeTab("rankings", (row, n, hook) =>
       decodeRankingRow(row, n, undefined, hook)
     );
 
-    const outcomes = await decodeTab("outcomes", (row, n) => decodeOutcomeRow(row, n, hook));
-    const contributions = await decodeTab("contributions", (row, n) =>
+    const outcomes = await decodeTab("outcomes", (row, n, hook) => decodeOutcomeRow(row, n, hook));
+    const contributions = await decodeTab("contributions", (row, n, hook) =>
       decodeContributionRow(row, n, hook)
     );
-    const properties = await decodeTab("properties", (row, n) => decodePropertyRow(row, n, hook));
-    const resets = await decodeTab("resets", (row, n) => decodeResetRow(row, n, hook));
+    const properties = await decodeTab("properties", (row, n, hook) =>
+      decodePropertyRow(row, n, hook)
+    );
+    const resets = await decodeTab("resets", (row, n, hook) => decodeResetRow(row, n, hook));
     // Latest-wins and resets. Rows of every tab are in append order, so a later row wins on an
     // equal timestamp.
     const effective = effectiveEntries({ grades, rankings, properties, resets });
@@ -570,14 +682,16 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   async append(ref: ProjectRef, entries: Entry[], opts?: AppendOptions): Promise<AppendResult> {
     const identity = await this.auth.getIdentity();
 
-    let role: ParticipantRole | undefined;
+    let role: ParticipantRole;
     try {
       role = await this.resolveRole(ref.id, identity.participantId);
     } catch (err) {
       // Rate limited or offline: fall back to the role seen earlier in this session and still
-      // enqueue the writes for later sync. Delegation is never granted on an unverified role.
-      role = this.roles.get(ref.id);
-      if (role === undefined && opts?.onBehalfOf !== undefined) throw err;
+      // enqueue the writes; Drive refuses them on flush if access was revoked since. Without a
+      // known role nothing is written.
+      const cached = this.roles.get(ref.id);
+      if (!cached) throw err;
+      role = cached.role;
     }
     if (role === "view") {
       throw new Error("PERMISSION_DENIED: View role cannot append entries");
@@ -602,15 +716,13 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     const needsRound = entries.some((e) => e.kind === "ranking" && e.round === undefined);
     const currentRound = needsRound ? await this.currentRound(ref.id) : 1;
 
-    // Protected projects keep every payload encrypted; never write plaintext into them.
-    const isProtected = await this.isProtected(ref.id);
-    const key = isProtected ? this.keys.get(ref.id) : undefined;
-    if (isProtected && !key) {
-      throw new Error("Password required to append to a protected project");
-    }
-    const seal = async (payload: unknown): Promise<string> => {
+    // Protected projects keep every payload encrypted; never write plaintext into them. A key
+    // loaded in this session always encrypts, whatever the (writable) meta tab says now.
+    const key = await this.writeKey(ref.id);
+    /** The row: its leading columns, then the payload sealed to them. */
+    const sealRow = async (tab: string, columns: string[], payload: unknown): Promise<string[]> => {
       const json = JSON.stringify(payload);
-      return key ? encrypt(json, key) : json;
+      return [...columns, key ? await encrypt(json, key, rowContext(tab, columns)) : json];
     };
 
     const rows: { tab: string; row: string[] }[] = [];
@@ -623,52 +735,45 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       if (entry.kind === "grade") {
         rows.push({
           tab: "grades",
-          row: [entryId, now, by, entry.optionId, await seal({ value: entry.value, byName })],
+          row: await sealRow("grades", [entryId, now, by, entry.optionId], {
+            value: entry.value,
+            byName,
+          }),
         });
       } else if (entry.kind === "comment") {
         rows.push({
           tab: "comments",
-          row: [
-            entryId,
-            now,
-            by,
-            entry.optionId,
-            await seal({
-              body: entry.body,
-              hidden: entry.hidden,
-              replaces: entry.replaces,
-              byName,
-            }),
-          ],
+          row: await sealRow("comments", [entryId, now, by, entry.optionId], {
+            body: entry.body,
+            hidden: entry.hidden,
+            replaces: entry.replaces,
+            byName,
+          }),
         });
       } else if (entry.kind === "ranking") {
         rows.push({
           tab: "rankings",
-          row: [
-            entryId,
-            now,
-            by,
-            await seal({ ranking: entry.ranking, round: entry.round ?? currentRound, byName }),
-          ],
+          row: await sealRow("rankings", [entryId, now, by], {
+            ranking: entry.ranking,
+            round: entry.round ?? currentRound,
+            byName,
+          }),
         });
       } else if (entry.kind === "outcome") {
-        rows.push({ tab: "outcomes", row: [entryId, now, by, await seal(entry.outcome)] });
+        rows.push({
+          tab: "outcomes",
+          row: await sealRow("outcomes", [entryId, now, by], entry.outcome),
+        });
       } else if (entry.kind === "property") {
         rows.push({
           tab: "properties",
-          row: [
-            entryId,
-            now,
-            by,
-            entry.optionId,
-            await seal({
-              plugin: entry.plugin,
-              key: entry.key,
-              scope: entry.scope,
-              value: entry.value,
-              byName,
-            }),
-          ],
+          row: await sealRow("properties", [entryId, now, by, entry.optionId], {
+            plugin: entry.plugin,
+            key: entry.key,
+            scope: entry.scope,
+            value: entry.value,
+            byName,
+          }),
         });
       } else if (entry.kind === "reset") {
         const {
@@ -681,7 +786,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
           at: now,
           by,
         });
-        rows.push({ tab: "resets", row: [entryId, now, by, await seal({ ...payload, byName })] });
+        rows.push({
+          tab: "resets",
+          row: await sealRow("resets", [entryId, now, by], { ...payload, byName }),
+        });
       } else if (entry.kind === "contribution") {
         const c = entry.contribution;
         // Rule 1: the store stamps the author and time; caller-supplied `by`/`at` are ignored.
@@ -689,13 +797,10 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         // the author is always the signed-in user.
         rows.push({
           tab: "contributions",
-          row: [
-            c.id || entryId,
-            now,
-            identity.participantId,
-            c.targetKind,
-            c.targetId,
-            await seal({
+          row: await sealRow(
+            "contributions",
+            [c.id || entryId, now, identity.participantId, c.targetKind, c.targetId],
+            {
               type: c.type,
               body: c.body,
               pros: c.pros,
@@ -703,8 +808,8 @@ export class GoogleSheetsProjectStore implements ProjectStore {
               sources: c.sources,
               author: c.author,
               reviewStatus: c.reviewStatus,
-            }),
-          ],
+            }
+          ),
         });
       }
     }
@@ -732,10 +837,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       throw new Error("PERMISSION_DENIED: Only owner may update options");
     }
     // openProject succeeded, so a protected project has its key in this session.
-    const key = snap.project.protected ? this.keys.get(ref.id) : undefined;
-    if (snap.project.protected && !key) {
-      throw new Error("Password required to decrypt project");
-    }
+    const key = await this.writeKey(ref.id);
 
     // Each option keeps its sheet row: changed options are written in place and added ones after
     // the last row. Rows that could not be decoded (direct edits) are never rewritten, so no
@@ -776,17 +878,18 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       const row = rowOf.get(id);
       if (!opt || row === undefined) continue;
       const json = JSON.stringify(opt);
+      // The `by` column names the option's author, like the payload does (F3: they must agree).
+      const columns = [
+        opt.id,
+        String(opt.order ?? 0),
+        opt.status,
+        opt.at || "",
+        opt.by || identity.participantId,
+      ];
       updates.push({
         range: `options!A${row}:F${row}`,
         values: [
-          [
-            opt.id,
-            String(opt.order ?? 0),
-            opt.status,
-            opt.at || "",
-            identity.participantId,
-            key ? await encrypt(json, key) : json,
-          ],
+          [...columns, key ? await encrypt(json, key, rowContext("options", columns)) : json],
         ],
       });
     }
@@ -801,10 +904,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     if (snap.role !== "owner") {
       throw new Error("PERMISSION_DENIED: Only owner may update meta");
     }
-    const key = snap.project.protected ? this.keys.get(ref.id) : undefined;
-    if (snap.project.protected && !key) {
-      throw new Error("Password required to decrypt project");
-    }
+    const key = await this.writeKey(ref.id);
     if (
       patch.title === undefined &&
       patch.description === undefined &&
@@ -827,10 +927,13 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     };
 
     if (patch.title !== undefined) {
-      set("title", key ? await encrypt(patch.title, key) : patch.title);
+      set("title", key ? await encrypt(patch.title, key, metaContext("title")) : patch.title);
     }
     if (patch.description !== undefined) {
-      set("description", key ? await encrypt(patch.description, key) : patch.description);
+      set(
+        "description",
+        key ? await encrypt(patch.description, key, metaContext("description")) : patch.description
+      );
     }
     const voting = patch.voting ? { ...snap.project.voting, ...patch.voting } : undefined;
     if (voting) {
@@ -844,12 +947,12 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         identity.participantId,
         monotonicNow()
       );
-      const sealJson = (value: unknown) => {
+      const sealJson = (name: string, value: unknown) => {
         const json = JSON.stringify(value);
-        return key ? encrypt(json, key) : json;
+        return key ? encrypt(json, key, metaContext(name)) : json;
       };
-      set("strategy", await sealJson(next.strategy));
-      set("strategyChanges", await sealJson(next.strategyChanges));
+      set("strategy", await sealJson("strategy", next.strategy));
+      set("strategyChanges", await sealJson("strategyChanges", next.strategyChanges));
     }
 
     await this.client.batchUpdateValues(ref.id, [{ range: "meta!A:B", values: rows }]);
@@ -925,7 +1028,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       linkSharing: {
         enabled: !!linkPerm,
         role: linkPerm?.role === "writer" ? "contribute" : "view",
-        url: `https://kpsolo.github.io/decisionator/#/p/${ref.id}`,
+        url: projectLinkUrl(ref.id),
       },
       collaborators: userPerms.map((p) => ({
         email: p.emailAddress || "",
@@ -956,6 +1059,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     // Participant side: drops local cache
     this.keys.delete(ref.id);
     this.protection.delete(ref.id);
+    this.kdfParams.delete(ref.id);
     this.roles.delete(ref.id);
     this.optionIds.delete(ref.id);
   }
@@ -971,13 +1075,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     if (snap.project.protected) {
       throw new Error("Project is already password protected");
     }
-    if (password.length < 12) {
-      throw new Error("Password must be at least 12 characters long");
-    }
+    assertPasswordStrength(password);
 
     const salt = generateSalt();
     const saltBase64 = bytesToBase64(salt);
-    const cryptoKey = await deriveKey(password, salt, 600_000);
+    const cryptoKey = await deriveKey(password, salt, KDF_DEFAULT_ITERATIONS);
     const verifier = await makeVerifier(cryptoKey);
 
     // 1. Rename the file so its name no longer reveals the title.
@@ -1007,20 +1109,30 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     };
     setMeta("protected", "true");
     setMeta("kdf", "pbkdf2-sha256");
-    setMeta("kdfIterations", "600000");
+    setMeta("kdfIterations", String(KDF_DEFAULT_ITERATIONS));
     setMeta("salt", saltBase64);
     setMeta("verifier", verifier);
-    setMeta("title", await encrypt(snap.project.title, cryptoKey));
+    setMeta("title", await encrypt(snap.project.title, cryptoKey, metaContext("title")));
     if (snap.project.description) {
-      setMeta("description", await encrypt(snap.project.description, cryptoKey));
+      setMeta(
+        "description",
+        await encrypt(snap.project.description, cryptoKey, metaContext("description"))
+      );
     }
     if (snap.project.strategy) {
-      setMeta("strategy", await encrypt(JSON.stringify(snap.project.strategy), cryptoKey));
+      setMeta(
+        "strategy",
+        await encrypt(JSON.stringify(snap.project.strategy), cryptoKey, metaContext("strategy"))
+      );
     }
     if (snap.project.strategyChanges) {
       setMeta(
         "strategyChanges",
-        await encrypt(JSON.stringify(snap.project.strategyChanges), cryptoKey)
+        await encrypt(
+          JSON.stringify(snap.project.strategyChanges),
+          cryptoKey,
+          metaContext("strategyChanges")
+        )
       );
     }
 
@@ -1033,7 +1145,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
         const payload = copy[payloadColumn];
         // Row 1 is the header; rows without a payload have nothing to protect.
         if (rows.length > 0 && payload) {
-          copy[payloadColumn] = await encrypt(payload, cryptoKey);
+          copy[payloadColumn] = await encrypt(
+            payload,
+            cryptoKey,
+            rowContext(tab, copy.slice(0, payloadColumn))
+          );
         }
         rows.push(copy);
       }
@@ -1043,6 +1159,11 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     // The owner just chose the password, so later writes in this session encrypt with it.
     this.protection.set(ref.id, true);
     this.keys.set(ref.id, cryptoKey);
+    this.kdfParams.set(ref.id, {
+      salt: saltBase64,
+      verifier,
+      iterations: String(KDF_DEFAULT_ITERATIONS),
+    });
   }
 
   /** Role of `participantId` from the Drive permissions; remembered for rate-limited appends. */
@@ -1058,8 +1179,38 @@ export class GoogleSheetsProjectStore implements ProjectStore {
       (p) => p.role === "writer" && (p.emailAddress === participantId || p.type === "anyone")
     );
     const role: ParticipantRole = isOwner ? "owner" : isWriter ? "contribute" : "view";
-    this.roles.set(spreadsheetId, role);
+    this.roles.set(spreadsheetId, { role, at: Date.now() });
     return role;
+  }
+
+  /**
+   * Records what the meta tab says about protection. Once a project is known protected in this
+   * session (seen protected, or its key loaded) a "not protected" meta is a downgrade attempt by
+   * someone who can edit the sheet, and is refused instead of believed.
+   */
+  private noteProtection(spreadsheetId: string, sheetSaysProtected: boolean): void {
+    if (sheetSaysProtected) {
+      this.protection.set(spreadsheetId, true);
+      return;
+    }
+    if (this.protection.get(spreadsheetId) === true || this.keys.has(spreadsheetId)) {
+      throw downgradeError();
+    }
+    this.protection.set(spreadsheetId, false);
+  }
+
+  /**
+   * The key every write to the project is sealed with, or `undefined` for a plain project. A key
+   * loaded in this session is always used: nothing is written in plaintext once the project was
+   * unlocked, whatever the meta tab says now.
+   */
+  private async writeKey(spreadsheetId: string): Promise<CryptoKey | undefined> {
+    const key = this.keys.get(spreadsheetId);
+    if (key) return key;
+    if (await this.isProtected(spreadsheetId)) {
+      throw new Error("Password required to write to a protected project");
+    }
+    return undefined;
   }
 
   /**
@@ -1092,6 +1243,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
     try {
       return parseVoting((await this.readMeta(spreadsheetId)).get("voting")).state.round;
     } catch (err) {
+      if (err instanceof Error && err.message.startsWith("PROTECTION_DOWNGRADE")) throw err;
       const known = this.rounds.get(spreadsheetId);
       if (known === undefined) throw err;
       return known;
@@ -1101,7 +1253,7 @@ export class GoogleSheetsProjectStore implements ProjectStore {
   private async readMeta(spreadsheetId: string): Promise<Map<string, string>> {
     const data = await this.client.batchGetValues(spreadsheetId, ["meta!A:B"]);
     const meta = readMetaRows(data.valueRanges[0]?.values ?? []).values;
-    this.protection.set(spreadsheetId, meta.get("protected") === "true");
+    this.noteProtection(spreadsheetId, meta.get("protected") === "true");
     this.rounds.set(spreadsheetId, parseVoting(meta.get("voting")).state.round);
     return meta;
   }
