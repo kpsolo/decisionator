@@ -15,39 +15,22 @@ export type ComparisonRow =
       ok: true;
       order: string[];
       winner: string;
-      /** The preview's input-derived seed, for strategies that use randomness. */
+      /**
+       * The draw seed, for strategies that use randomness. It is derived publicly from the round,
+       * strategy and votes (strategy contract v1.2.0), so the preview and the recorded outcome
+       * use the same seed and anyone can recompute it.
+       */
       seed?: string;
       differsFromChosen: boolean;
-      /** The unrecorded preview outcome. Never record it: its seed is derived from the votes. */
+      /** The unrecorded preview outcome. */
       preview: OutcomeRecord;
       /**
-       * Re-runs this strategy on the same votes with a fresh CSPRNG seed and returns the outcome
-       * to record. A random draw can therefore pick a different winner than the preview.
+       * Re-runs this strategy on the same votes and returns the outcome to record. The seed is the
+       * public derivation, so on unchanged votes the result equals the preview.
        */
       adopt(): Promise<OutcomeRecord>;
     }
   | { strategyId: string; name: string; ok: false; reason: string; differsFromChosen: false };
-
-/**
- * A seed derived from the tally inputs, so reopening the comparison gives the same preview draw
- * for the same votes. It is predictable, so it is only used for previews, never for a recorded
- * outcome.
- */
-export async function inputSeed(snapshot: ProjectSnapshot): Promise<string> {
-  const { options, ballots, grades } = checkInput(snapshot, {});
-  const canonical = JSON.stringify({
-    options: options.map((o) => o.id).sort(),
-    ballots: [...ballots].sort((a, b) => (a.by < b.by ? -1 : a.by > b.by ? 1 : 0)),
-    grades: [...grades]
-      .map((g) => [g.optionId, g.average] as const)
-      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1])),
-  });
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
-  return [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, 32);
-}
 
 /** Runs every given strategy on the same snapshot without recording anything. */
 export async function compareStrategies(
@@ -55,7 +38,6 @@ export async function compareStrategies(
   strategies: StrategyDescriptor[],
   triggeredBy: string
 ): Promise<ComparisonRow[]> {
-  const seed = await inputSeed(snapshot);
   const chosen = chosenStrategy(snapshot, strategies);
   const rows: ComparisonRow[] = [];
   for (const s of strategies) {
@@ -71,8 +53,7 @@ export async function compareStrategies(
       });
       continue;
     }
-    // Without a seed, runTally draws a fresh one from the CSPRNG.
-    const tally = (withSeed?: string) =>
+    const tally = () =>
       runTally({
         snapshot,
         strategy: s.strategy,
@@ -82,20 +63,19 @@ export async function compareStrategies(
         settings,
         runInput: typeof settings.pick === "string" ? settings.pick : undefined,
         usesRandomness: s.usesRandomness,
-        seed: withSeed,
       });
     try {
-      const preview = await tally(seed);
+      const preview = await tally();
       rows.push({
         strategyId: s.id,
         name: s.name,
         ok: true,
         order: preview.result.order.map((o: { optionId: string }) => o.optionId),
         winner: preview.result.winner,
-        ...(s.usesRandomness ? { seed } : {}),
+        ...(s.usesRandomness && preview.seed ? { seed: preview.seed } : {}),
         differsFromChosen: false,
         preview,
-        adopt: () => tally(undefined),
+        adopt: tally,
       });
     } catch (err) {
       rows.push({

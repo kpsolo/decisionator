@@ -3,7 +3,9 @@ import type { Grade, Option } from "../src/index.js";
 import {
   type TallyStrategyInput,
   type TallyStrategyPlugin,
+  deriveDrawSeed,
   runTally,
+  verifyOutcomeSeed,
 } from "../src/strategy-host/tally.js";
 
 const option = (id: string): Option => ({
@@ -62,7 +64,6 @@ describe("runTally", () => {
       strategyId: "test",
       strategyVersion: "0.0.0",
       triggeredBy: "owner",
-      seed: "000102030405060708090a0b0c0d0e0f",
     });
     const grades = new Map(seen[0]?.grades?.map((g) => [g.optionId, g.average]));
     expect(grades.get("a")).toBeCloseTo(21 / 5, 12);
@@ -70,26 +71,29 @@ describe("runTally", () => {
     expect(grades.get("a")).not.toBe(grades.get("b"));
   });
 
-  it("draws the seed from crypto.getRandomValues, never Math.random", async () => {
+  it("derives the recorded seed publicly from the inputs, without any randomness source", async () => {
+    vi.stubGlobal("crypto", undefined);
     const random = vi.spyOn(Math, "random");
-    const getRandomValues = vi.spyOn(globalThis.crypto, "getRandomValues");
     const { strategy } = capturingStrategy();
-    const outcome = await runTally({
-      snapshot,
-      strategy,
-      strategyId: "test",
-      strategyVersion: "0.0.0",
-      triggeredBy: "owner",
-      usesRandomness: true,
-    });
-    expect(outcome.seed).toMatch(/^[0-9a-f]{32}$/);
-    expect(getRandomValues).toHaveBeenCalled();
+    const run = () =>
+      runTally({
+        snapshot,
+        strategy,
+        strategyId: "test",
+        strategyVersion: "0.0.0",
+        triggeredBy: "owner",
+        usesRandomness: true,
+      });
+    const first = await run();
+    const second = await run();
+    expect(first.seed).toMatch(/^[0-9a-f]{32}$/);
+    expect(second.seed).toBe(first.seed);
+    expect(first.seed).toBe(deriveDrawSeed(first));
+    expect(verifyOutcomeSeed(first)).toEqual({ status: "verified", seed: first.seed });
     expect(random).not.toHaveBeenCalled();
   });
 
-  it("refuses to run without a CSPRNG instead of falling back to Math.random", async () => {
-    vi.stubGlobal("crypto", undefined);
-    const random = vi.spyOn(Math, "random");
+  it("rejects a caller-supplied seed", async () => {
     const { strategy } = capturingStrategy();
     await expect(
       runTally({
@@ -99,8 +103,28 @@ describe("runTally", () => {
         strategyVersion: "0.0.0",
         triggeredBy: "owner",
         usesRandomness: true,
-      })
-    ).rejects.toThrow(/getRandomValues/);
-    expect(random).not.toHaveBeenCalled();
+        seed: "000102030405060708090a0b0c0d0e0f",
+      } as Parameters<typeof runTally>[0])
+    ).rejects.toThrow(/caller-supplied seed/);
+  });
+
+  it("gives a different seed when the round, strategy or inputs change", async () => {
+    const { strategy } = capturingStrategy();
+    const base = {
+      snapshot,
+      strategy,
+      strategyId: "test",
+      strategyVersion: "0.0.0",
+      triggeredBy: "owner",
+      usesRandomness: true,
+    };
+    const a = await runTally(base);
+    const b = await runTally({
+      ...base,
+      snapshot: { ...snapshot, project: { voting: { ...snapshot.project.voting, round: 2 } } },
+    });
+    const c = await runTally({ ...base, strategyId: "other" });
+    const d = await runTally({ ...base, snapshot: { ...snapshot, options: [option("a")] } });
+    expect(new Set([a.seed, b.seed, c.seed, d.seed]).size).toBe(4);
   });
 });

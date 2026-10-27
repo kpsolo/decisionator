@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog.js";
 import { getInstalledPlugins } from "../plugins/plugin-registry.js";
+import { DrawIntegrityNotice } from "./DrawIntegrityNotice.js";
 import { type ComparisonRow, compareStrategies } from "./compare.js";
 import { chosenStrategy, enabledStrategies } from "./strategies.js";
 
@@ -66,8 +67,12 @@ export function CompareStrategiesDialog({
         <DialogContent className="max-w-3xl">
           <DialogTitle>Compare strategies</DialogTitle>
           <DialogDescription>
-            {`What each method would decide from the same votes. This project is decided by ${chosen.name}. Nothing is recorded unless you adopt a result. Random draws here are previews: adopting one draws again with a fresh seed.`}
+            {`What each method would decide from the same votes. This project is decided by ${chosen.name}. Nothing is recorded unless you adopt a result. Random draws use a seed derived from the votes, so adopting a row records exactly the draw shown here.`}
           </DialogDescription>
+          <DrawIntegrityNotice
+            outcomes={snapshot.outcomes}
+            round={snapshot.project.voting?.round ?? 1}
+          />
 
           {!rows && !message && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-busy="true">
@@ -151,14 +156,14 @@ export function CompareStrategiesDialog({
                                 if (!onAdopt) return;
                                 setAdopting(r.strategyId);
                                 try {
-                                  // Re-run with a fresh CSPRNG seed: the preview's seed is
-                                  // derived from the votes, so it must not be recorded.
+                                  // Re-run with the publicly derived seed: on unchanged votes
+                                  // the recorded draw equals the preview.
                                   const outcome = await r.adopt();
                                   await onAdopt(outcome);
                                   setMessage(
                                     outcome.result.winner === r.winner
                                       ? `Adopted the ${r.name} result as a new outcome.`
-                                      : `Adopted the ${r.name} result as a new outcome. The recorded draw used a fresh seed and chose ${titleOf(outcome.result.winner)}.`
+                                      : `Adopted the ${r.name} result as a new outcome. The votes changed since the preview, so the recorded draw chose ${titleOf(outcome.result.winner)}.`
                                   );
                                 } catch (err) {
                                   setMessage(err instanceof Error ? err.message : String(err));

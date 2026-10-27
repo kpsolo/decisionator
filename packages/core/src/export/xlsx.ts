@@ -175,17 +175,53 @@ function resolvePath(base: string, target: string): string {
   return parts.join("/");
 }
 
+/** Largest inflated size of one workbook part (zip entry) that {@link readWorkbook} accepts. */
+export const MAX_XLSX_ENTRY_BYTES = 25 * 1024 * 1024;
+/** Largest inflated size of all workbook parts together that {@link readWorkbook} accepts. */
+export const MAX_XLSX_TOTAL_BYTES = 50 * 1024 * 1024;
+
+const TOO_LARGE = "The workbook is too large to import (over 50 MB uncompressed)";
+
 /**
- * Reads every sheet of an `.xlsx` workbook as rows of text cells (`""` for empty cells),
- * keyed by sheet name. Throws when `bytes` is not a readable workbook.
+ * Unzips only the XML parts of a workbook, within a decompression budget (zip-bomb guard).
+ * Declared sizes are checked before anything is inflated; fflate inflates each entry into a
+ * buffer of its declared size, so a header that understates the size cannot produce more, and
+ * the actual output sizes are checked again afterwards.
  */
-export function readWorkbook(bytes: Uint8Array): Map<string, string[][]> {
+function unzipWorkbook(bytes: Uint8Array): Record<string, Uint8Array> {
+  let declaredTotal = 0;
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(bytes);
-  } catch {
+    files = unzipSync(bytes, {
+      filter(file) {
+        // Media, printer settings and the like are never read: do not inflate them.
+        if (!/\.(xml|rels)$/i.test(file.name)) return false;
+        if (file.originalSize > MAX_XLSX_ENTRY_BYTES) throw new RangeError(TOO_LARGE);
+        declaredTotal += file.originalSize;
+        if (declaredTotal > MAX_XLSX_TOTAL_BYTES) throw new RangeError(TOO_LARGE);
+        return true;
+      },
+    });
+  } catch (err) {
+    if (err instanceof RangeError && err.message === TOO_LARGE) throw new Error(TOO_LARGE);
     throw new Error("The file is not a valid .xlsx workbook");
   }
+  let actualTotal = 0;
+  for (const data of Object.values(files)) {
+    if (data.length > MAX_XLSX_ENTRY_BYTES) throw new Error(TOO_LARGE);
+    actualTotal += data.length;
+    if (actualTotal > MAX_XLSX_TOTAL_BYTES) throw new Error(TOO_LARGE);
+  }
+  return files;
+}
+
+/**
+ * Reads every sheet of an `.xlsx` workbook as rows of text cells (`""` for empty cells),
+ * keyed by sheet name. Throws when `bytes` is not a readable workbook or inflates to more than
+ * {@link MAX_XLSX_TOTAL_BYTES}.
+ */
+export function readWorkbook(bytes: Uint8Array): Map<string, string[][]> {
+  const files = unzipWorkbook(bytes);
   const read = (path: string) => {
     const entry = files[path];
     return entry ? strFromU8(entry) : undefined;

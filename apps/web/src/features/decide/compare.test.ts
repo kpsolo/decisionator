@@ -1,7 +1,7 @@
-import type { Option } from "@decisionator/core";
+import { type Option, verifyOutcomeSeed } from "@decisionator/core";
 import type { ProjectSnapshot } from "@decisionator/plugin-sdk";
-import { describe, expect, it, vi } from "vitest";
-import { compareStrategies, inputSeed } from "./compare.js";
+import { describe, expect, it } from "vitest";
+import { compareStrategies } from "./compare.js";
 import { BUILTIN_STRATEGIES, WEIGHTED_ID, cannotRunReason, chosenStrategy } from "./strategies.js";
 
 const option = (id: string): Option =>
@@ -92,7 +92,7 @@ describe("compareStrategies", () => {
     const a = rnd(rows);
     const b = rnd(again);
     expect(a?.ok && b?.ok && a.winner === b.winner && a.seed === b.seed).toBe(true);
-    expect(a?.ok && a.seed).toBe(await inputSeed(snap));
+    expect(a?.ok && verifyOutcomeSeed(a.preview).status).toBe("verified");
   });
 
   it("explains a strategy that cannot run and marks winners that differ from the chosen one", async () => {
@@ -106,33 +106,38 @@ describe("compareStrategies", () => {
 });
 
 describe("adopting a comparison row", () => {
-  it("re-runs a random strategy with a fresh CSPRNG seed, not the preview's input seed", async () => {
+  it("records the previewed draw with the publicly derived seed", async () => {
     const snap = snapshot();
-    const preview = await inputSeed(snap);
     const rows = await compareStrategies(snap, BUILTIN_STRATEGIES, "owner");
     const rnd = rows.find((r) => r.strategyId === "org.decisionator.strategy.random");
     if (!rnd?.ok) throw new Error("random row should run");
-    expect(rnd.preview.seed).toBe(preview);
 
-    const spy = vi.spyOn(globalThis.crypto, "getRandomValues");
     const first = await rnd.adopt();
     const second = await rnd.adopt();
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
-
-    expect(first.seed).toMatch(/^[0-9a-f]{32}$/);
-    expect(first.seed).not.toBe(preview);
-    expect(second.seed).not.toBe(first.seed);
+    // Re-adopting cannot re-roll the draw: same votes, same seed, same winner.
+    expect(first.seed).toBe(rnd.preview.seed);
+    expect(second.seed).toBe(first.seed);
+    expect(first.result).toEqual(rnd.preview.result);
+    expect(verifyOutcomeSeed(first).status).toBe("verified");
     expect(first.strategy.id).toBe("org.decisionator.strategy.random");
     expect(first.triggeredBy).toBe("owner");
   });
 
-  it("gives the previewed result when no draw is needed, still with a fresh seed", async () => {
-    const rows = await compareStrategies(snapshot(), BUILTIN_STRATEGIES, "owner");
-    const borda = rows.find((r) => r.strategyId === "org.decisionator.strategy.borda");
-    if (!borda?.ok) throw new Error("borda row should run");
-    const adopted = await borda.adopt();
-    expect(adopted.result).toEqual(borda.preview.result);
-    expect(adopted.seed).not.toBe(borda.preview.seed);
+  it("changes the draw only when the recorded inputs change", async () => {
+    const snap = snapshot();
+    const before = (await compareStrategies(snap, BUILTIN_STRATEGIES, "owner")).find(
+      (r) => r.strategyId === "org.decisionator.strategy.random"
+    );
+    const moreVotes = {
+      ...snap,
+      rankings: [
+        ...snap.rankings,
+        { id: "r3", at: "2026-01-01T11:00:00.000Z", by: "ann", round: 1, ranking: ["bcn"] },
+      ],
+    } as ProjectSnapshot;
+    const after = (await compareStrategies(moreVotes, BUILTIN_STRATEGIES, "owner")).find(
+      (r) => r.strategyId === "org.decisionator.strategy.random"
+    );
+    expect(before?.ok && after?.ok && before.seed !== after.seed).toBe(true);
   });
 });

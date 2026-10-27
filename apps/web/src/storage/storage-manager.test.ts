@@ -97,4 +97,27 @@ describe("StorageManager Universal Registry & Resolution", () => {
     expect(sm.resolveStore({ store: "firestore", id: "456" })).toBe(mockStoreB);
     expect(sm.resolveStore({ store: "org.decisionator.store.file", id: "789" })).toBe(mockStoreA);
   });
+
+  it("never matches a store on an id suffix", () => {
+    const sm = new StorageManager("file");
+    const lookalike = { id: "evil.store.file" } as unknown as ProjectStore;
+    const notion = { id: "acme.store.notion" } as unknown as ProjectStore;
+    sm.registerStore(lookalike);
+    sm.registerStore(notion);
+
+    // A third-party id ending in a built-in's name does not stand in for the built-in.
+    expect(() => sm.resolveStore({ store: "file", id: "1" })).toThrow(/^NOT_SUPPORTED/);
+    expect(() => sm.resolveStore({ store: "org.decisionator.store.file", id: "1" })).toThrow(
+      /^NOT_SUPPORTED/
+    );
+    // Nor is a third-party store reachable by the tail of its id.
+    expect(() => sm.resolveStore({ store: "notion", id: "1" })).toThrow(/^NOT_SUPPORTED/);
+    expect(() => sm.resolveStore({ store: "x.acme.store.notion", id: "1" })).toThrow(
+      /^NOT_SUPPORTED/
+    );
+    expect(sm.resolveStore({ store: "acme.store.notion", id: "1" })).toBe(notion);
+
+    sm.registerStore(fileStore);
+    expect(sm.resolveStore({ store: "file", id: "1" })).toBe(fileStore);
+  });
 });

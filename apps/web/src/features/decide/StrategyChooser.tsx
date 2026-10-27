@@ -16,6 +16,7 @@ import {
 } from "../../components/ui/card.js";
 import { NativeSelect } from "../../components/ui/native-select.js";
 import { getInstalledPlugins } from "../plugins/plugin-registry.js";
+import { DrawIntegrityNotice } from "./DrawIntegrityNotice.js";
 import { type StrategyDescriptor, enabledStrategies } from "./strategies.js";
 
 export { BUILTIN_STRATEGIES, strategyName } from "./strategies.js";
@@ -71,6 +72,7 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const activeOptions = snapshot.options.filter((o) => o.status === "active");
+  const round = snapshot.project.voting?.round ?? 1;
   const selectedDescriptor = available.find((s) => s.id === selectedStrategyId);
 
   // Check preconditions in real-time
@@ -151,8 +153,9 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
         <CardHeader>
           <CardTitle className="text-lg font-bold">Decision Strategies</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Only the project owner can execute decision strategies or close voting.
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>Only the project owner can execute decision strategies or close voting.</p>
+          <DrawIntegrityNotice outcomes={snapshot.outcomes} round={round} />
         </CardContent>
       </Card>
     );
@@ -173,6 +176,7 @@ export const StrategyChooser: React.FC<StrategyChooserProps> = ({
       </CardHeader>
 
       <CardContent className="space-y-4">
+        <DrawIntegrityNotice outcomes={snapshot.outcomes} round={round} />
         {/* Strategy selector radio group */}
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className="mb-2 text-sm font-semibold text-foreground">

@@ -3,6 +3,7 @@ import { Award, History, Trophy } from "lucide-react";
 import type React from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Card, CardContent, CardHeader } from "../../components/ui/card.js";
+import { DrawIntegrityNotice } from "../decide/DrawIntegrityNotice.js";
 import { strategyName } from "../decide/StrategyChooser.js";
 import { ExposureBox } from "../option-view/OptionPlaces.js";
 import { VerifyButton } from "./VerifyButton.js";
@@ -101,6 +102,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               </strong>
             </span>
           </div>
+          <DrawIntegrityNotice outcomes={outcomes} round={currentRound} />
         </CardContent>
       </Card>
 

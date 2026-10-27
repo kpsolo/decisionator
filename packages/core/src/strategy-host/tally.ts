@@ -1,5 +1,8 @@
 import type { Comment, Grade, Option, OutcomeRecord, Ranking } from "../index.js";
 import { computeOptionStats, createRng, getEffectiveBallots } from "../index.js";
+import { deriveDrawSeed } from "./draw-seed.js";
+
+export * from "./draw-seed.js";
 
 export interface TallyProjectSnapshot {
   project: {
@@ -39,10 +42,12 @@ export interface RunTallyOptions {
   settings?: unknown;
   runInput?: unknown;
   usesRandomness?: boolean;
-  seed?: string; // Optional CSPRNG 32 hex chars, generated if not provided
 }
 
-/** A fresh 128-bit seed from the platform CSPRNG (browsers and Node.js 19+ expose it globally). */
+/**
+ * A fresh 128-bit seed from the platform CSPRNG (browsers and Node.js 19+ expose it globally).
+ * Never used for a recorded outcome: those use {@link deriveDrawSeed} so anyone can verify them.
+ */
 export function generateRandomSeed(): string {
   if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
     throw new Error(
@@ -59,21 +64,26 @@ export function generateRandomSeed(): string {
 /**
  * Tally host (T077, FR-024):
  * - Builds StrategyInput from project snapshot
- * - Generates CSPRNG 128-bit seed
+ * - Derives the draw seed publicly from the round, strategy and inputs (strategy contract
+ *   v1.2.0 § Draw seed); callers cannot supply one
  * - Runs strategy check and decide
  * - Assembles immutable OutcomeRecord
  */
-export async function runTally({
-  snapshot,
-  strategy,
-  strategyId,
-  strategyVersion,
-  triggeredBy,
-  settings,
-  runInput,
-  usesRandomness,
-  seed = generateRandomSeed(),
-}: RunTallyOptions): Promise<OutcomeRecord> {
+export async function runTally(options: RunTallyOptions): Promise<OutcomeRecord> {
+  const {
+    snapshot,
+    strategy,
+    strategyId,
+    strategyVersion,
+    triggeredBy,
+    settings,
+    runInput,
+    usesRandomness,
+  } = options;
+  if ("seed" in options) {
+    // A chosen seed would make the recorded draw look fair while being picked by the caller.
+    throw new Error("runTally derives the draw seed itself; a caller-supplied seed is not allowed");
+  }
   const currentRound = snapshot.project.voting?.round ?? 1;
   const topN = snapshot.project.voting?.topN ?? 3;
   const closedAt = new Date().toISOString();
@@ -114,7 +124,12 @@ export async function runTally({
     throw new Error(`Strategy check failed: ${checkRes.reason}`);
   }
 
-  // 5. Execute decide with deterministic counter-mode RNG
+  // 5. Execute decide with deterministic counter-mode RNG, seeded from public data only
+  const seed = deriveDrawSeed({
+    round: currentRound,
+    strategy: { id: strategyId, version: strategyVersion },
+    inputs: strategyInput,
+  });
   const rng = createRng(seed);
   // biome-ignore lint/suspicious/noExplicitAny: Borda extended result returns order and tieBreak
   const decision = strategy.decide(strategyInput, rng) as any;

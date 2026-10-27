@@ -139,7 +139,9 @@ export class StorageManager implements StorageManagerContract {
 
   /**
    * Finds a registered store by its full id ("org.decisionator.store.firestore") or short id
-   * ("firestore"), whichever form it was registered or asked for with.
+   * ("firestore"), whichever form it was registered or asked for with. Only exact matches count:
+   * a third-party id that merely ends in a built-in's name ("evil.store.file") never stands in
+   * for it, and vice versa.
    */
   private find(storeId: string): ProjectStore | undefined {
     if (!storeId) return undefined;
@@ -148,10 +150,6 @@ export class StorageManager implements StorageManagerContract {
     const short = shortStoreId(storeId);
     for (const [id, store] of this.stores) {
       if (shortStoreId(id) === short) return store;
-    }
-    // Other dotted ids, matched on their last segments ("acme.store.notion" ~ "notion").
-    for (const [id, store] of this.stores) {
-      if (id.endsWith(`.${storeId}`) || storeId.endsWith(`.${id}`)) return store;
     }
     return undefined;
   }

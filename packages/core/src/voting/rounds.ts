@@ -124,3 +124,13 @@ export function latestOutcome<T extends { round?: number; at: string }>(
   }
   return pickLatest(outcomes);
 }
+
+/**
+ * How many times `round` was decided again after its first outcome (0 when decided once or not
+ * at all). Re-deciding appends, so every earlier outcome stays visible; showing this count keeps
+ * "decide until I like the result" in plain sight.
+ */
+export function redecidedCount(outcomes: readonly { round?: number }[], round: number): number {
+  const n = outcomes.filter((o) => (o.round ?? 1) === round).length;
+  return Math.max(0, n - 1);
+}
